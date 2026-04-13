@@ -1,0 +1,4 @@
+export OPP_REPL_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+export PATH="$OPP_REPL_ROOT:$PATH"
+export PYTHONPATH="$OPP_REPL_ROOT/python:$PYTHONPATH"
+echo "opp_repl is ready (added $OPP_REPL_ROOT to PATH)."
