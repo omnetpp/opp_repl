@@ -212,7 +212,8 @@ class SimulationProject:
         return os.path.abspath(os.path.join(os.environ[enviroment_variable], path)) if enviroment_variable in os.environ else None
 
     def get_full_path(self, path):
-        return os.path.abspath(os.path.join(self.get_environment_variable_relative_path(self.folder_environment_variable, self.folder), path))
+        base = self.get_environment_variable_relative_path(self.folder_environment_variable, self.folder)
+        return os.path.abspath(os.path.join(base, path)) if base is not None else None
 
     def get_relative_path(self, path):
         return os.path.relpath(path, self.get_environment_variable_relative_path(self.folder_environment_variable, self.folder))
@@ -549,7 +550,8 @@ def find_simulation_project_from_current_working_directory():
         else:
             path = parent_path
     for k, simulation_project in simulation_projects.items():
-        if current_working_directory.startswith(os.path.realpath(simulation_project.get_full_path("."))):
+        full_path = simulation_project.get_full_path(".")
+        if full_path is not None and current_working_directory.startswith(os.path.realpath(full_path)):
             return simulation_project
 
 def determine_default_simulation_project(name=None, version=None, required=True, **kwargs):
