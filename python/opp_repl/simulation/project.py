@@ -431,68 +431,6 @@ class SimulationProject:
             self.binary_simulation_distribution_file_paths = self.collect_binary_simulation_distribution_file_paths()
         return self.binary_simulation_distribution_file_paths
 
-    def collect_binary_simulation_distribution_file_paths(self):
-        file_paths = []
-        def append_file_if_exists(file_name):
-            if os.path.exists(file_name):
-                file_paths.append(file_name)
-        file_paths.append(get_omnetpp_relative_path("bin/opp_run"))
-        file_paths.append(get_omnetpp_relative_path("bin/opp_run_release"))
-        file_paths.append(get_omnetpp_relative_path("bin/opp_run_dbg"))
-        file_paths.append(get_omnetpp_relative_path("bin/opp_python_repl"))
-        file_paths.append(get_omnetpp_relative_path("bin/opp_ssh_cluster_python"))
-        append_file_if_exists(get_omnetpp_relative_path("shell.nix"))
-        file_paths.append(self.get_executable(mode="release"))
-        file_paths.append(self.get_executable(mode="debug"))
-        file_paths += list(glob.glob(get_omnetpp_relative_path("lib/*.so")))
-        file_paths += list(filter(lambda path: not re.search(r"formatter", path), glob.glob(get_omnetpp_relative_path("python/**/*.py"), recursive=True)))
-        append_file_if_exists(self.get_full_path(".omnetpp"))
-        append_file_if_exists(self.get_full_path(".nedfolders"))
-        append_file_if_exists(self.get_full_path(".nedexclusions"))
-        file_paths += glob.glob(self.get_full_path(os.path.join("bin", "*")))
-        for executable in self.executables:
-            append_file_if_exists(self.get_full_path(os.path.join(self.bin_folder, executable)))
-            append_file_if_exists(self.get_full_path(os.path.join(self.bin_folder, executable)))
-        for dynamic_library in self.dynamic_libraries:
-            append_file_if_exists(self.get_full_path(os.path.join(self.library_folder, "lib" + dynamic_library + ".so")))
-            append_file_if_exists(self.get_full_path(os.path.join(self.library_folder, "lib" + dynamic_library + "_dbg.so")))
-        for ned_folder in self.ned_folders:
-            if not re.search(r"test", ned_folder):
-                file_paths += glob.glob(self.get_full_path(os.path.join(ned_folder, "**/*.ini")), recursive=True)
-                file_paths += glob.glob(self.get_full_path(os.path.join(ned_folder, "**/*.ned")), recursive=True)
-        for python_folder in self.python_folders:
-            file_paths += glob.glob(self.get_full_path(os.path.join(python_folder, "**/*.py")), recursive=True)
-        return file_paths
-
-    def create_binary_simulation_distribution(self, folder=os.path.join(os.path.expanduser("~"), "omnetpp-distribution")):
-        try:
-            os.makedirs(folder)
-        except FileExistsError:
-            pass
-        for source_file_name in self.collect_binary_simulation_distribution_file_paths():
-            workspace_relative_filename = os.path.relpath(source_file_name, get_omnetpp_relative_path(".."))
-            destination_file_name = os.path.join(folder, workspace_relative_filename)
-            try:
-                os.makedirs(os.path.dirname(destination_file_name))
-            except FileExistsError:
-                pass
-            shutil.copy(source_file_name, destination_file_name)
-        with open(os.path.join(folder, "omnetpp/setenv"), "w") as file:
-            file.write("""#!/usr/bin/env -S sh -c "echo >&2 \"Error: You are running this script instead of sourcing it. Make sure to use it as 'source setenv' or '. setenv', otherwise its settings won't take effect.\"; exit 1"
-export __omnetpp_root_dir=$(pwd)
-export PATH=$__omnetpp_root_dir/bin:$PATH
-export PYTHONPATH=$__omnetpp_root_dir/python:$PYTHONPATH
-export LD_LIBRARY_PATH=$__omnetpp_root_dir/lib:$LD_LIBRARY_PATH
-""")
-        return folder
-
-    def copy_binary_simulation_distribution_to_cluster(self, worker_hostnames):
-        binary_distribution_folder = self.create_binary_simulation_distribution()
-        hostname = socket.gethostname()
-        for worker_hostname in worker_hostnames:
-            if hostname != worker_hostname:
-                os.system(f'rsync --exclude "\\*\\*/results" -r "{binary_distribution_folder}" "{worker_hostname}:."')
-
 simulation_projects = {}
 
 def get_simulation_project(name, version=None):

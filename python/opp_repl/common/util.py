@@ -199,11 +199,11 @@ def set_default_build_argument(value):
     global _default_build_argument
     _default_build_argument = value
 
-def get_omnetpp_relative_path(path):
-    return os.path.abspath(os.path.join(os.environ["__omnetpp_root_dir"], path)) if "__omnetpp_root_dir" in os.environ else None
-
 def get_workspace_path(path):
-    return os.path.join(os.path.realpath(get_omnetpp_relative_path("..")), path)
+    workspace_root = os.environ.get("WORKSPACE_ROOT")
+    if workspace_root is None:
+        workspace_root = os.path.realpath(os.path.dirname(__file__) + "/../../../..")
+    return os.path.join(workspace_root, path)
 
 def flatten(list):
     return [item for sublist in list for item in sublist]
