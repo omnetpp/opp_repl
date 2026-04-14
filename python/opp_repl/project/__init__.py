@@ -1,5 +1,5 @@
-from opp_repl.project.inet import *
-from opp_repl.project.omnetpp import *
+#from opp_repl.project.inet import *
+#from opp_repl.project.omnetpp import *
 
 __sphinx_mock__ = True # ignore this module in documentation
 
