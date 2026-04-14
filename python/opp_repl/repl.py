@@ -40,9 +40,9 @@ def run_repl_main():
             sys.exit(0)
         else:
             _logger.info("OMNeT++ Python support is loaded.")
-            # if args.mcp_port != 0:
-            #     from opp_repl.mcp_server import start_mcp_server
-            #     start_mcp_server(port=args.mcp_port)
+            if args.mcp_port != 0:
+                from opp_repl.common.mcp import start_mcp_server
+                start_mcp_server(port=args.mcp_port)
             app = IPython.terminal.ipapp.TerminalIPythonApp.instance()
             app.interactive_shell_class = TerminalInteractiveShell
             app.display_banner = False
