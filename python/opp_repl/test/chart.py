@@ -15,9 +15,12 @@ import matplotlib
 import numpy
 import importlib.util
 
-import omnetpp
-import omnetpp.scave
-import omnetpp.scave.analysis
+try:
+    import omnetpp
+    import omnetpp.scave
+    import omnetpp.scave.analysis
+except ImportError:
+    pass
 
 from opp_repl.common import *
 from opp_repl.documentation.chart import *

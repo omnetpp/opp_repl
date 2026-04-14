@@ -16,7 +16,10 @@ import re
 import shutil
 import subprocess
 
-from omnetpp.scave.results import *
+try:
+    from omnetpp.scave.results import *
+except ImportError:
+    pass
 
 from opp_repl.simulation import *
 from opp_repl.test.fingerprint import *

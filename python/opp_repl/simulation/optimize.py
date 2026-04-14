@@ -7,7 +7,10 @@ import importlib.util
 if importlib.util.find_spec('optimparallel'):
     import optimparallel
 
-from omnetpp.scave.results import *
+try:
+    from omnetpp.scave.results import *
+except ImportError:
+    pass
 
 from opp_repl.simulation.config import *
 from opp_repl.simulation.task import *

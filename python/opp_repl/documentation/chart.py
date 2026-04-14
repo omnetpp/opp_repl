@@ -5,7 +5,10 @@ import logging
 import os
 import re
 
-import omnetpp.scave.analysis
+try:
+    import omnetpp.scave.analysis
+except ImportError:
+    pass
 
 from opp_repl.simulation.project import *
 

@@ -4,7 +4,7 @@ import os
 from opp_repl.simulation.project import *
 
 def define_omnetpp_sample_projects():
-    omnetpp_root = os.environ["__omnetpp_root_dir"]
+    omnetpp_root = os.environ.get("__omnetpp_root_dir")
     if omnetpp_root is not None:
         for folder in os.listdir(os.path.join(omnetpp_root, "samples")):
             define_simulation_project(name=folder, folder_environment_variable="__omnetpp_root_dir", folder=f"samples/{folder}", build_types=["executable"])
