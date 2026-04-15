@@ -32,6 +32,60 @@ from opp_repl.simulation.config import *
 
 _logger = logging.getLogger(__name__)
 
+class OmnetppProject:
+    """
+    Represents a specific OMNeT++ installation with all its options. Used to locate the OMNeT++ root directory,
+    resolve executables like ``opp_run``, and determine library suffixes for different build modes.
+    """
+
+    def __init__(self, environment_variable="__omnetpp_root_dir", root_folder=None):
+        """
+        Initializes a new OMNeT++ project.
+
+        Parameters:
+            environment_variable (string):
+                The operating system environment variable specifying the root folder of the OMNeT++ installation.
+
+            root_folder (string or None):
+                The root folder of the OMNeT++ installation. If specified, it is used instead of the environment variable.
+        """
+        self.environment_variable = environment_variable
+        self.root_folder = root_folder
+
+    def __repr__(self):
+        return f"OmnetppProject(environment_variable={self.environment_variable!r}, root_folder={self.root_folder!r})"
+
+    def get_root_path(self):
+        if self.root_folder is not None:
+            return os.path.abspath(self.root_folder)
+        elif self.environment_variable is not None and self.environment_variable in os.environ:
+            return os.path.abspath(os.environ[self.environment_variable])
+        else:
+            return None
+
+    def get_library_suffix(self, mode="release"):
+        if mode == "release":
+            return "_release"
+        elif mode == "debug":
+            return "_dbg"
+        elif mode == "sanitize":
+            return "_sanitize"
+        elif mode == "coverage":
+            return "_coverage"
+        elif mode == "profile":
+            return "_profile"
+        else:
+            raise Exception(f"Unknown mode: {mode}")
+
+    def get_executable(self, mode="release"):
+        root = self.get_root_path()
+        if root is None:
+            return None
+        suffix = self.get_library_suffix(mode=mode)
+        return os.path.abspath(os.path.join(root, "bin/opp_run" + suffix))
+
+default_omnetpp_project = OmnetppProject()
+
 class SimulationProject:
     """
     Represents a simulation project that usually comes with its own modules and their C++ implementation, and also with
@@ -40,7 +94,7 @@ class SimulationProject:
     Please note that undocumented features are not supposed to be called by the user.
     """
 
-    def __init__(self, name, version, git_hash=None, git_diff_hash=None, folder_environment_variable=None, root_folder=None, folder=".", omnetpp_environment_variable="__omnetpp_root_dir", omnetpp_root_folder=None,
+    def __init__(self, name, version, git_hash=None, git_diff_hash=None, folder_environment_variable=None, root_folder=None, folder=".", omnetpp_project=None,
                  bin_folder=".", library_folder=".", executables=None, dynamic_libraries=None, static_libraries=None, build_types=["dynamic library"],
                  ned_folders=["."], ned_exclusions=[], ini_file_folders=["."], python_folders=["python"], image_folders=["."],
                  include_folders=["."], cpp_folders=["."], cpp_defines=[], msg_folders=["."],
@@ -69,11 +123,8 @@ class SimulationProject:
             root_folder (string or None):
                 The root folder of the simulation project. If specified, it is used instead of the folder_environment_variable environment variable.
 
-            omnetpp_environment_variable (string):
-                The operating system environment variable specifying the root folder of the omnetpp installation.
-
-            omnetpp_root_folder (string or None):
-                The root folder of the omnetpp installation. If specified, it is used instead of the omnetpp_environment_variable environment variable.
+            omnetpp_project (:py:class:`OmnetppProject` or None):
+                The OMNeT++ project representing the OMNeT++ installation to use. If unspecified, the default OMNeT++ project is used.
 
             folder (string):
                 The directory of the simulation project relative to the value of the folder_environment_variable attribute.
@@ -161,8 +212,7 @@ class SimulationProject:
         self.folder_environment_variable = folder_environment_variable
         self.root_folder = root_folder
         self.folder = folder
-        self.omnetpp_environment_variable = omnetpp_environment_variable
-        self.omnetpp_root_folder = omnetpp_root_folder
+        self.omnetpp_project = omnetpp_project or default_omnetpp_project
         # TODO this is commented out because it runs subprocesses, and it even does this from the IDE when some completely unrelated modules are loaded, sigh!
         # self.git_hash = git_hash or run_command_with_logging(["git", "rev-parse", "HEAD"], cwd=self.get_full_path(".")).stdout.strip()
         # if git_diff_hash:
@@ -227,14 +277,6 @@ class SimulationProject:
         else:
             return None
 
-    def get_omnetpp_root_path(self):
-        if self.omnetpp_root_folder is not None:
-            return os.path.abspath(self.omnetpp_root_folder)
-        elif self.omnetpp_environment_variable is not None and self.omnetpp_environment_variable in os.environ:
-            return os.path.abspath(os.environ[self.omnetpp_environment_variable])
-        else:
-            return None
-
     def get_full_path(self, path):
         root = self.get_root_path()
         base = os.path.join(root, self.folder) if root is not None else None
@@ -247,24 +289,12 @@ class SimulationProject:
 
     def get_executable(self, mode="release"):
         dynamic_loading = self.build_types[0] == "dynamic library"
-        executable = "bin/opp_run" if dynamic_loading else os.path.join(self.folder, self.executables[0])
-        suffix = self.get_library_suffix(mode=mode) if dynamic_loading else ""
-        root = self.get_omnetpp_root_path() if dynamic_loading else self.get_root_path()
-        return os.path.abspath(os.path.join(root, executable + suffix)) if root is not None else None
-
-    def get_library_suffix(self, mode="release"):
-        if mode == "release":
-            return "_release"
-        elif mode == "debug":
-            return "_dbg"
-        elif mode == "sanitize":
-            return "_sanitize"
-        elif mode == "coverage":
-            return "_coverage"
-        elif mode == "profile":
-            return "_profile"
+        if dynamic_loading:
+            return self.omnetpp_project.get_executable(mode=mode)
         else:
-            raise Exception(f"Unknown mode: {mode}")
+            executable = os.path.join(self.folder, self.executables[0])
+            root = self.get_root_path()
+            return os.path.abspath(os.path.join(root, executable)) if root is not None else None
 
     def get_library_folder_full_path(self):
         return self.get_full_path(self.library_folder)
@@ -409,8 +439,7 @@ class SimulationProject:
                         default_args = self.get_default_args()
                         args = [executable, *default_args, "-s", "-f", ini_file, "-c", config, "-q", "numruns"]
                     else:
-                        omnetpp_root = self.get_omnetpp_root_path()
-                        executable = os.path.join(omnetpp_root, "bin/opp_run") if omnetpp_root is not None else None
+                        executable = self.omnetpp_project.get_executable(mode="release")
                         args = [executable, "-s", "-f", ini_file, "-c", config, "-q", "numruns"]
                     result = run_command_with_logging(args, cwd=working_directory, env=self.get_env())
                     if result.returncode == 0:
@@ -507,9 +536,7 @@ def find_simulation_project_from_current_working_directory():
     while True:
         project_file_name = os.path.join(path, ".omnetpp")
         if os.path.exists(project_file_name):
-            with open(project_file_name) as project_file:
-                kwargs = json.load(project_file)
-                return define_simulation_project(**kwargs)
+            return _resolve_simulation_project_from_file(project_file_name, root_folder=path)
         parent_path = os.path.abspath(os.path.join(path, os.pardir))
         if path == parent_path:
             break
@@ -595,9 +622,12 @@ def resolve_simulation_project(designator):
     if designator.startswith('git:'):
         raise ValueError(f"git: designator is not yet implemented: {designator}")
 
-    # absolute or relative folder path
+    # absolute or relative file or folder path
     if designator.startswith(('/', '.', '~')):
-        return _resolve_simulation_project_from_folder(os.path.expanduser(os.path.abspath(designator)))
+        path = os.path.expanduser(os.path.abspath(designator))
+        if os.path.isfile(path):
+            return _resolve_simulation_project_from_file(path, root_folder=os.path.dirname(path))
+        return _resolve_simulation_project_from_folder(path)
 
     # name:version
     if ':' in designator:
@@ -616,7 +646,10 @@ def _resolve_simulation_project_from_folder(path):
             return project
     project_file = os.path.join(path, ".omnetpp")
     if os.path.exists(project_file):
-        with open(project_file) as f:
-            kwargs = json.load(f)
-            return define_simulation_project(root_folder=path, **kwargs)
+        return _resolve_simulation_project_from_file(project_file, root_folder=path)
     raise ValueError(f"No simulation project found at {path} (no registered project or .omnetpp file)")
+
+def _resolve_simulation_project_from_file(path, **kwargs):
+    with open(path) as f:
+        file_kwargs = json.load(f)
+        return define_simulation_project(**file_kwargs, **kwargs)
