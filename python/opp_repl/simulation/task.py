@@ -501,7 +501,7 @@ class MultipleSimulationTasks(MultipleTasks):
     def get_parameters_string(self, **kwargs):
         return ""
 
-def get_simulation_tasks(simulation_project=None, simulation_configs=None, mode=None, debug=None, break_at_event_number=None, break_at_matching_event=None, run_number=None, run_number_filter=None, exclude_run_number_filter=None, sim_time_limit=None, cpu_time_limit=None, concurrent=True, expected_num_tasks=None, simulation_task_class=SimulationTask, multiple_simulation_tasks_class=MultipleSimulationTasks, **kwargs):
+def get_simulation_tasks(simulation_project=None, simulation_environment=None, simulation_project_filter=None, simulation_configs=None, mode=None, debug=None, break_at_event_number=None, break_at_matching_event=None, run_number=None, run_number_filter=None, exclude_run_number_filter=None, sim_time_limit=None, cpu_time_limit=None, concurrent=True, expected_num_tasks=None, simulation_task_class=SimulationTask, multiple_simulation_tasks_class=MultipleSimulationTasks, **kwargs):
     """
     Returns multiple simulation tasks matching the filter criteria. The returned tasks can be run by calling the
     :py:meth:`run <opp_repl.common.task.MultipleTasks.run>` method.
@@ -510,6 +510,15 @@ def get_simulation_tasks(simulation_project=None, simulation_configs=None, mode=
         simulation_project (:py:class:`SimulationProject <opp_repl.simulation.project.SimulationProject>` or None):
             The simulation project from which simulation tasks are collected. If not specified then the default simulation
             project is used.
+
+        simulation_environment (:py:class:`SimulationEnvironment <opp_repl.simulation.environment.SimulationEnvironment>` or None):
+            A simulation environment grouping an OMNeT++ project with one or more simulation projects. When provided,
+            overlays are automatically mounted and tasks are collected from all matching projects. Takes precedence
+            over *simulation_project*.
+
+        simulation_project_filter (string or None):
+            A regex that selects which projects within a *simulation_environment* to include. Ignored when
+            *simulation_environment* is not provided.
 
         simulation_configs (List of :py:class:`SimulationConfig <opp_repl.simulation.config.SimulationConfig>` or None):
             The list of simulation configurations from which the simulation tasks are collected. If not specified then
@@ -572,10 +581,27 @@ def get_simulation_tasks(simulation_project=None, simulation_configs=None, mode=
         debug = True if break_at_event_number or break_at_matching_event else False
     if mode is None:
         mode = "debug" if debug else "release"
+    if simulation_environment is not None:
+        simulation_environment.ensure_overlays()
+        projects = simulation_environment.get_matching_projects(simulation_project_filter)
+        all_tasks = []
+        for project in projects:
+            project_configs = simulation_configs if simulation_configs is not None else project.get_simulation_configs(concurrent=concurrent, **kwargs)
+            project_tasks = _collect_simulation_tasks_for_project(project_configs, run_number=run_number, run_number_filter=run_number_filter, exclude_run_number_filter=exclude_run_number_filter, sim_time_limit=sim_time_limit, cpu_time_limit=cpu_time_limit, mode=mode, debug=debug, break_at_event_number=break_at_event_number, break_at_matching_event=break_at_matching_event, simulation_task_class=simulation_task_class, **kwargs)
+            all_tasks.extend(project_tasks)
+        if expected_num_tasks is not None and len(all_tasks) != expected_num_tasks:
+            raise Exception("Number of found and expected simulation tasks mismatch")
+        return multiple_simulation_tasks_class(tasks=all_tasks, simulation_project=projects[0] if len(projects) == 1 else None, mode=mode, concurrent=concurrent, **kwargs)
     if simulation_project is None:
         simulation_project = get_default_simulation_project()
     if simulation_configs is None:
         simulation_configs = simulation_project.get_simulation_configs(concurrent=concurrent, **kwargs)
+    simulation_tasks = _collect_simulation_tasks_for_project(simulation_configs, run_number=run_number, run_number_filter=run_number_filter, exclude_run_number_filter=exclude_run_number_filter, sim_time_limit=sim_time_limit, cpu_time_limit=cpu_time_limit, mode=mode, debug=debug, break_at_event_number=break_at_event_number, break_at_matching_event=break_at_matching_event, simulation_task_class=simulation_task_class, **kwargs)
+    if expected_num_tasks is not None and len(simulation_tasks) != expected_num_tasks:
+        raise Exception("Number of found and expected simulation tasks mismatch")
+    return multiple_simulation_tasks_class(tasks=simulation_tasks, simulation_project=simulation_project, mode=mode, concurrent=concurrent, **kwargs)
+
+def _collect_simulation_tasks_for_project(simulation_configs, run_number=None, run_number_filter=None, exclude_run_number_filter=None, sim_time_limit=None, cpu_time_limit=None, mode="release", debug=False, break_at_event_number=None, break_at_matching_event=None, simulation_task_class=SimulationTask, **kwargs):
     simulation_tasks = []
     for simulation_config in simulation_configs:
         if run_number is not None:
@@ -588,9 +614,7 @@ def get_simulation_tasks(simulation_project=None, simulation_configs=None, mode=
                     simulation_run_sim_time_limit = sim_time_limit(simulation_config, generated_run_number) if callable(sim_time_limit) else (sim_time_limit or simulation_config.sim_time_limit)
                     simulation_task = simulation_task_class(simulation_config=simulation_config, run_number=generated_run_number, mode=mode, debug=debug, break_at_event_number=break_at_event_number, break_at_matching_event=break_at_matching_event, sim_time_limit=simulation_run_sim_time_limit, cpu_time_limit=cpu_time_limit, **kwargs)
                     simulation_tasks.append(simulation_task)
-    if expected_num_tasks is not None and len(simulation_tasks) != expected_num_tasks:
-        raise Exception("Number of found and expected simulation tasks mismatch")
-    return multiple_simulation_tasks_class(tasks=simulation_tasks, simulation_project=simulation_project, mode=mode, concurrent=concurrent, **kwargs)
+    return simulation_tasks
 
 def get_simulation_task(**kwargs):
     multiple_simulation_tasks = get_simulation_tasks(**kwargs)
