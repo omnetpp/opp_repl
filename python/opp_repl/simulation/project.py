@@ -876,6 +876,43 @@ def _parse_opp_file(path):
             raise ValueError(f"{path}: parameter '{kw.arg}' must be a literal value: {e}")
     return class_name, kwargs
 
+# -- Git worktree helpers -------------------------------------------------
+
+def make_worktree_simulation_project(simulation_project, git_hash):
+    """Create a git worktree at *git_hash* and return a new :py:class:`SimulationProject` for it.
+
+    The worktree is placed next to the original project folder, named
+    ``<basename>-<short_hash>``.  If the worktree already exists, it is
+    reused.
+
+    Parameters:
+        simulation_project (:py:class:`SimulationProject`):
+            The source project whose repository is checked out.
+        git_hash (str):
+            A git commit-ish (hash, tag, branch name, etc.).
+
+    Returns:
+        :py:class:`SimulationProject`: A new project rooted at the worktree.
+    """
+    src_root = simulation_project.get_root_path()
+    if src_root is None:
+        raise RuntimeError("Source project has no root path")
+    short_hash = git_hash[:10]
+    worktree_path = os.path.join(os.path.dirname(src_root),
+                                 os.path.basename(src_root) + "-" + short_hash)
+    if not os.path.isdir(worktree_path):
+        subprocess.run(
+            ["git", "worktree", "add", worktree_path, git_hash],
+            cwd=src_root, check=True,
+        )
+    import copy
+    project = copy.copy(simulation_project)
+    project.name = simulation_project.name + "-" + short_hash
+    project.root_folder = worktree_path
+    project.simulation_configs = None
+    project._overlay = None
+    return project
+
 # -- Default workspace and module-level shims ----------------------------
 
 default_workspace = SimulationWorkspace(os.path.expanduser("~/workspace"))
