@@ -597,6 +597,7 @@ class SimulationProject:
 
     def get_simulation_configs(self, **kwargs):
         if self.simulation_configs is None:
+            self.ensure_mounted()
             self.simulation_configs = self.get_all_simulation_configs()
         return list(builtins.filter(lambda simulation_config: simulation_config.matches_filter(**kwargs), self.simulation_configs))
 
