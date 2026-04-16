@@ -1,4 +1,5 @@
 import copy
+import pandas as pd
 
 try:
     from omnetpp.scave.results import *
