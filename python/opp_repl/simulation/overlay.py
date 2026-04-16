@@ -133,86 +133,50 @@ def cleanup_overlays(build_root=None):
 def make_overlay_simulation_project(project, overlay_key=None, omnetpp_project=None, build_root=None):
     """Create an overlay-backed copy of a SimulationProject.
 
-    Makes a shallow copy and patches ``root_folder`` and ``omnetpp_project``
-    so that all methods naturally resolve paths to the overlay mount point.
-    Also overrides ``get_env()`` to include the overlay OMNeT++ bin/lib dirs.
-
-    Parameters:
-        project: The original :py:class:`SimulationProject` to copy.
-        overlay_key (str or None): Overlay key name. Defaults to ``project.name``.
-        omnetpp_project: Optional override for the OMNeT++ project.
-        build_root (str or None): Override for the build root directory.
-
-    Returns:
-        A copy of *project* whose paths point to the overlay.
+    .. deprecated::
+        Use ``SimulationProject(..., overlay_key=..., build_root=...)`` instead.
     """
     import copy
+    import warnings
+    warnings.warn(
+        "make_overlay_simulation_project is deprecated; pass overlay_key to SimulationProject() instead",
+        DeprecationWarning, stacklevel=2,
+    )
+    clone = copy.copy(project)
     overlay = OverlayMount(
         project.get_root_path(),
         overlay_key or project.name,
         build_root,
     )
-    clone = copy.copy(project)
     clone._overlay = overlay
     clone.root_folder = overlay.merged_path
     clone.simulation_configs = None
     if omnetpp_project is not None:
         clone.omnetpp_project = omnetpp_project
-
-    original_get_env = type(project).get_env
-
-    def _overlay_get_env(self):
-        env = original_get_env(self)
-        opp_root = self.get_omnetpp_project().get_root_path()
-        if opp_root is not None:
-            bin_dir = os.path.join(opp_root, "bin")
-            lib_dir = os.path.join(opp_root, "lib")
-            path_parts = env.get("PATH", "").split(os.pathsep)
-            if bin_dir not in path_parts:
-                env["PATH"] = bin_dir + os.pathsep + env.get("PATH", "")
-            ld_parts = env.get("LD_LIBRARY_PATH", "").split(os.pathsep)
-            if lib_dir not in ld_parts:
-                env["LD_LIBRARY_PATH"] = lib_dir + os.pathsep + env.get("LD_LIBRARY_PATH", "")
-        return env
-
-    import types
-    clone.get_env = types.MethodType(_overlay_get_env, clone)
-
-    clone.ensure_mounted = lambda: overlay.mount()
-    clone.unmount = lambda: overlay.unmount()
-    clone.is_mounted = lambda: overlay.is_mounted()
     return clone
 
 
 def make_overlay_omnetpp_project(project, overlay_key=None, build_root=None):
     """Create an overlay-backed copy of an OmnetppProject.
 
-    Makes a shallow copy and patches ``root_folder`` so that all methods
-    naturally resolve paths to the overlay mount point.
-
-    Parameters:
-        project: The original :py:class:`OmnetppProject` to copy.
-        overlay_key (str or None): Overlay key name. Defaults to the basename
-            of the project's root path.
-        build_root (str or None): Override for the build root directory.
-
-    Returns:
-        A copy of *project* whose paths point to the overlay.
+    .. deprecated::
+        Use ``OmnetppProject(..., overlay_key=..., build_root=...)`` instead.
     """
     import copy
+    import warnings
+    warnings.warn(
+        "make_overlay_omnetpp_project is deprecated; pass overlay_key to OmnetppProject() instead",
+        DeprecationWarning, stacklevel=2,
+    )
     root = project.get_root_path()
+    clone = copy.copy(project)
     overlay = OverlayMount(
         root,
         overlay_key or os.path.basename(root),
         build_root,
     )
-    clone = copy.copy(project)
     clone._overlay = overlay
     clone.root_folder = overlay.merged_path
-
-    clone.ensure_mounted = lambda: overlay.mount()
-    clone.unmount = lambda: overlay.unmount()
-    clone.is_mounted = lambda: overlay.is_mounted()
     return clone
 
 

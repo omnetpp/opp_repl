@@ -37,9 +37,14 @@ class OmnetppProject:
     """
     Represents a specific OMNeT++ installation with all its options. Used to locate the OMNeT++ root directory,
     resolve executables like ``opp_run``, and determine library suffixes for different build modes.
+
+    Optionally supports overlay builds via fuse-overlayfs.  When *overlay_key*
+    is given, an :py:class:`OverlayMount` is created and all paths resolve to
+    the overlay's merged directory instead of the original source tree.
     """
 
-    def __init__(self, environment_variable="__omnetpp_root_dir", root_folder=None):
+    def __init__(self, environment_variable="__omnetpp_root_dir", root_folder=None,
+                 overlay_key=None, build_root=None):
         """
         Initializes a new OMNeT++ project.
 
@@ -49,12 +54,37 @@ class OmnetppProject:
 
             root_folder (string or None):
                 The root folder of the OMNeT++ installation. If specified, it is used instead of the environment variable.
+
+            overlay_key (str or None):
+                If set, enables overlay mode.  An :py:class:`OverlayMount` is
+                created with this key and all paths resolve to the overlay's
+                merged directory.
+
+            build_root (str or None):
+                Override for the overlay build root directory.
         """
         self.environment_variable = environment_variable
         self.root_folder = root_folder
+        self._overlay = None
+        if overlay_key is not None:
+            from opp_repl.simulation.overlay import OverlayMount
+            source_root = self._resolve_source_root()
+            if source_root is None:
+                raise RuntimeError("Cannot create overlay: root path is not set")
+            self._overlay = OverlayMount(source_root, overlay_key, build_root)
+            self.root_folder = self._overlay.merged_path
+
+    def _resolve_source_root(self):
+        if self.root_folder is not None:
+            return os.path.abspath(self.root_folder)
+        elif self.environment_variable is not None and self.environment_variable in os.environ:
+            return os.path.abspath(os.environ[self.environment_variable])
+        else:
+            return None
 
     def __repr__(self):
-        return f"OmnetppProject(environment_variable={self.environment_variable!r}, root_folder={self.root_folder!r})"
+        overlay = f", overlay={self._overlay.overlay_key!r}" if self._overlay else ""
+        return f"OmnetppProject(environment_variable={self.environment_variable!r}, root_folder={self.root_folder!r}{overlay})"
 
     def get_root_path(self):
         if self.root_folder is not None:
@@ -86,6 +116,7 @@ class OmnetppProject:
         return os.path.abspath(os.path.join(root, "bin/opp_run" + suffix))
 
     def build(self, mode="release"):
+        self.ensure_mounted()
         root = self.get_root_path()
         if root is None:
             raise RuntimeError("Cannot build OMNeT++: root path is not set")
@@ -99,6 +130,23 @@ class OmnetppProject:
         args = ["make", "MODE=" + mode, "-j", str(multiprocessing.cpu_count())]
         _logger.info("Building OMNeT++ in %s mode at %s", mode, root)
         run_command_with_logging(args, cwd=root, env=env, error_message="Building OMNeT++ failed")
+
+    def ensure_mounted(self):
+        if self._overlay is not None:
+            self._overlay.mount()
+
+    def unmount(self):
+        if self._overlay is not None:
+            self._overlay.unmount()
+
+    def is_mounted(self):
+        if self._overlay is not None:
+            return self._overlay.is_mounted()
+        return False
+
+    def clean(self):
+        if self._overlay is not None:
+            self._overlay.clean()
 
 default_omnetpp_project = OmnetppProject()
 
@@ -116,7 +164,7 @@ class SimulationProject:
                  include_folders=["."], cpp_folders=["."], cpp_defines=[], msg_folders=["."],
                  media_folder=".", statistics_folder=".", fingerprint_store="fingerprint.json", speed_store="speed.json",
                  used_projects=[], external_bin_folders=[], external_library_folders=[], external_libraries=[], external_include_folders=[],
-                 simulation_configs=None, **kwargs):
+                 simulation_configs=None, overlay_key=None, build_root=None, **kwargs):
         """
         Initializes a new simulation project.
 
@@ -222,6 +270,14 @@ class SimulationProject:
             simulation_configs (List of :py:class:`SimulationConfig <opp_repl.simulation.config.SimulationConfig>`):
                 The list of simulation configs available in this simulation project.
 
+            overlay_key (str or None):
+                If set, enables overlay mode.  An :py:class:`OverlayMount` is
+                created with this key and all paths resolve to the overlay's
+                merged directory.
+
+            build_root (str or None):
+                Override for the overlay build root directory.
+
             kwargs (dict):
                 Ignored.
         """
@@ -265,6 +321,15 @@ class SimulationProject:
         self.external_include_folders = external_include_folders
         self.simulation_configs = simulation_configs
         self.binary_simulation_distribution_file_paths = None
+        self._overlay = None
+        if overlay_key is not None:
+            from opp_repl.simulation.overlay import OverlayMount
+            source_root = self.get_root_path()
+            if source_root is None:
+                raise RuntimeError("Cannot create overlay: root path is not set")
+            self._overlay = OverlayMount(source_root, overlay_key, build_root)
+            self.root_folder = self._overlay.merged_path
+            self.simulation_configs = None
 
     def __repr__(self):
         return repr(self, ["name", "version", "git_hash", "git_diff_hash"])
@@ -282,7 +347,17 @@ class SimulationProject:
         return hasher.digest()
 
     def get_env(self):
-        return os.environ.copy()
+        env = os.environ.copy()
+        opp = self.get_omnetpp_project()
+        opp_root = opp.get_root_path() if opp else None
+        if opp_root is not None:
+            bin_dir = os.path.join(opp_root, "bin")
+            lib_dir = os.path.join(opp_root, "lib")
+            if bin_dir not in env.get("PATH", "").split(os.pathsep):
+                env["PATH"] = bin_dir + os.pathsep + env.get("PATH", "")
+            if lib_dir not in env.get("LD_LIBRARY_PATH", "").split(os.pathsep):
+                env["LD_LIBRARY_PATH"] = lib_dir + os.pathsep + env.get("LD_LIBRARY_PATH", "")
+        return env
 
     def get_environment_variable_relative_path(self, enviroment_variable, path):
         return os.path.abspath(os.path.join(os.environ[enviroment_variable], path)) if enviroment_variable in os.environ else None
@@ -382,8 +457,26 @@ class SimulationProject:
         return msg_files
 
     def build(self, **kwargs):
+        self.ensure_mounted()
         import opp_repl.simulation.build
         opp_repl.simulation.build.build_project(simulation_project=self, **kwargs)
+
+    def ensure_mounted(self):
+        if self._overlay is not None:
+            self._overlay.mount()
+
+    def unmount(self):
+        if self._overlay is not None:
+            self._overlay.unmount()
+
+    def is_mounted(self):
+        if self._overlay is not None:
+            return self._overlay.is_mounted()
+        return False
+
+    def clean(self):
+        if self._overlay is not None:
+            self._overlay.clean()
 
     # KLUDGE TODO replace this with a Python binding to the C++ configuration reader
     def collect_ini_file_simulation_configs(self, ini_path):
@@ -555,7 +648,7 @@ def find_simulation_project_from_current_working_directory():
     current_working_directory = os.getcwd()
     path = current_working_directory
     while True:
-        project_file_name = os.path.join(path, ".omnetpp")
+        project_file_name = os.path.join(path, ".opp")
         if os.path.exists(project_file_name):
             return _resolve_simulation_project_from_file(project_file_name, root_folder=path)
         parent_path = os.path.abspath(os.path.join(path, os.pardir))
@@ -625,7 +718,7 @@ def resolve_simulation_project(designator):
     - **git:ref** — (TODO) checkout a git ref in a worktree and resolve
 
     When a folder path is given, the function first checks whether any registered
-    project already lives at that location.  If not, it looks for a ``.omnetpp``
+    project already lives at that location.  If not, it looks for a ``.opp``
     project descriptor file in the folder and auto-registers the project.
 
     Parameters:
@@ -665,10 +758,10 @@ def _resolve_simulation_project_from_folder(path):
     for (name, version), project in simulation_projects.items():
         if os.path.realpath(project.get_full_path(".")) == path:
             return project
-    project_file = os.path.join(path, ".omnetpp")
+    project_file = os.path.join(path, ".opp")
     if os.path.exists(project_file):
         return _resolve_simulation_project_from_file(project_file, root_folder=path)
-    raise ValueError(f"No simulation project found at {path} (no registered project or .omnetpp file)")
+    raise ValueError(f"No simulation project found at {path} (no registered project or .opp file)")
 
 def _resolve_simulation_project_from_file(path, **kwargs):
     with open(path) as f:

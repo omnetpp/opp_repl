@@ -11,24 +11,10 @@ import logging
 import os
 
 from opp_repl.simulation.project import OmnetppProject, SimulationProject
-from opp_repl.simulation.overlay import OverlayOmnetppProject, OverlaySimulationProject
 from opp_repl.simulation.environment import SimulationEnvironment
 from opp_repl.simulation.task import run_simulations
 
 _logger = logging.getLogger(__name__)
-
-def _make_inet_project(name, inet_root):
-    return SimulationProject(
-        name=name,
-        version=None,
-        root_folder=inet_root,
-        library_folder="src",
-        dynamic_libraries=["INET"],
-        build_types=["dynamic library"],
-        ned_folders=["src", "examples", "showcases", "tutorials", "tests/networks"],
-        ini_file_folders=["examples"],
-        bin_folder="bin",
-    )
 
 def test_overlay_build(env_name, opp_root, inet_root, build_root=None, clean=True):
     """Test one omnetpp + inet combination under overlays.
@@ -49,21 +35,19 @@ def test_overlay_build(env_name, opp_root, inet_root, build_root=None, clean=Tru
     opp_basename = os.path.basename(opp_root)
     inet_basename = os.path.basename(inet_root)
 
-    overlay_opp = OverlayOmnetppProject(
-        OmnetppProject(root_folder=opp_root),
-        overlay_key=opp_basename, build_root=build_root,
-    )
-    inet_proj = _make_inet_project(f"{inet_basename}+{opp_basename}", inet_root)
-    overlay_inet = OverlaySimulationProject(
-        inet_proj,
-        overlay_key=f"{inet_basename}+{opp_basename}",
+    overlay_opp = OmnetppProject(root_folder=opp_root, overlay_key=opp_basename, build_root=build_root)
+    overlay_inet = SimulationProject(
+        name=f"{inet_basename}+{opp_basename}", version=None, root_folder=inet_root,
         omnetpp_project=overlay_opp,
-        build_root=build_root,
+        library_folder="src", dynamic_libraries=["INET"], build_types=["dynamic library"],
+        ned_folders=["src", "examples", "showcases", "tutorials", "tests/networks"],
+        ini_file_folders=["examples"], bin_folder="bin",
+        overlay_key=f"{inet_basename}+{opp_basename}", build_root=build_root,
     )
 
     if clean:
         for proj in [overlay_opp, overlay_inet]:
-            proj._overlay.clean()
+            proj.clean()
 
     env = SimulationEnvironment(
         env_name,
@@ -141,17 +125,18 @@ def run_simple_example():
         omnepp_project = OmnetppProject(root_folder=os.path.expanduser(f"~/workspace/{omnetpp_folder}"))
         omnepp_project.build(mode="release")
         for inet_folder in inet_folders:
-            inet_project = SimulationProject(name=inet_folder, version=None, root_folder=os.path.expanduser(f"~/workspace/{inet_folder}"),
-                                  library_folder="src", dynamic_libraries=["INET"],
-                                  build_types=["dynamic library"],
-                                  ned_folders=["src", "examples", "showcases", "tutorials", "tests/networks"],
-                                  ini_file_folders=["examples"], bin_folder="bin")
-            overlay_inet = OverlaySimulationProject(inet_project,
-                overlay_key=f"{omnetpp_folder}+{inet_folder}",
+            inet_project = SimulationProject(
+                name=inet_folder, version=None,
                 omnetpp_project=omnepp_project,
+                overlay_key=f"{omnetpp_folder}+{inet_folder}",
+                root_folder=os.path.expanduser(f"~/workspace/{inet_folder}"),
+                library_folder="src", bin_folder="bin",
+                build_types=["dynamic library"],
+                dynamic_libraries=["INET"],
+                ned_folders=["src", "examples", "showcases", "tutorials", "tests/networks"],
+                ini_file_folders=["examples"],
             )
-            overlay_inet.ensure_mounted()
-            overlay_inet.build(mode="release")
+            inet_project.build(mode="release")
             print(f"--- {omnetpp_folder}+{inet_folder} ---")
-            results = run_simulations(simulation_project=overlay_inet, working_directory_filter="examples/ethernet/simple")
+            results = run_simulations(simulation_project=inet_project, working_directory_filter="examples/ethernet/simple")
             print(results)
