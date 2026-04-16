@@ -88,6 +88,9 @@ def api_reference(package_name: str) -> str:
     if all_names is None:
         all_names = [n for n in dir(mod) if not n.startswith("_")]
     lines = []
+    module_doc = inspect.getdoc(mod)
+    if module_doc:
+        lines.append(module_doc)
     for name in sorted(all_names):
         obj = getattr(mod, name, None)
         if obj is None:
@@ -134,10 +137,11 @@ def execute_python(code: str) -> str:
     """Execute Python code in the live IPython session.
 
     The code runs in the same namespace as the interactive REPL user.
-    All public opp_repl functions and classes are pre-loaded.
+    All public opp_repl packages, functions and classes are pre-loaded.
 
     IMPORTANT: Before writing any code, always read the API resources first.
     Do NOT guess function names, parameter names, or signatures. Look them up.
+    Do NOT import packages that are already pre-loaded.
 
     To discover the API:
     - Read the file:///opp_repl/packages resource for a list of sub-packages

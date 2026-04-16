@@ -1,3 +1,42 @@
+"""
+Compare simulation results between two simulation projects or git versions.
+
+This module runs matching simulation configs in both projects and compares
+three aspects: stdout trajectories, fingerprint trajectories, and statistical
+(scalar) results.
+
+Quick examples
+--------------
+
+Compare two arbitrary projects::
+
+    results = compare_simulations(
+        simulation_project_1=project_a,
+        simulation_project_2=project_b,
+        working_directory_filter="simulations/nr/.*",
+        config_filter="General",
+        run_number=0)
+
+Compare two git commits of the same project::
+
+    simu5g = get_simulation_project("simu5g")
+    results = compare_git_versions(simu5g, "HEAD~1", "HEAD",
+                                   config_filter="General",
+                                   run_number=0)
+
+Analyze the results::
+
+    r = results.results[0]
+    print(r)                            # overall summary
+    print(r.stdout_trajectory_comparison_result)       # IDENTICAL / DIVERGENT
+    print(r.fingerprint_trajectory_comparison_result)  # IDENTICAL / DIVERGENT
+    print(r.statistical_comparison_result)             # IDENTICAL / DIFFERENT
+    r.print_different_statistical_results(include_relative_errors=True)
+
+See :py:func:`compare_simulations`, :py:func:`compare_git_versions`, and
+:py:class:`CompareSimulationsTaskResult` for full details.
+"""
+
 import copy
 import pandas as pd
 
@@ -15,6 +54,40 @@ __sphinx_mock__ = True # ignore this module in documentation
 _logger = logging.getLogger(__name__)
 
 class CompareSimulationsTaskResult(TaskResult):
+    """Result of comparing two simulation runs.
+
+    The overall verdict is stored in ``result`` (``"IDENTICAL"``,
+    ``"DIVERGENT"``, or ``"DIFFERENT"``) with a human-readable ``reason``.
+
+    Stdout trajectory::
+
+        r.stdout_trajectory_comparison_result   # "IDENTICAL" or "DIVERGENT"
+        r.stdout_trajectory_divergence_position  # divergence event or None
+        r.stdout_trajectory_divergence_position.get_description()
+        r.debug_at_stdout_divergence_position()
+        r.run_until_stdout_divergence_position()
+
+    Fingerprint trajectory::
+
+        r.fingerprint_trajectory_comparison_result   # "IDENTICAL" or "DIVERGENT"
+        r.fingerprint_trajectory_divergence_position  # divergence event or None
+        r.fingerprint_trajectory_divergence_position.get_description()
+        r.print_divergence_position_cause_chain()
+        r.show_divergence_posisiton_in_sequence_chart()
+        r.debug_at_fingerprint_divergence_position()
+        r.run_until_fingerprint_divergence_position()
+
+    Statistical (scalar) differences::
+
+        r.statistical_comparison_result        # "IDENTICAL" or "DIFFERENT"
+        r.different_statistical_results        # DataFrame sorted by relative_error
+        r.identical_statistical_results        # DataFrame of matching scalars
+        r.df_1, r.df_2                         # raw scalar DataFrames
+        r.print_different_statistic_modules()
+        r.print_different_statistic_names()
+        r.print_different_statistical_results(include_relative_errors=True,
+                                              include_absolute_errors=True)
+    """
     def __init__(self, multiple_task_results=None, **kwargs):
         super().__init__(expected_result="IDENTICAL", **kwargs)
         self.multiple_task_results = multiple_task_results
@@ -303,8 +376,58 @@ def compare_simulations_using_multiple_tasks(multiple_tasks_1, multiple_tasks_2,
     return multiple_compare_simulations_tasks.run(**kwargs)
 
 def compare_simulations(**kwargs):
+    """Compare simulation results between two projects.
+
+    Use suffixed keyword arguments (``_1`` / ``_2``) for project-specific
+    parameters; unsuffixed arguments apply to both sides.  Any keyword
+    arguments accepted by :py:func:`get_simulation_tasks` can be used
+    (e.g. ``working_directory_filter``, ``config_filter``, ``run_number``).
+
+    Additional filtering keyword arguments:
+
+    - ``statistical_result_name_filter`` / ``exclude_statistic_name_filter``
+    - ``statistical_result_module_filter`` / ``exclude_statistic_module_filter``
+    - ``stdout_filter`` / ``exclude_stdout_filter``
+
+    Example::
+
+        results = compare_simulations(
+            simulation_project_1=project_a,
+            simulation_project_2=project_b,
+            working_directory_filter="simulations/nr/.*",
+            config_filter="General",
+            run_number=0)
+
+    Returns:
+        :py:class:`MultipleCompareSimulationsTaskResults`
+    """
     kwargs_1 = {key[:-2]: value for key, value in kwargs.items() if key.endswith('_1')}
     kwargs_2 = {key[:-2]: value for key, value in kwargs.items() if key.endswith('_2')}
     multiple_simulation_tasks_1 = get_simulation_tasks(**kwargs_1, **kwargs)
     multiple_simulation_tasks_2 = get_simulation_tasks(**kwargs_2, **kwargs)
     return compare_simulations_using_multiple_tasks(multiple_simulation_tasks_1, multiple_simulation_tasks_2, **kwargs)
+
+def compare_git_versions(simulation_project, git_hash_1, git_hash_2, **kwargs):
+    """Compare simulation results between two git versions of the same project.
+
+    Creates git worktrees for each commit, builds both, and runs the
+    comparison pipeline.
+
+    Parameters:
+        simulation_project (:py:class:`SimulationProject`):
+            The simulation project whose repository contains both commits.
+        git_hash_1 (str):
+            First git commit-ish (hash, tag, branch, etc.).
+        git_hash_2 (str):
+            Second git commit-ish.
+        kwargs:
+            Forwarded to :py:func:`compare_simulations` (e.g.
+            ``working_directory_filter``, ``config_filter``, ``run_number``).
+
+    Returns:
+        The result of :py:func:`compare_simulations_using_multiple_tasks`.
+    """
+    from opp_repl.simulation.project import make_worktree_simulation_project
+    project_1 = make_worktree_simulation_project(simulation_project, git_hash_1)
+    project_2 = make_worktree_simulation_project(simulation_project, git_hash_2)
+    return compare_simulations(simulation_project_1=project_1, simulation_project_2=project_2, **kwargs)
