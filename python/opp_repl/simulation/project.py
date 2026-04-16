@@ -12,6 +12,8 @@ one above the current working directory when the omnetpp.repl package is loaded,
 later.
 """
 
+import ast
+import builtins
 import glob
 import hashlib
 import json
@@ -150,6 +152,20 @@ class OmnetppProject:
 
 default_omnetpp_project = OmnetppProject()
 
+omnetpp_projects = {}
+
+def get_omnetpp_project_by_name(name):
+    return omnetpp_projects[name]
+
+def set_omnetpp_project(name, project):
+    omnetpp_projects[name] = project
+
+def define_omnetpp_project(name, **kwargs):
+    project = OmnetppProject(**kwargs)
+    project.name = name
+    set_omnetpp_project(name, project)
+    return project
+
 class SimulationProject:
     """
     Represents a simulation project that usually comes with its own modules and their C++ implementation, and also with
@@ -158,7 +174,7 @@ class SimulationProject:
     Please note that undocumented features are not supposed to be called by the user.
     """
 
-    def __init__(self, name, version, git_hash=None, git_diff_hash=None, folder_environment_variable=None, root_folder=None, folder=".", omnetpp_project=None,
+    def __init__(self, name, version=None, git_hash=None, git_diff_hash=None, folder_environment_variable=None, root_folder=None, folder=".", omnetpp_project=None,
                  bin_folder=".", library_folder=".", executables=None, dynamic_libraries=None, static_libraries=None, build_types=["dynamic library"],
                  ned_folders=["."], ned_exclusions=[], ini_file_folders=["."], python_folders=["python"], image_folders=["."],
                  include_folders=["."], cpp_folders=["."], cpp_defines=[], msg_folders=["."],
@@ -381,6 +397,8 @@ class SimulationProject:
         return os.path.relpath(path, base)
 
     def get_omnetpp_project(self):
+        if isinstance(self.omnetpp_project, str):
+            self.omnetpp_project = get_omnetpp_project_by_name(self.omnetpp_project)
         return self.omnetpp_project or default_omnetpp_project
 
     def get_executable(self, mode="release"):
@@ -767,7 +785,100 @@ def _resolve_simulation_project_from_folder(path):
         return _resolve_simulation_project_from_file(project_file, root_folder=path)
     raise ValueError(f"No simulation project found at {path} (no registered project or .opp file)")
 
-def _resolve_simulation_project_from_file(path, **kwargs):
+def _parse_opp_file(path):
+    """Parse a restricted-Python ``.opp`` file and return (class_name, kwargs).
+
+    The file must contain a single expression of the form::
+
+        OmnetppProject(key=value, ...)
+        SimulationProject(key=value, ...)
+
+    All values must be literals (strings, numbers, booleans, None, lists, dicts).
+    No imports, no variable references, no arbitrary code.
+
+    Returns:
+        tuple: (class_name, dict_of_keyword_arguments)
+
+    Raises:
+        ValueError: if the file does not match the restricted format.
+    """
     with open(path) as f:
-        file_kwargs = json.load(f)
-        return define_simulation_project(**file_kwargs, **kwargs)
+        source = f.read()
+    tree = ast.parse(source, filename=path, mode="eval")
+    node = tree.body
+    if not isinstance(node, ast.Call):
+        raise ValueError(f"{path}: expected a single constructor call, got {type(node).__name__}")
+    if not isinstance(node.func, ast.Name):
+        raise ValueError(f"{path}: expected a simple name like OmnetppProject(...), got {ast.dump(node.func)}")
+    class_name = node.func.id
+    if class_name not in ("OmnetppProject", "SimulationProject"):
+        raise ValueError(f"{path}: unknown project type '{class_name}', expected OmnetppProject or SimulationProject")
+    if node.args:
+        raise ValueError(f"{path}: positional arguments are not allowed, use keyword arguments only")
+    kwargs = {}
+    for kw in node.keywords:
+        try:
+            kwargs[kw.arg] = ast.literal_eval(kw.value)
+        except (ValueError, SyntaxError) as e:
+            raise ValueError(f"{path}: parameter '{kw.arg}' must be a literal value: {e}")
+    return class_name, kwargs
+
+def _resolve_simulation_project_from_file(path, **kwargs):
+    class_name, file_kwargs = _parse_opp_file(path)
+    if class_name != "SimulationProject":
+        raise ValueError(f"{path}: expected SimulationProject, got {class_name}")
+    file_kwargs.update(kwargs)
+    return define_simulation_project(**file_kwargs)
+
+def load_opp_file(path):
+    """Load a single ``.opp`` file and register the project.
+
+    Returns:
+        The created :py:class:`OmnetppProject` or :py:class:`SimulationProject`.
+    """
+    class_name, kwargs = _parse_opp_file(path)
+    kwargs.setdefault("root_folder", os.path.dirname(os.path.abspath(path)))
+    if class_name == "OmnetppProject":
+        name = kwargs.pop("name", os.path.basename(os.path.dirname(os.path.abspath(path))))
+        return define_omnetpp_project(name, **kwargs)
+    else:
+        kwargs.setdefault("name", os.path.splitext(os.path.basename(path))[0])
+        return define_simulation_project(**kwargs)
+
+def load_workspace(workspace_path):
+    """Scan *workspace_path* for ``*.opp`` files and register all projects.
+
+    Omnetpp projects are loaded first so that simulation projects can
+    reference them by name via ``omnetpp_project="..."``.
+
+    Returns:
+        dict: ``{name: project}`` for all loaded projects.
+    """
+    workspace_path = os.path.expanduser(workspace_path)
+    opp_files = glob.glob(os.path.join(workspace_path, "*", "*.opp"))
+    # Separate by type — parse first, load omnetpp projects first
+    parsed = []
+    for opp_file in sorted(opp_files):
+        try:
+            class_name, kwargs = _parse_opp_file(opp_file)
+            parsed.append((opp_file, class_name, kwargs))
+        except ValueError as e:
+            _logger.warning("Skipping %s: %s", opp_file, e)
+    results = {}
+    # Pass 1: OmnetppProject (no dependencies)
+    for opp_file, class_name, kwargs in parsed:
+        if class_name == "OmnetppProject":
+            kwargs.setdefault("root_folder", os.path.dirname(os.path.abspath(opp_file)))
+            name = kwargs.pop("name", os.path.basename(os.path.dirname(os.path.abspath(opp_file))))
+            proj = define_omnetpp_project(name, **kwargs)
+            results[name] = proj
+            _logger.info("Loaded omnetpp project '%s' from %s", name, opp_file)
+    # Pass 2: SimulationProject (may reference omnetpp by name — resolved lazily)
+    for opp_file, class_name, kwargs in parsed:
+        if class_name == "SimulationProject":
+            kwargs.setdefault("root_folder", os.path.dirname(os.path.abspath(opp_file)))
+            kwargs.setdefault("name", os.path.splitext(os.path.basename(opp_file))[0])
+            proj = define_simulation_project(**kwargs)
+            results[proj.name] = proj
+            _logger.info("Loaded simulation project '%s' from %s", proj.name, opp_file)
+    return results

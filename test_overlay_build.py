@@ -10,7 +10,7 @@ Usage from the REPL::
 import logging
 import os
 
-from opp_repl.simulation.project import OmnetppProject, SimulationProject
+from opp_repl.simulation.project import OmnetppProject, SimulationProject, load_workspace, get_simulation_project
 from opp_repl.simulation.environment import SimulationEnvironment
 from opp_repl.simulation.task import run_simulations
 
@@ -117,24 +117,21 @@ def test_all_overlay_builds(workspace=None, build_root=None):
     print(f"\n{'All 4 combinations PASSED' if all_passed else 'Some combinations FAILED'}")
     return all_passed
 
-def run_simple_example():
-    """Run examples/ethernet/simple with all 4 omnetpp/inet overlay combinations."""
-    omnetpp_folders = ["omnetpp", "omnetpp-baseline"]
-    inet_folders = ["inet", "inet-baseline"]
-    for omnetpp_folder in omnetpp_folders:
-        omnepp_project = OmnetppProject(root_folder=os.path.expanduser(f"~/workspace/{omnetpp_folder}"))
-        for inet_folder in inet_folders:
-            inet_project = SimulationProject(
-                name=inet_folder, version=None,
-                omnetpp_project=omnepp_project,
-                overlay_key=f"{omnetpp_folder}+{inet_folder}",
-                root_folder=os.path.expanduser(f"~/workspace/{inet_folder}"),
-                library_folder="src", bin_folder="bin",
-                build_types=["dynamic library"],
-                dynamic_libraries=["INET"],
-                ned_folders=["src", "examples", "showcases", "tutorials", "tests/networks"],
-                ini_file_folders=["examples"],
-            )
-            print(f"--- {omnetpp_folder}+{inet_folder} ---")
-            results = run_simulations(simulation_project=inet_project, working_directory_filter="examples/ethernet/simple")
-            print(results)
+def run_simple_example(workspace=None):
+    """Run examples/ethernet/simple with all 4 omnetpp/inet overlay combinations.
+
+    Loads project definitions from ``.opp`` files in the workspace.
+    """
+    workspace = workspace or os.path.expanduser("~/workspace")
+    load_workspace(workspace)
+    overlay_names = [
+        "inet+omnetpp",
+        "inet+omnetpp-baseline",
+        "inet-baseline+omnetpp",
+        "inet-baseline+omnetpp-baseline",
+    ]
+    for name in overlay_names:
+        project = get_simulation_project(name)
+        print(f"--- {name} ---")
+        results = run_simulations(simulation_project=project, working_directory_filter="examples/ethernet/simple")
+        print(results)
