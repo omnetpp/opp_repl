@@ -11,8 +11,10 @@ import ctypes
 import inspect
 import io
 import logging
+import pydoc
 import re
 import signal
+import sys
 import threading
 import traceback
 
@@ -158,19 +160,31 @@ def execute_python(code: str) -> str:
         # Run in the live IPython session — shared namespace with the user
         global _active_mcp_thread_id
         _active_mcp_thread_id = threading.get_ident()
+
+        # Disable interactive pager so help() prints text directly
+        old_pager = pydoc.pager
+        pydoc.pager = pydoc.plainpager
+
+        # Capture stdout so the AI sees printed output
+        captured = io.StringIO()
+        old_stdout = sys.stdout
+        sys.stdout = captured
         try:
-            with io.StringIO() as buf:
-                result = ip.run_cell(code, silent=False, store_history=False)
-                output = buf.getvalue()
+            result = ip.run_cell(code, silent=False, store_history=False)
         except KeyboardInterrupt:
             text = "Interrupted by user (Ctrl-C)"
             _logger.info(text)
             return text
         finally:
+            sys.stdout = old_stdout
+            pydoc.pager = old_pager
             _active_mcp_thread_id = None
 
         # Capture the cell output
         parts = []
+        output = captured.getvalue()
+        if output:
+            parts.append(_strip_ansi(output.rstrip()))
         if result.result is not None:
             parts.append(_strip_ansi(repr(result.result)))
         if result.error_in_exec is not None:
