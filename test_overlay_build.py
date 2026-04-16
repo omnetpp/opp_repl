@@ -123,7 +123,6 @@ def run_simple_example():
     inet_folders = ["inet", "inet-baseline"]
     for omnetpp_folder in omnetpp_folders:
         omnepp_project = OmnetppProject(root_folder=os.path.expanduser(f"~/workspace/{omnetpp_folder}"))
-        omnepp_project.build(mode="release")
         for inet_folder in inet_folders:
             inet_project = SimulationProject(
                 name=inet_folder, version=None,
@@ -136,7 +135,6 @@ def run_simple_example():
                 ned_folders=["src", "examples", "showcases", "tutorials", "tests/networks"],
                 ini_file_folders=["examples"],
             )
-            inet_project.build(mode="release")
             print(f"--- {omnetpp_folder}+{inet_folder} ---")
             results = run_simulations(simulation_project=inet_project, working_directory_filter="examples/ethernet/simple")
             print(results)

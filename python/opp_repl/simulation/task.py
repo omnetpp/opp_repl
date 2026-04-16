@@ -491,7 +491,7 @@ class MultipleSimulationTasks(MultipleTasks):
         return super().run(**kwargs)
 
     def build_before_run(self, **kwargs):
-        build_project(**dict(kwargs, simulation_project=self.simulation_project, mode=self.mode))
+        self.simulation_project.build(mode=self.mode)
 
     def run_protected(self, **kwargs):
         if self.build:

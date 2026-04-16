@@ -456,10 +456,13 @@ class SimulationProject:
             msg_files = msg_files + list(map(lambda file_path: self.get_relative_path(file_path), file_paths))
         return msg_files
 
-    def build(self, **kwargs):
+    def build(self, mode="release", **kwargs):
         self.ensure_mounted()
+        opp = self.get_omnetpp_project()
+        if opp is not None:
+            opp.build(mode=mode)
         import opp_repl.simulation.build
-        opp_repl.simulation.build.build_project(simulation_project=self, **kwargs)
+        opp_repl.simulation.build.build_project(simulation_project=self, mode=mode, **kwargs)
 
     def ensure_mounted(self):
         if self._overlay is not None:
