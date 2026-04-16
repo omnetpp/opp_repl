@@ -152,20 +152,6 @@ class OmnetppProject:
 
 default_omnetpp_project = OmnetppProject()
 
-omnetpp_projects = {}
-
-def get_omnetpp_project_by_name(name):
-    return omnetpp_projects[name]
-
-def set_omnetpp_project(name, project):
-    omnetpp_projects[name] = project
-
-def define_omnetpp_project(name, **kwargs):
-    project = OmnetppProject(**kwargs)
-    project.name = name
-    set_omnetpp_project(name, project)
-    return project
-
 class SimulationProject:
     """
     Represents a simulation project that usually comes with its own modules and their C++ implementation, and also with
@@ -398,7 +384,8 @@ class SimulationProject:
 
     def get_omnetpp_project(self):
         if isinstance(self.omnetpp_project, str):
-            self.omnetpp_project = get_omnetpp_project_by_name(self.omnetpp_project)
+            ws = getattr(self, '_workspace', None) or _default_workspace
+            self.omnetpp_project = ws.get_omnetpp_project_by_name(self.omnetpp_project)
         return self.omnetpp_project or default_omnetpp_project
 
     def get_executable(self, mode="release"):
@@ -624,166 +611,219 @@ class SimulationProject:
             self.binary_simulation_distribution_file_paths = self.collect_binary_simulation_distribution_file_paths()
         return self.binary_simulation_distribution_file_paths
 
-simulation_projects = {}
+class SimulationWorkspace:
+    """Holds registries for :py:class:`OmnetppProject` and
+    :py:class:`SimulationProject` instances and provides methods to discover,
+    load, and resolve projects from ``.opp`` descriptor files.
 
-def get_simulation_project(name, version=None):
+    A default module-level instance (``_default_workspace``) backs the
+    legacy module-level helper functions so that existing code continues
+    to work unchanged.
     """
-    Returns a defined simulation project for the provided name and version.
 
-    Parameters:
-        name (string):
-            The name of the simulation project.
+    def __init__(self, workspace_path=None):
+        self.workspace_path = workspace_path
+        self.omnetpp_projects = {}
+        self.simulation_projects = {}
+        self.default_project = None
+        if workspace_path is not None:
+            self.load()
 
-        version (string or None):
-            The version of the simulation project. If unspecified, then the latest version is returned.
+    # -- omnetpp project registry ----------------------------------------
 
-    Returns (py:class:`SimulationProject` or None):
-        a simulation project.
-    """
-    return simulation_projects[(name, version)]
+    def get_omnetpp_project_by_name(self, name):
+        return self.omnetpp_projects[name]
 
-def set_simulation_project(name, version, simulation_project):
-    simulation_projects[(name, version)] = simulation_project
+    def set_omnetpp_project(self, name, project):
+        self.omnetpp_projects[name] = project
 
-def define_simulation_project(name, version=None, **kwargs):
-    """
-    Defines a simulation project for the provided name, version and additional parameters.
+    def define_omnetpp_project(self, name, **kwargs):
+        project = OmnetppProject(**kwargs)
+        project.name = name
+        self.set_omnetpp_project(name, project)
+        return project
 
-    Parameters:
-        name (string):
-            The name of the simulation project.
+    # -- simulation project registry -------------------------------------
 
-        version (string or None):
-            The version of the simulation project. If unspecified, then no version is assumed.
+    def get_simulation_project(self, name, version=None):
+        return self.simulation_projects[(name, version)]
 
-        kwargs (dict):
-            Additional parameters are inherited from the constructor of :py:class:`SimulationProject`.
+    def set_simulation_project(self, name, version, simulation_project):
+        self.simulation_projects[(name, version)] = simulation_project
 
-    Returns (:py:class:`SimulationProject`):
-        the new simulation project.
-    """
-    simulation_project = SimulationProject(name, version, **kwargs)
-    set_simulation_project(name, version, simulation_project)
-    return simulation_project
+    def define_simulation_project(self, name, version=None, **kwargs):
+        simulation_project = SimulationProject(name, version, **kwargs)
+        simulation_project._workspace = self
+        self.set_simulation_project(name, version, simulation_project)
+        return simulation_project
 
-def find_simulation_project_from_current_working_directory():
-    current_working_directory = os.getcwd()
-    path = current_working_directory
-    while True:
-        project_file_name = os.path.join(path, ".opp")
-        if os.path.exists(project_file_name):
-            return _resolve_simulation_project_from_file(project_file_name, root_folder=path)
-        parent_path = os.path.abspath(os.path.join(path, os.pardir))
-        if path == parent_path:
-            break
+    # -- default project -------------------------------------------------
+
+    def get_default_simulation_project(self):
+        if self.default_project is None:
+            raise Exception("No default simulation project is set")
+        return self.default_project
+
+    def set_default_simulation_project(self, project):
+        self.default_project = project
+
+    def determine_default_simulation_project(self, name=None, version=None, required=True, **kwargs):
+        if name:
+            simulation_project = self.get_simulation_project(name, version)
         else:
-            path = parent_path
-    for k, simulation_project in simulation_projects.items():
-        full_path = simulation_project.get_full_path(".")
-        if full_path is not None and current_working_directory.startswith(os.path.realpath(full_path)):
-            return simulation_project
-
-def determine_default_simulation_project(name=None, version=None, required=True, **kwargs):
-    if name:
-        simulation_project = get_simulation_project(name, version, **kwargs)
-    else:
-        simulation_project = find_simulation_project_from_current_working_directory(**kwargs)
-    if simulation_project is None:
-        message = "No enclosing simulation project is found from current working directory, and no simulation project is specified explicitly"
-        if required:
-            raise Exception(message)
+            simulation_project = self.find_simulation_project_from_current_working_directory(**kwargs)
+        if simulation_project is None:
+            message = "No enclosing simulation project is found from current working directory, and no simulation project is specified explicitly"
+            if required:
+                raise Exception(message)
+            else:
+                _logger.warn(message)
         else:
-            _logger.warn(message)
-    else:
-        _logger.info(f"Default project is set to {simulation_project.name}")
-    set_default_simulation_project(simulation_project)
-    return simulation_project
+            _logger.info(f"Default project is set to {simulation_project.name}")
+        self.set_default_simulation_project(simulation_project)
+        return simulation_project
 
-default_project = None
+    def find_simulation_project_from_current_working_directory(self, **kwargs):
+        current_working_directory = os.getcwd()
+        path = current_working_directory
+        while True:
+            project_file_name = os.path.join(path, ".opp")
+            if os.path.exists(project_file_name):
+                return self._resolve_simulation_project_from_file(project_file_name, root_folder=path)
+            parent_path = os.path.abspath(os.path.join(path, os.pardir))
+            if path == parent_path:
+                break
+            else:
+                path = parent_path
+        for k, simulation_project in self.simulation_projects.items():
+            full_path = simulation_project.get_full_path(".")
+            if full_path is not None and current_working_directory.startswith(os.path.realpath(full_path)):
+                return simulation_project
 
-def get_default_simulation_project():
-    """
-    Returns the currently selected default simulation project from the set of defined simulation projects. The default
-    simulation project is usually the one that is above the current working directory.
+    # -- resolve ---------------------------------------------------------
 
-    Returns (:py:class:`SimulationProject`):
-        a simulation project.
-    """
-    global default_project
-    if default_project is None:
-        raise Exception("No default simulation project is set")
-    return default_project
+    def resolve_simulation_project(self, designator):
+        """
+        Resolves a project designator string to a :py:class:`SimulationProject`.
 
-def set_default_simulation_project(project):
-    """
-    Changes the currently selected default simulation project from the set of defined simulation projects.
+        The designator can take several forms:
 
-    Parameters:
-        project (:py:class:`SimulationProject`):
-            The simulation project that is set as the default.
+        - **name** — lookup by registered name (e.g. ``"inet"``)
+        - **name:version** — lookup by registered name and version (e.g. ``"inet:4.5"``)
+        - **folder path** — absolute or relative path to a project folder (e.g. ``"../inet-baseline"``, ``"/home/user/inet-old"``)
+        - **git:ref** — (TODO) checkout a git ref in a worktree and resolve
 
-    Returns (None):
-        nothing.
-    """
-    global default_project
-    default_project = project
+        When a folder path is given, the function first checks whether any registered
+        project already lives at that location.  If not, it looks for a ``.opp``
+        project descriptor file in the folder and auto-registers the project.
 
-def resolve_simulation_project(designator):
-    """
-    Resolves a project designator string to a :py:class:`SimulationProject`.
+        Parameters:
+            designator (string or None):
+                The project designator string.  If ``None``, the default project is
+                returned.
 
-    The designator can take several forms:
+        Returns (:py:class:`SimulationProject`):
+            the resolved simulation project.
+        """
+        if designator is None:
+            return self.get_default_simulation_project()
 
-    - **name** — lookup by registered name (e.g. ``"inet"``)
-    - **name:version** — lookup by registered name and version (e.g. ``"inet:4.5"``)
-    - **folder path** — absolute or relative path to a project folder (e.g. ``"../inet-baseline"``, ``"/home/user/inet-old"``)
-    - **git:ref** — (TODO) checkout a git ref in a worktree and resolve
+        # TODO: git:ref — create a git worktree for the ref and resolve from the worktree folder
+        if designator.startswith('git:'):
+            raise ValueError(f"git: designator is not yet implemented: {designator}")
 
-    When a folder path is given, the function first checks whether any registered
-    project already lives at that location.  If not, it looks for a ``.opp``
-    project descriptor file in the folder and auto-registers the project.
+        # absolute or relative file or folder path
+        if designator.startswith(('/', '.', '~')):
+            path = os.path.expanduser(os.path.abspath(designator))
+            if os.path.isfile(path):
+                return self._resolve_simulation_project_from_file(path, root_folder=os.path.dirname(path))
+            return self._resolve_simulation_project_from_folder(path)
 
-    Parameters:
-        designator (string or None):
-            The project designator string.  If ``None``, the default project is
-            returned.
+        # name:version
+        if ':' in designator:
+            name, version = designator.split(':', 1)
+            return self.get_simulation_project(name, version)
 
-    Returns (:py:class:`SimulationProject`):
-        the resolved simulation project.
-    """
-    if designator is None:
-        return get_default_simulation_project()
+        # plain name
+        return self.get_simulation_project(designator, None)
 
-    # TODO: git:ref — create a git worktree for the ref and resolve from the worktree folder
-    if designator.startswith('git:'):
-        raise ValueError(f"git: designator is not yet implemented: {designator}")
+    def _resolve_simulation_project_from_folder(self, path):
+        path = os.path.realpath(path)
+        if not os.path.isdir(path):
+            raise ValueError(f"Not a directory: {path}")
+        for (name, version), project in self.simulation_projects.items():
+            if os.path.realpath(project.get_full_path(".")) == path:
+                return project
+        project_file = os.path.join(path, ".opp")
+        if os.path.exists(project_file):
+            return self._resolve_simulation_project_from_file(project_file, root_folder=path)
+        raise ValueError(f"No simulation project found at {path} (no registered project or .opp file)")
 
-    # absolute or relative file or folder path
-    if designator.startswith(('/', '.', '~')):
-        path = os.path.expanduser(os.path.abspath(designator))
-        if os.path.isfile(path):
-            return _resolve_simulation_project_from_file(path, root_folder=os.path.dirname(path))
-        return _resolve_simulation_project_from_folder(path)
+    def _resolve_simulation_project_from_file(self, path, **kwargs):
+        class_name, file_kwargs = _parse_opp_file(path)
+        if class_name != "SimulationProject":
+            raise ValueError(f"{path}: expected SimulationProject, got {class_name}")
+        file_kwargs.update(kwargs)
+        return self.define_simulation_project(**file_kwargs)
 
-    # name:version
-    if ':' in designator:
-        name, version = designator.split(':', 1)
-        return get_simulation_project(name, version)
+    # -- .opp file loading -----------------------------------------------
 
-    # plain name
-    return get_simulation_project(designator, None)
+    def load_opp_file(self, path):
+        """Load a single ``.opp`` file and register the project.
 
-def _resolve_simulation_project_from_folder(path):
-    path = os.path.realpath(path)
-    if not os.path.isdir(path):
-        raise ValueError(f"Not a directory: {path}")
-    for (name, version), project in simulation_projects.items():
-        if os.path.realpath(project.get_full_path(".")) == path:
-            return project
-    project_file = os.path.join(path, ".opp")
-    if os.path.exists(project_file):
-        return _resolve_simulation_project_from_file(project_file, root_folder=path)
-    raise ValueError(f"No simulation project found at {path} (no registered project or .opp file)")
+        Returns:
+            The created :py:class:`OmnetppProject` or :py:class:`SimulationProject`.
+        """
+        class_name, kwargs = _parse_opp_file(path)
+        kwargs.setdefault("root_folder", os.path.dirname(os.path.abspath(path)))
+        if class_name == "OmnetppProject":
+            name = kwargs.pop("name", os.path.basename(os.path.dirname(os.path.abspath(path))))
+            return self.define_omnetpp_project(name, **kwargs)
+        else:
+            kwargs.setdefault("name", os.path.splitext(os.path.basename(path))[0])
+            return self.define_simulation_project(**kwargs)
+
+    def load(self, workspace_path=None):
+        """Scan *workspace_path* for ``*.opp`` files and register all projects.
+
+        Omnetpp projects are loaded first so that simulation projects can
+        reference them by name via ``omnetpp_project="..."``.
+
+        Returns:
+            dict: ``{name: project}`` for all loaded projects.
+        """
+        workspace_path = workspace_path or self.workspace_path
+        if workspace_path is None:
+            raise ValueError("No workspace path specified")
+        workspace_path = os.path.expanduser(workspace_path)
+        opp_files = glob.glob(os.path.join(workspace_path, "*", "*.opp"))
+        parsed = []
+        for opp_file in sorted(opp_files):
+            try:
+                class_name, kwargs = _parse_opp_file(opp_file)
+                parsed.append((opp_file, class_name, kwargs))
+            except ValueError as e:
+                _logger.warning("Skipping %s: %s", opp_file, e)
+        results = {}
+        # Pass 1: OmnetppProject (no dependencies)
+        for opp_file, class_name, kwargs in parsed:
+            if class_name == "OmnetppProject":
+                kwargs.setdefault("root_folder", os.path.dirname(os.path.abspath(opp_file)))
+                name = kwargs.pop("name", os.path.basename(os.path.dirname(os.path.abspath(opp_file))))
+                proj = self.define_omnetpp_project(name, **kwargs)
+                results[name] = proj
+                _logger.info("Loaded omnetpp project '%s' from %s", name, opp_file)
+        # Pass 2: SimulationProject (may reference omnetpp by name — resolved lazily)
+        for opp_file, class_name, kwargs in parsed:
+            if class_name == "SimulationProject":
+                kwargs.setdefault("root_folder", os.path.dirname(os.path.abspath(opp_file)))
+                kwargs.setdefault("name", os.path.splitext(os.path.basename(opp_file))[0])
+                proj = self.define_simulation_project(**kwargs)
+                results[proj.name] = proj
+                _logger.info("Loaded simulation project '%s' from %s", proj.name, opp_file)
+        return results
+
+# -- .opp file parser (module-level utility) -----------------------------
 
 def _parse_opp_file(path):
     """Parse a restricted-Python ``.opp`` file and return (class_name, kwargs).
@@ -823,62 +863,101 @@ def _parse_opp_file(path):
             raise ValueError(f"{path}: parameter '{kw.arg}' must be a literal value: {e}")
     return class_name, kwargs
 
-def _resolve_simulation_project_from_file(path, **kwargs):
-    class_name, file_kwargs = _parse_opp_file(path)
-    if class_name != "SimulationProject":
-        raise ValueError(f"{path}: expected SimulationProject, got {class_name}")
-    file_kwargs.update(kwargs)
-    return define_simulation_project(**file_kwargs)
+# -- Default workspace and module-level shims ----------------------------
+
+_default_workspace = SimulationWorkspace()
+
+simulation_projects = _default_workspace.simulation_projects
+omnetpp_projects = _default_workspace.omnetpp_projects
+
+def get_omnetpp_project_by_name(name):
+    return _default_workspace.get_omnetpp_project_by_name(name)
+
+def set_omnetpp_project(name, project):
+    _default_workspace.set_omnetpp_project(name, project)
+
+def define_omnetpp_project(name, **kwargs):
+    return _default_workspace.define_omnetpp_project(name, **kwargs)
+
+def get_simulation_project(name, version=None):
+    """
+    Returns a defined simulation project for the provided name and version.
+
+    Parameters:
+        name (string):
+            The name of the simulation project.
+
+        version (string or None):
+            The version of the simulation project. If unspecified, then the latest version is returned.
+
+    Returns (py:class:`SimulationProject` or None):
+        a simulation project.
+    """
+    return _default_workspace.get_simulation_project(name, version)
+
+def set_simulation_project(name, version, simulation_project):
+    _default_workspace.set_simulation_project(name, version, simulation_project)
+
+def define_simulation_project(name, version=None, **kwargs):
+    """
+    Defines a simulation project for the provided name, version and additional parameters.
+
+    Parameters:
+        name (string):
+            The name of the simulation project.
+
+        version (string or None):
+            The version of the simulation project. If unspecified, then no version is assumed.
+
+        kwargs (dict):
+            Additional parameters are inherited from the constructor of :py:class:`SimulationProject`.
+
+    Returns (:py:class:`SimulationProject`):
+        the new simulation project.
+    """
+    return _default_workspace.define_simulation_project(name, version, **kwargs)
+
+def find_simulation_project_from_current_working_directory(**kwargs):
+    return _default_workspace.find_simulation_project_from_current_working_directory(**kwargs)
+
+def determine_default_simulation_project(name=None, version=None, required=True, **kwargs):
+    return _default_workspace.determine_default_simulation_project(name, version, required, **kwargs)
+
+def get_default_simulation_project():
+    """
+    Returns the currently selected default simulation project from the set of defined simulation projects. The default
+    simulation project is usually the one that is above the current working directory.
+
+    Returns (:py:class:`SimulationProject`):
+        a simulation project.
+    """
+    return _default_workspace.get_default_simulation_project()
+
+def set_default_simulation_project(project):
+    """
+    Changes the currently selected default simulation project from the set of defined simulation projects.
+
+    Parameters:
+        project (:py:class:`SimulationProject`):
+            The simulation project that is set as the default.
+
+    Returns (None):
+        nothing.
+    """
+    _default_workspace.set_default_simulation_project(project)
+
+def resolve_simulation_project(designator):
+    """
+    Resolves a project designator string to a :py:class:`SimulationProject`.
+
+    See :py:meth:`SimulationWorkspace.resolve_simulation_project` for details.
+    """
+    return _default_workspace.resolve_simulation_project(designator)
 
 def load_opp_file(path):
-    """Load a single ``.opp`` file and register the project.
-
-    Returns:
-        The created :py:class:`OmnetppProject` or :py:class:`SimulationProject`.
-    """
-    class_name, kwargs = _parse_opp_file(path)
-    kwargs.setdefault("root_folder", os.path.dirname(os.path.abspath(path)))
-    if class_name == "OmnetppProject":
-        name = kwargs.pop("name", os.path.basename(os.path.dirname(os.path.abspath(path))))
-        return define_omnetpp_project(name, **kwargs)
-    else:
-        kwargs.setdefault("name", os.path.splitext(os.path.basename(path))[0])
-        return define_simulation_project(**kwargs)
+    """Load a single ``.opp`` file and register the project in the default workspace."""
+    return _default_workspace.load_opp_file(path)
 
 def load_workspace(workspace_path):
-    """Scan *workspace_path* for ``*.opp`` files and register all projects.
-
-    Omnetpp projects are loaded first so that simulation projects can
-    reference them by name via ``omnetpp_project="..."``.
-
-    Returns:
-        dict: ``{name: project}`` for all loaded projects.
-    """
-    workspace_path = os.path.expanduser(workspace_path)
-    opp_files = glob.glob(os.path.join(workspace_path, "*", "*.opp"))
-    # Separate by type — parse first, load omnetpp projects first
-    parsed = []
-    for opp_file in sorted(opp_files):
-        try:
-            class_name, kwargs = _parse_opp_file(opp_file)
-            parsed.append((opp_file, class_name, kwargs))
-        except ValueError as e:
-            _logger.warning("Skipping %s: %s", opp_file, e)
-    results = {}
-    # Pass 1: OmnetppProject (no dependencies)
-    for opp_file, class_name, kwargs in parsed:
-        if class_name == "OmnetppProject":
-            kwargs.setdefault("root_folder", os.path.dirname(os.path.abspath(opp_file)))
-            name = kwargs.pop("name", os.path.basename(os.path.dirname(os.path.abspath(opp_file))))
-            proj = define_omnetpp_project(name, **kwargs)
-            results[name] = proj
-            _logger.info("Loaded omnetpp project '%s' from %s", name, opp_file)
-    # Pass 2: SimulationProject (may reference omnetpp by name — resolved lazily)
-    for opp_file, class_name, kwargs in parsed:
-        if class_name == "SimulationProject":
-            kwargs.setdefault("root_folder", os.path.dirname(os.path.abspath(opp_file)))
-            kwargs.setdefault("name", os.path.splitext(os.path.basename(opp_file))[0])
-            proj = define_simulation_project(**kwargs)
-            results[proj.name] = proj
-            _logger.info("Loaded simulation project '%s' from %s", proj.name, opp_file)
-    return results
+    """Scan *workspace_path* for ``*.opp`` files and register all projects in the default workspace."""
+    return _default_workspace.load(workspace_path)
