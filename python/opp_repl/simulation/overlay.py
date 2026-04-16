@@ -163,7 +163,7 @@ def make_overlay_simulation_project(project, overlay_key=None, omnetpp_project=N
 
     def _overlay_get_env(self):
         env = original_get_env(self)
-        opp_root = self.omnetpp_project.get_root_path()
+        opp_root = self.get_omnetpp_project().get_root_path()
         if opp_root is not None:
             bin_dir = os.path.join(opp_root, "bin")
             lib_dir = os.path.join(opp_root, "lib")

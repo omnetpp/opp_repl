@@ -16,6 +16,7 @@ import glob
 import hashlib
 import json
 import logging
+import multiprocessing
 import os
 import re
 import shutil
@@ -84,6 +85,21 @@ class OmnetppProject:
         suffix = self.get_library_suffix(mode=mode)
         return os.path.abspath(os.path.join(root, "bin/opp_run" + suffix))
 
+    def build(self, mode="release"):
+        root = self.get_root_path()
+        if root is None:
+            raise RuntimeError("Cannot build OMNeT++: root path is not set")
+        env = os.environ.copy()
+        bin_dir = os.path.join(root, "bin")
+        lib_dir = os.path.join(root, "lib")
+        if bin_dir not in env.get("PATH", "").split(os.pathsep):
+            env["PATH"] = bin_dir + os.pathsep + env.get("PATH", "")
+        if lib_dir not in env.get("LD_LIBRARY_PATH", "").split(os.pathsep):
+            env["LD_LIBRARY_PATH"] = lib_dir + os.pathsep + env.get("LD_LIBRARY_PATH", "")
+        args = ["make", "MODE=" + mode, "-j", str(multiprocessing.cpu_count())]
+        _logger.info("Building OMNeT++ in %s mode at %s", mode, root)
+        run_command_with_logging(args, cwd=root, env=env, error_message="Building OMNeT++ failed")
+
 default_omnetpp_project = OmnetppProject()
 
 class SimulationProject:
@@ -124,7 +140,9 @@ class SimulationProject:
                 The root folder of the simulation project. If specified, it is used instead of the folder_environment_variable environment variable.
 
             omnetpp_project (:py:class:`OmnetppProject` or None):
-                The OMNeT++ project representing the OMNeT++ installation to use. If unspecified, the default OMNeT++ project is used.
+                The OMNeT++ project representing the OMNeT++ installation to use.
+                If unspecified, defaults to the global ``default_omnetpp_project``
+                when an executable is needed (e.g. for running simulations).
 
             folder (string):
                 The directory of the simulation project relative to the value of the folder_environment_variable attribute.
@@ -212,7 +230,7 @@ class SimulationProject:
         self.folder_environment_variable = folder_environment_variable
         self.root_folder = root_folder
         self.folder = folder
-        self.omnetpp_project = omnetpp_project or default_omnetpp_project
+        self.omnetpp_project = omnetpp_project
         # TODO this is commented out because it runs subprocesses, and it even does this from the IDE when some completely unrelated modules are loaded, sigh!
         # self.git_hash = git_hash or run_command_with_logging(["git", "rev-parse", "HEAD"], cwd=self.get_full_path(".")).stdout.strip()
         # if git_diff_hash:
@@ -287,10 +305,13 @@ class SimulationProject:
         base = os.path.join(root, self.folder) if root is not None else None
         return os.path.relpath(path, base)
 
+    def get_omnetpp_project(self):
+        return self.omnetpp_project or default_omnetpp_project
+
     def get_executable(self, mode="release"):
         dynamic_loading = self.build_types[0] == "dynamic library"
         if dynamic_loading:
-            return self.omnetpp_project.get_executable(mode=mode)
+            return self.get_omnetpp_project().get_executable(mode=mode)
         else:
             executable = os.path.join(self.folder, self.executables[0])
             root = self.get_root_path()
@@ -439,7 +460,7 @@ class SimulationProject:
                         default_args = self.get_default_args()
                         args = [executable, *default_args, "-s", "-f", ini_file, "-c", config, "-q", "numruns"]
                     else:
-                        executable = self.omnetpp_project.get_executable(mode="release")
+                        executable = self.get_omnetpp_project().get_executable(mode="release")
                         args = [executable, "-s", "-f", ini_file, "-c", config, "-q", "numruns"]
                     result = run_command_with_logging(args, cwd=working_directory, env=self.get_env())
                     if result.returncode == 0:

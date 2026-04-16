@@ -17,12 +17,11 @@ from opp_repl.simulation.task import run_simulations
 
 _logger = logging.getLogger(__name__)
 
-def _make_inet_project(name, inet_root, omnetpp_project):
+def _make_inet_project(name, inet_root):
     return SimulationProject(
         name=name,
         version=None,
         root_folder=inet_root,
-        omnetpp_project=omnetpp_project,
         library_folder="src",
         dynamic_libraries=["INET"],
         build_types=["dynamic library"],
@@ -54,7 +53,7 @@ def test_overlay_build(env_name, opp_root, inet_root, build_root=None, clean=Tru
         OmnetppProject(root_folder=opp_root),
         overlay_key=opp_basename, build_root=build_root,
     )
-    inet_proj = _make_inet_project(f"{inet_basename}+{opp_basename}", inet_root, overlay_opp)
+    inet_proj = _make_inet_project(f"{inet_basename}+{opp_basename}", inet_root)
     overlay_inet = OverlaySimulationProject(
         inet_proj,
         overlay_key=f"{inet_basename}+{opp_basename}",
@@ -134,26 +133,25 @@ def test_all_overlay_builds(workspace=None, build_root=None):
     print(f"\n{'All 4 combinations PASSED' if all_passed else 'Some combinations FAILED'}")
     return all_passed
 
-def run_simple_example(workspace=None, build_root=None):
+def run_simple_example():
     """Run examples/ethernet/simple with all 4 omnetpp/inet overlay combinations."""
-    ws = workspace or os.path.join(os.path.expanduser("~"), "workspace")
-    build_root = build_root or os.path.join(os.path.expanduser("~"), ".opp-test-builds")
-    opps = [os.path.join(ws, d) for d in ("omnetpp", "omnetpp-baseline")]
-    inets = [os.path.join(ws, d) for d in ("inet", "inet-baseline")]
-    for opp_root in opps:
-        opp = OmnetppProject(root_folder=opp_root)
-        for inet_root in inets:
-            opp_name = os.path.basename(opp_root)
-            inet_name = os.path.basename(inet_root)
-            name = f"{opp_name}+{inet_name}"
-            inet_proj = _make_inet_project(name, inet_root, opp)
-            overlay_inet = OverlaySimulationProject(
-                inet_proj,
-                overlay_key=f"{inet_name}+{opp_name}",
-                omnetpp_project=opp,
-                build_root=build_root,
+    omnetpp_folders = ["omnetpp", "omnetpp-baseline"]
+    inet_folders = ["inet", "inet-baseline"]
+    for omnetpp_folder in omnetpp_folders:
+        omnepp_project = OmnetppProject(root_folder=os.path.expanduser(f"~/workspace/{omnetpp_folder}"))
+        omnepp_project.build(mode="release")
+        for inet_folder in inet_folders:
+            inet_project = SimulationProject(name=inet_folder, version=None, root_folder=os.path.expanduser(f"~/workspace/{inet_folder}"),
+                                  library_folder="src", dynamic_libraries=["INET"],
+                                  build_types=["dynamic library"],
+                                  ned_folders=["src", "examples", "showcases", "tutorials", "tests/networks"],
+                                  ini_file_folders=["examples"], bin_folder="bin")
+            overlay_inet = OverlaySimulationProject(inet_project,
+                overlay_key=f"{omnetpp_folder}+{inet_folder}",
+                omnetpp_project=omnepp_project,
             )
             overlay_inet.ensure_mounted()
             overlay_inet.build(mode="release")
-            print(f"--- {name} ---")
-            print(run_simulations(simulation_project=overlay_inet, working_directory_filter="examples/ethernet/simple"))
+            print(f"--- {omnetpp_folder}+{inet_folder} ---")
+            results = run_simulations(simulation_project=overlay_inet, working_directory_filter="examples/ethernet/simple")
+            print(results)
