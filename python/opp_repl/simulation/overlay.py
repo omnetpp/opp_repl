@@ -129,6 +129,15 @@ def cleanup_overlays(build_root=None):
         except Exception as e:
             _logger.warning("Failed to unmount overlay %s: %s", key, e)
 
+def clear_build_root(build_root=None):
+    """Unmount all overlays and remove the entire build root directory."""
+    import shutil
+    root = build_root or get_build_root()
+    cleanup_overlays(root)
+    if os.path.isdir(root):
+        shutil.rmtree(root)
+        _logger.info("Removed build root %s", root)
+
 
 def make_overlay_simulation_project(project, overlay_key=None, omnetpp_project=None, build_root=None):
     """Create an overlay-backed copy of a SimulationProject.
