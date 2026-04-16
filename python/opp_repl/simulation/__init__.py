@@ -9,7 +9,6 @@ separate processes and also in the same Python process loading INET as a library
 """
 
 from opp_repl.simulation.compare import *
-from opp_repl.simulation.environment import *
 from opp_repl.simulation.overlay import *
 # from opp_repl.simulation.optimize import *
 from opp_repl.simulation.project import *
