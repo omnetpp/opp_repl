@@ -90,8 +90,6 @@ class SimulationWorkspace:
         project = OmnetppProject(**kwargs)
         project.name = name
         self.set_omnetpp_project(name, project)
-        if get_default_omnetpp_project() is None:
-            set_default_omnetpp_project(project)
         return project
 
     # -- simulation project registry -------------------------------------
@@ -121,6 +119,13 @@ class SimulationWorkspace:
 
     def set_default_simulation_project(self, project):
         self._default_project = project
+        from opp_repl.simulation.project import get_default_omnetpp_project, set_default_omnetpp_project
+        if get_default_omnetpp_project() is None and project is not None:
+            omnetpp_project = project.get_omnetpp_project()
+            if omnetpp_project is None and "omnetpp" in self._omnetpp_projects:
+                omnetpp_project = self._omnetpp_projects["omnetpp"]
+            if omnetpp_project is not None:
+                set_default_omnetpp_project(omnetpp_project)
 
     def determine_default_simulation_project(self, name=None, version=None, required=True, **kwargs):
         if name:
