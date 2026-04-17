@@ -11,6 +11,7 @@ import ctypes
 import inspect
 import io
 import logging
+import os
 import pydoc
 import re
 import signal
@@ -68,22 +69,21 @@ def package_list() -> str:
     import opp_repl
     lines = []
     for pkg_name in _get_subpackages(opp_repl):
-        try:
-            mod = __import__(pkg_name, fromlist=[""])
+        mod = sys.modules.get(pkg_name)
+        if mod is None:
+            first_line = "(not loaded)"
+        else:
             doc = inspect.getdoc(mod) or ""
             first_line = doc.split("\n")[0] if doc else "(no description)"
-        except Exception:
-            first_line = "(not loaded)"
         lines.append(f"{pkg_name}\n    {first_line}")
     return "\n\n".join(lines)
 
 @_mcp.resource("file:///opp_repl/api/{package_name}")
 def api_reference(package_name: str) -> str:
     """Public API reference for a specific opp_repl package, auto-generated from docstrings."""
-    try:
-        mod = __import__(package_name, fromlist=[""])
-    except ImportError:
-        return f"Package '{package_name}' not found."
+    mod = sys.modules.get(package_name)
+    if mod is None:
+        return f"Package '{package_name}' not loaded."
     all_names = getattr(mod, "__all__", None)
     if all_names is None:
         all_names = [n for n in dir(mod) if not n.startswith("_")]
