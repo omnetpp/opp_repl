@@ -15,8 +15,8 @@ import subprocess
 _logger = logging.getLogger(__name__)
 
 def get_build_root():
-    """Returns the root directory for overlay builds (default ``~/.opp-builds``)."""
-    return os.environ.get("OPP_BUILD_ROOT", os.path.expanduser("~/.opp-builds"))
+    """Returns the root directory for overlay builds (default ``~/.omnetpp/build``)."""
+    return os.environ.get("OPP_BUILD_ROOT", os.path.expanduser("~/.omnetpp/build"))
 
 class OverlayMount:
     """Manages a single fuse-overlayfs mount point.
