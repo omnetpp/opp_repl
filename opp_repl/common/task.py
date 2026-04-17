@@ -137,7 +137,7 @@ class TaskContext:
         indentation = self.get_indentation()[:-1]
         indentation_string = (COLOR_LIGHT_GRAY + indentation + COLOR_RESET) if include_context_indentation and indentation != "" else ""
         position_string = (COLOR_GRAY + self.get_position() + COLOR_RESET) if include_context_position else ""
-        path_string = (COLOR_GRAY + self.get_path()) if include_context_path else ""
+        path_string = (COLOR_GRAY + self.get_path() + COLOR_RESET) if include_context_path else ""
         elements = [e for e in [position_string, path_string, indentation_string] if e != ""]
         return " ".join(elements)
 
