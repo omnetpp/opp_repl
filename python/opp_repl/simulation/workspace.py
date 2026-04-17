@@ -224,11 +224,25 @@ class SimulationWorkspace:
     # -- .opp file loading -----------------------------------------------
 
     def load_opp_file(self, path):
-        """Load a single ``.opp`` file and register the project.
+        """Load ``.opp`` file(s) and register the project(s).
+
+        *path* may be a single file path **or** a glob pattern (any string
+        containing ``*``, ``?``, or ``[``).  When a glob pattern is given,
+        all matching files are loaded in two passes (OmnetppProject first,
+        then SimulationProject) just like :py:meth:`load`.
 
         Returns:
-            The created :py:class:`OmnetppProject` or :py:class:`SimulationProject`.
+            A single :py:class:`OmnetppProject` or
+            :py:class:`SimulationProject` when *path* refers to exactly one
+            file, or a ``dict`` mapping project names to project objects when
+            a glob pattern is used.
         """
+        if glob.has_magic(path):
+            return self._load_opp_glob(path)
+        return self._load_single_opp_file(path)
+
+    def _load_single_opp_file(self, path):
+        """Load one ``.opp`` file and register the project."""
         class_name, kwargs = _parse_opp_file(path)
         kwargs.setdefault("root_folder", os.path.dirname(os.path.abspath(path)))
         if class_name == "OmnetppProject":
@@ -237,6 +251,36 @@ class SimulationWorkspace:
         else:
             kwargs.setdefault("name", os.path.splitext(os.path.basename(path))[0])
             return self.define_simulation_project(**kwargs)
+
+    def _load_opp_glob(self, pattern):
+        """Load all ``.opp`` files matching *pattern* (two-pass)."""
+        opp_files = sorted(glob.glob(pattern, recursive=True))
+        if not opp_files:
+            _logger.warning("No .opp files matched pattern: %s", pattern)
+            return {}
+        parsed = []
+        for opp_file in opp_files:
+            try:
+                class_name, kwargs = _parse_opp_file(opp_file)
+                parsed.append((opp_file, class_name, kwargs))
+            except ValueError as e:
+                _logger.warning("Skipping %s: %s", opp_file, e)
+        results = {}
+        for opp_file, class_name, kwargs in parsed:
+            if class_name == "OmnetppProject":
+                kwargs.setdefault("root_folder", os.path.dirname(os.path.abspath(opp_file)))
+                name = kwargs.pop("name", os.path.basename(os.path.dirname(os.path.abspath(opp_file))))
+                proj = self.define_omnetpp_project(name, **kwargs)
+                results[name] = proj
+                _logger.info("Loaded omnetpp project '%s' from %s", name, opp_file)
+        for opp_file, class_name, kwargs in parsed:
+            if class_name == "SimulationProject":
+                kwargs.setdefault("root_folder", os.path.dirname(os.path.abspath(opp_file)))
+                kwargs.setdefault("name", os.path.splitext(os.path.basename(opp_file))[0])
+                proj = self.define_simulation_project(**kwargs)
+                results[proj.name] = proj
+                _logger.info("Loaded simulation project '%s' from %s", proj.name, opp_file)
+        return results
 
     def load(self, workspace_path=None):
         """Scan *workspace_path* for ``*.opp`` files and register all projects.
@@ -421,7 +465,11 @@ def resolve_simulation_project(designator):
     return get_default_simulation_workspace().resolve_simulation_project(designator)
 
 def load_opp_file(path):
-    """Load a single ``.opp`` file and register the project in the default workspace."""
+    """Load ``.opp`` file(s) and register the project(s) in the default workspace.
+
+    *path* can be a single file or a glob pattern (e.g.
+    ``"/home/user/workspace/omnetpp/samples/*/*.opp"``).
+    """
     return get_default_simulation_workspace().load_opp_file(path)
 
 def load_workspace(workspace_path):
