@@ -23,12 +23,15 @@ def parse_run_repl_arguments():
     parser.add_argument("-l", "--log-level", choices=["ERROR", "WARN", "INFO", "DEBUG"], default="INFO", help="specifies the log level for the root logging category")
     parser.add_argument("--external-command-log-level", choices=["ERROR", "WARN", "INFO", "DEBUG"], default="WARN", help="specifies the log level for the external command logging categories")
     parser.add_argument("--mcp-port", type=int, default=9966, help="port for the MCP server (0 to disable)")
+    parser.add_argument("--load", nargs="+", default=[], metavar="OPP_FILE", help="load additional .opp files (paths or glob patterns)")
     parser.add_argument("--handle-exception", default=True, action=argparse.BooleanOptionalAction, help="disables displaying stacktraces for exceptions")
     return parser.parse_args(sys.argv[1:])
 
 def process_run_repl_arguments(args):
     initialize_logging(args.log_level, args.external_command_log_level, None)
     logging.getLogger("distributed.deploy.ssh").setLevel(args.log_level)
+    for opp_file in args.load:
+        load_opp_file(opp_file)
     simulation_project = determine_default_simulation_project(name=args.simulation_project, required=False)
 
 def run_repl_main():
