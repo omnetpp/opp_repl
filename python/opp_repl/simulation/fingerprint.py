@@ -4,6 +4,7 @@ import logging
 import os
 
 from opp_repl.common import *
+from opp_repl.common.eventlog import *
 from opp_repl.simulation.eventlog import *
 
 __sphinx_mock__ = True # ignore this module in documentation
