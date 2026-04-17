@@ -1,0 +1,36 @@
+[project]
+name = "opp_repl"
+version = "0.1.0"
+description = "OMNeT++ Python read-eval-print-loop for running and testing simulations"
+requires-python = ">=3.10"
+dependencies = [
+    "ipython",
+    "mcp",
+    "pandas",
+]
+
+[project.optional-dependencies]
+cluster = [
+    "dask",
+    "distributed",
+]
+chart = [
+    "matplotlib",
+    "numpy",
+]
+optimize = [
+    "scipy",
+    "optimparallel",
+]
+github = [
+    "requests",
+]
+all = [
+    "dask",
+    "distributed",
+    "matplotlib",
+    "numpy",
+    "optimparallel",
+    "requests",
+    "scipy",
+]
