@@ -149,7 +149,14 @@ class OmnetppProject:
         if self._overlay is not None:
             self._overlay.clean()
 
-default_omnetpp_project = None
+_default_omnetpp_project = None
+
+def get_default_omnetpp_project():
+    return _default_omnetpp_project
+
+def set_default_omnetpp_project(project):
+    global _default_omnetpp_project
+    _default_omnetpp_project = project
 
 class SimulationProject:
     """
@@ -395,7 +402,7 @@ class SimulationProject:
         if isinstance(self.omnetpp_project, str):
             ws = getattr(self, '_workspace', None) or get_default_simulation_workspace()
             self.omnetpp_project = ws.get_omnetpp_project_by_name(self.omnetpp_project)
-        return self.omnetpp_project or default_omnetpp_project
+        return self.omnetpp_project or get_default_omnetpp_project()
 
     def get_executable(self, mode="release"):
         dynamic_loading = self.build_types[0] == "dynamic library"
