@@ -20,7 +20,10 @@ Similarly, creating a multiple tasks object containing two empty tasks and runni
     mt.run()
 """
 
-import dask
+try:
+    import dask
+except ImportError:
+    pass
 import datetime
 import functools
 import hashlib
