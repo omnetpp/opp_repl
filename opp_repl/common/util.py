@@ -418,6 +418,8 @@ class DebugLevel(LoggerLevel):
 
 def run_command_with_logging(args, error_message=None, nice=10, wait=True, **kwargs):
     logger = logging.getLogger(os.path.basename(args[0]))
+    if logger.level == logging.NOTSET:
+        logger.setLevel(get_external_command_log_level())
     def log_stream(stream, logger, lines):
         for line in iter(stream.readline, ""):
             logger(line.rstrip("\n"))
