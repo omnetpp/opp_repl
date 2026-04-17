@@ -477,6 +477,21 @@ def load_opp_file(path):
     """
     return get_default_simulation_workspace().load_opp_file(path)
 
+def get_simulation_project_variables():
+    """Return a dict mapping ``{name}_project`` to each loaded simulation project.
+
+    Hyphens and dots in project names are replaced with underscores so that the
+    keys are valid Python identifiers.  This is intended to be injected into the
+    REPL namespace at startup, e.g.::
+
+        globals().update(get_simulation_project_variables())
+    """
+    result = {}
+    for name in get_simulation_project_names():
+        var_name = name.replace('-', '_').replace('.', '_') + '_project'
+        result[var_name] = get_simulation_project(name)
+    return result
+
 def load_workspace(workspace_path):
     """Scan *workspace_path* for ``*.opp`` files and register all projects in the default workspace."""
     return get_default_simulation_workspace().load(workspace_path)
