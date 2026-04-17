@@ -172,7 +172,7 @@ class SimulationProject:
                  include_folders=["."], cpp_folders=["."], cpp_defines=[], msg_folders=["."],
                  media_folder=".", statistics_folder=".", fingerprint_store="fingerprint.json", speed_store="speed.json",
                  used_projects=[], external_bin_folders=[], external_library_folders=[], external_libraries=[], external_include_folders=[],
-                 simulation_configs=None, overlay_key=None, build_root=None, **kwargs):
+                 simulation_configs=None, overlay_key=None, build_root=None, opp_env_workspace=None, opp_env_project=None, **kwargs):
         """
         Initializes a new simulation project.
 
@@ -286,6 +286,14 @@ class SimulationProject:
             build_root (str or None):
                 Override for the overlay build root directory.
 
+            opp_env_workspace (str or None):
+                If set, simulations are run inside an opp_env environment.
+                The value is the path to the opp_env workspace directory.
+
+            opp_env_project (str or None):
+                The opp_env project identifier (e.g. ``"inet-4.6.0"``).
+                Defaults to the project name if not specified.
+
             kwargs (dict):
                 Ignored.
         """
@@ -328,6 +336,8 @@ class SimulationProject:
         self.external_libraries = external_libraries
         self.external_include_folders = external_include_folders
         self.simulation_configs = simulation_configs
+        self.opp_env_workspace = opp_env_workspace
+        self.opp_env_project = opp_env_project or name
         self.binary_simulation_distribution_file_paths = None
         self._overlay = None
         if overlay_key is not None:
@@ -585,7 +595,11 @@ class SimulationProject:
                     else:
                         executable = self.get_omnetpp_project().get_executable(mode="release")
                         args = [executable, "-s", "-f", ini_file, "-c", config, "-q", "numruns"]
-                    result = run_command_with_logging(args, cwd=working_directory, env=self.get_env())
+                    if self.opp_env_workspace:
+                        _logger.warn("Cannot determine number of runs using opp_env")
+                        continue
+                    else:
+                        result = run_command_with_logging(args, cwd=working_directory, env=self.get_env())
                     if result.returncode == 0:
                         # KLUDGE: this was added to test source dependency based task result caching
                         result.stdout = re.sub(r"INI dependency: (.*)", "", result.stdout)

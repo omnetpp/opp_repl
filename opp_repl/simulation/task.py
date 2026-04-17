@@ -22,6 +22,7 @@ from opp_repl.simulation.fingerprint import *
 from opp_repl.simulation.project import *
 from opp_repl.simulation.stdout import *
 from opp_repl.simulation.subprocess import *
+from opp_repl.simulation.opp_env_runner import *
 from opp_repl.simulation.iderunner import *
 
 _logger = logging.getLogger(__name__)
@@ -318,7 +319,10 @@ class SimulationTask(Task):
             executable = simulation_project.get_executable()
             default_args = simulation_project.get_default_args()
             args = [executable, *default_args, "-s", "-u", "Cmdenv", "-f", simulation_config.ini_file, "-c", simulation_config.config, "-r", "0", "--sim-time-limit", "0s"]
-            subprocess_result = run_command_with_logging(args, cwd=simulation_project.get_full_path(simulation_config.working_directory), env=simulation_project.get_env())
+            if simulation_project.opp_env_workspace:
+                subprocess_result = OppEnvSimulationRunner().run_args(simulation_project, args, cwd=simulation_project.get_full_path(simulation_config.working_directory))
+            else:
+                subprocess_result = run_command_with_logging(args, cwd=simulation_project.get_full_path(simulation_config.working_directory), env=simulation_project.get_env())
             match = re.search(r"The simulation wanted to ask a question|The simulation attempted to prompt for user input", subprocess_result.stderr)
             self.interactive = match is not None
         return self.interactive
@@ -384,10 +388,17 @@ class SimulationTask(Task):
         args = [*prepend_args, executable, *default_args, "-s", "-u", self.user_interface, "-f", ini_file, "-c", config, "-r", str(self.run_number), *inifile_entries_args, *result_folder_args, *sim_time_limit_args, *cpu_time_limit_args, *record_eventlog_args, *file_args, *record_pcap_args, *append_args]
         expected_result = self.get_expected_result()
         if simulation_runner is None:
-            simulation_runner = "ide" if self.debug else "subprocess"
+            if self.debug:
+                simulation_runner = "ide"
+            elif simulation_project.opp_env_workspace:
+                simulation_runner = "opp_env"
+            else:
+                simulation_runner = "subprocess"
         if simulation_runner_class is None:
             if simulation_runner == "subprocess":
                 simulation_runner_class = SubprocessSimulationRunner
+            elif simulation_runner == "opp_env":
+                simulation_runner_class = OppEnvSimulationRunner
             elif simulation_runner == "inprocess":
                 import opp_repl.cffi
                 simulation_runner_class = opp_repl.cffi.InprocessSimulationRunner
