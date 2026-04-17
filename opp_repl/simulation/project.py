@@ -402,7 +402,13 @@ class SimulationProject:
         if isinstance(self.omnetpp_project, str):
             ws = getattr(self, '_workspace', None) or get_default_simulation_workspace()
             self.omnetpp_project = ws.get_omnetpp_project_by_name(self.omnetpp_project)
-        return self.omnetpp_project or get_default_omnetpp_project()
+        result = self.omnetpp_project or get_default_omnetpp_project()
+        if result is None:
+            ws = getattr(self, '_workspace', None) or get_default_simulation_workspace()
+            omnetpp_projects = ws.get_omnetpp_projects()
+            if "omnetpp" in omnetpp_projects:
+                result = omnetpp_projects["omnetpp"]
+        return result
 
     def get_executable(self, mode="release"):
         dynamic_loading = self.build_types[0] == "dynamic library"
