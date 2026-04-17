@@ -10,9 +10,8 @@ workspace directory (e.g. ``~/workspace``).
 Pre-loaded variables
 --------------------
 
-When the opp_repl REPL starts, a default workspace is created automatically::
-
-    default_workspace = SimulationWorkspace("~/workspace")
+When the opp_repl REPL starts, a default workspace is created automatically
+and can be accessed via ``get_default_simulation_workspace()``.
 
 All ``.opp`` files found under ``~/workspace`` are loaded, so simulation
 projects are immediately available without any setup.  Use the convenience
@@ -21,8 +20,8 @@ functions below instead of accessing the workspace directly:
 - ``get_simulation_project("simu5g")`` — look up a project by name
 - ``get_default_simulation_project()`` — the project matching the current
   working directory (set automatically at startup)
-- ``simulation_projects`` — dict of ``(name, version)`` →
-  :py:class:`~opp_repl.simulation.project.SimulationProject`
+- ``get_default_simulation_workspace().get_simulation_projects()`` — dict of
+  ``(name, version)`` → :py:class:`~opp_repl.simulation.project.SimulationProject`
 
 Example usage::
 
@@ -30,7 +29,8 @@ Example usage::
     print(simu5g.folder)
     print(simu5g.get_simulation_configs())
 
-    for (name, version), proj in simulation_projects.items():
+    ws = get_default_simulation_workspace()
+    for (name, version), proj in ws.get_simulation_projects().items():
         print(name, proj.folder)
 
 Loading additional projects
@@ -56,26 +56,34 @@ class SimulationWorkspace:
     :py:class:`SimulationProject` instances and provides methods to discover,
     load, and resolve projects from ``.opp`` descriptor files.
 
-    A default module-level instance (``default_workspace``) backs the
-    legacy module-level helper functions so that existing code continues
-    to work unchanged.
+    A default module-level instance backs the module-level helper
+    functions so that existing code continues to work unchanged.
     """
 
     def __init__(self, workspace_path=None):
-        self.workspace_path = workspace_path
-        self.omnetpp_projects = {}
-        self.simulation_projects = {}
-        self.default_project = None
+        self._workspace_path = workspace_path
+        self._omnetpp_projects = {}
+        self._simulation_projects = {}
+        self._default_project = None
         if workspace_path is not None:
             self.load()
+
+    def get_workspace_path(self):
+        return self._workspace_path
+
+    def get_omnetpp_projects(self):
+        return self._omnetpp_projects
+
+    def get_simulation_projects(self):
+        return self._simulation_projects
 
     # -- omnetpp project registry ----------------------------------------
 
     def get_omnetpp_project_by_name(self, name):
-        return self.omnetpp_projects[name]
+        return self._omnetpp_projects[name]
 
     def set_omnetpp_project(self, name, project):
-        self.omnetpp_projects[name] = project
+        self._omnetpp_projects[name] = project
 
     def define_omnetpp_project(self, name, **kwargs):
         import opp_repl.simulation.project as _proj_mod
@@ -88,11 +96,15 @@ class SimulationWorkspace:
 
     # -- simulation project registry -------------------------------------
 
+    def get_simulation_project_names(self):
+        """Return a sorted list of registered simulation project names."""
+        return sorted(set(name for name, version in self._simulation_projects.keys()))
+
     def get_simulation_project(self, name, version=None):
-        return self.simulation_projects[(name, version)]
+        return self._simulation_projects[(name, version)]
 
     def set_simulation_project(self, name, version, simulation_project):
-        self.simulation_projects[(name, version)] = simulation_project
+        self._simulation_projects[(name, version)] = simulation_project
 
     def define_simulation_project(self, name, version=None, **kwargs):
         simulation_project = SimulationProject(name, version, **kwargs)
@@ -103,12 +115,12 @@ class SimulationWorkspace:
     # -- default project -------------------------------------------------
 
     def get_default_simulation_project(self):
-        if self.default_project is None:
+        if self._default_project is None:
             raise Exception("No default simulation project is set")
-        return self.default_project
+        return self._default_project
 
     def set_default_simulation_project(self, project):
-        self.default_project = project
+        self._default_project = project
 
     def determine_default_simulation_project(self, name=None, version=None, required=True, **kwargs):
         if name:
@@ -138,7 +150,7 @@ class SimulationWorkspace:
                 break
             else:
                 path = parent_path
-        for k, simulation_project in self.simulation_projects.items():
+        for k, simulation_project in self._simulation_projects.items():
             full_path = simulation_project.get_full_path(".")
             if full_path is not None and current_working_directory.startswith(os.path.realpath(full_path)):
                 return simulation_project
@@ -194,7 +206,7 @@ class SimulationWorkspace:
         path = os.path.realpath(path)
         if not os.path.isdir(path):
             raise ValueError(f"Not a directory: {path}")
-        for (name, version), project in self.simulation_projects.items():
+        for (name, version), project in self._simulation_projects.items():
             if os.path.realpath(project.get_full_path(".")) == path:
                 return project
         project_file = os.path.join(path, ".opp")
@@ -235,7 +247,7 @@ class SimulationWorkspace:
         Returns:
             dict: ``{name: project}`` for all loaded projects.
         """
-        workspace_path = workspace_path or self.workspace_path
+        workspace_path = workspace_path or self._workspace_path
         if workspace_path is None:
             raise ValueError("No workspace path specified")
         workspace_path = os.path.expanduser(workspace_path)
@@ -308,19 +320,30 @@ def _parse_opp_file(path):
 
 # -- Default workspace and module-level shims ----------------------------
 
-default_workspace = SimulationWorkspace(os.path.expanduser("~/workspace"))
+_default_simulation_workspace = None
 
-simulation_projects = default_workspace.simulation_projects
-omnetpp_projects = default_workspace.omnetpp_projects
+def get_default_simulation_workspace():
+    global _default_simulation_workspace
+    if _default_simulation_workspace is None:
+        _default_simulation_workspace = SimulationWorkspace(os.path.expanduser("~/workspace"))
+    return _default_simulation_workspace
+
+def set_default_simulation_workspace(workspace):
+    global _default_simulation_workspace
+    _default_simulation_workspace = workspace
 
 def get_omnetpp_project_by_name(name):
-    return default_workspace.get_omnetpp_project_by_name(name)
+    return get_default_simulation_workspace().get_omnetpp_project_by_name(name)
 
 def set_omnetpp_project(name, project):
-    default_workspace.set_omnetpp_project(name, project)
+    get_default_simulation_workspace().set_omnetpp_project(name, project)
 
 def define_omnetpp_project(name, **kwargs):
-    return default_workspace.define_omnetpp_project(name, **kwargs)
+    return get_default_simulation_workspace().define_omnetpp_project(name, **kwargs)
+
+def get_simulation_project_names():
+    """Return a sorted list of registered simulation project names."""
+    return get_default_simulation_workspace().get_simulation_project_names()
 
 def get_simulation_project(name, version=None):
     """
@@ -336,10 +359,10 @@ def get_simulation_project(name, version=None):
     Returns (py:class:`SimulationProject` or None):
         a simulation project.
     """
-    return default_workspace.get_simulation_project(name, version)
+    return get_default_simulation_workspace().get_simulation_project(name, version)
 
 def set_simulation_project(name, version, simulation_project):
-    default_workspace.set_simulation_project(name, version, simulation_project)
+    get_default_simulation_workspace().set_simulation_project(name, version, simulation_project)
 
 def define_simulation_project(name, version=None, **kwargs):
     """
@@ -358,13 +381,13 @@ def define_simulation_project(name, version=None, **kwargs):
     Returns (:py:class:`SimulationProject`):
         the new simulation project.
     """
-    return default_workspace.define_simulation_project(name, version, **kwargs)
+    return get_default_simulation_workspace().define_simulation_project(name, version, **kwargs)
 
 def find_simulation_project_from_current_working_directory(**kwargs):
-    return default_workspace.find_simulation_project_from_current_working_directory(**kwargs)
+    return get_default_simulation_workspace().find_simulation_project_from_current_working_directory(**kwargs)
 
 def determine_default_simulation_project(name=None, version=None, required=True, **kwargs):
-    return default_workspace.determine_default_simulation_project(name, version, required, **kwargs)
+    return get_default_simulation_workspace().determine_default_simulation_project(name, version, required, **kwargs)
 
 def get_default_simulation_project():
     """
@@ -374,7 +397,7 @@ def get_default_simulation_project():
     Returns (:py:class:`SimulationProject`):
         a simulation project.
     """
-    return default_workspace.get_default_simulation_project()
+    return get_default_simulation_workspace().get_default_simulation_project()
 
 def set_default_simulation_project(project):
     """
@@ -387,7 +410,7 @@ def set_default_simulation_project(project):
     Returns (None):
         nothing.
     """
-    default_workspace.set_default_simulation_project(project)
+    get_default_simulation_workspace().set_default_simulation_project(project)
 
 def resolve_simulation_project(designator):
     """
@@ -395,12 +418,12 @@ def resolve_simulation_project(designator):
 
     See :py:meth:`SimulationWorkspace.resolve_simulation_project` for details.
     """
-    return default_workspace.resolve_simulation_project(designator)
+    return get_default_simulation_workspace().resolve_simulation_project(designator)
 
 def load_opp_file(path):
     """Load a single ``.opp`` file and register the project in the default workspace."""
-    return default_workspace.load_opp_file(path)
+    return get_default_simulation_workspace().load_opp_file(path)
 
 def load_workspace(workspace_path):
     """Scan *workspace_path* for ``*.opp`` files and register all projects in the default workspace."""
-    return default_workspace.load(workspace_path)
+    return get_default_simulation_workspace().load(workspace_path)

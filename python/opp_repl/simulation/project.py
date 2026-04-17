@@ -358,7 +358,7 @@ class SimulationProject:
                 env["PATH"] = bin_dir + os.pathsep + env.get("PATH", "")
             if lib_dir not in env.get("LD_LIBRARY_PATH", "").split(os.pathsep):
                 env["LD_LIBRARY_PATH"] = lib_dir + os.pathsep + env.get("LD_LIBRARY_PATH", "")
-        ws = getattr(self, '_workspace', None) or default_workspace
+        ws = getattr(self, '_workspace', None) or get_default_simulation_workspace()
         for used_project_name in self.used_projects:
             used_project = ws.get_simulation_project(used_project_name, None)
             used_root = used_project.get_root_path()
@@ -393,7 +393,7 @@ class SimulationProject:
 
     def get_omnetpp_project(self):
         if isinstance(self.omnetpp_project, str):
-            ws = getattr(self, '_workspace', None) or default_workspace
+            ws = getattr(self, '_workspace', None) or get_default_simulation_workspace()
             self.omnetpp_project = ws.get_omnetpp_project_by_name(self.omnetpp_project)
         return self.omnetpp_project or default_omnetpp_project
 
