@@ -160,7 +160,7 @@ class CompareSimulationsTaskResult(TaskResult):
         else:
             stdout_trajectory_divergence_description = ""
         if self.fingerprint_trajectory_divergence_position:
-            fingerprint_trajectory_divergence_description = f"\nFingerprint trajectory comparison result: {self.fingerprint_trajectory_comparison_color}{self.fingerprint_trajectory_comparison_result}{COLOR_RESET}\n{self.fingerprint_trajectory_divergence_position.get_description()}"
+            fingerprint_trajectory_divergence_description = f"\nFingerprint trajectory comparison result: {self.fingerprint_trajectory_comparison_color}{self.fingerprint_trajectory_comparison_result}{COLOR_RESET}\n{self.fingerprint_trajectory_divergence_position.get_description()}\n"
         elif self.fingerprint_trajectory_comparison_result:
             fingerprint_trajectory_divergence_description = f"\nFingerprint trajectory comparison result: {self.fingerprint_trajectory_comparison_color}{self.fingerprint_trajectory_comparison_result}{COLOR_RESET}"
         else:
@@ -176,7 +176,7 @@ class CompareSimulationsTaskResult(TaskResult):
             statistical_desription = f"\nStatistical comparison result: {self.statistical_comparison_color}{self.statistical_comparison_result}{COLOR_RESET}"
         else:
             statistical_desription = ""
-        return TaskResult.__repr__(self) + stdout_trajectory_divergence_description + fingerprint_trajectory_divergence_description + statistical_desription
+        return TaskResult.__repr__(self) + "\n" + stdout_trajectory_divergence_description + fingerprint_trajectory_divergence_description + statistical_desription
 
     def debug_at_stdout_divergence_position(self, num_cause_events=0, **kwargs):
         if self.stdout_trajectory_divergence_position:
