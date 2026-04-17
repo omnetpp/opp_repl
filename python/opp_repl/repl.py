@@ -39,7 +39,6 @@ def run_repl_main():
         if "-h" in sys.argv:
             sys.exit(0)
         else:
-            _logger.info("OMNeT++ Python support is loaded.")
             if args.mcp_port != 0:
                 from opp_repl.common.mcp import start_mcp_server
                 start_mcp_server(port=args.mcp_port)
@@ -48,6 +47,7 @@ def run_repl_main():
             app.display_banner = False
             app.exec_lines = ["import opp_repl", "from opp_repl import *", "enable_autoreload()", "import_user_module()"] # "register_key_bindings()"
             app.initialize(argv=[])
+            _logger.info("OMNeT++ Python support is loaded.")
             app.start()
     except KeyboardInterrupt:
         _logger.warn("Program interrupted by user")

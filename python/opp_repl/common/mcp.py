@@ -219,7 +219,7 @@ def execute_python(code: str) -> str:
         if not text:
             text = "(no output)"
 
-    _logger.info(f"execute_python → {text[:200]}{'...' if len(text) > 200 else ''}")
+    _logger.info(f"execute_python → {text}")
     return _strip_ansi(text)
 
 def start_mcp_server(port=9966):
