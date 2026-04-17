@@ -20,7 +20,7 @@ Compare two arbitrary projects::
 Compare two git commits of the same project::
 
     simu5g = get_simulation_project("simu5g")
-    results = compare_git_versions(simu5g, "HEAD~1", "HEAD",
+    results = compare_simulations_between_commits(simu5g, "HEAD~1", "HEAD",
                                    config_filter="General",
                                    run_number=0)
 
@@ -33,7 +33,7 @@ Analyze the results::
     print(r.statistical_comparison_result)             # IDENTICAL / DIFFERENT
     r.print_different_statistical_results(include_relative_errors=True)
 
-See :py:func:`compare_simulations`, :py:func:`compare_git_versions`, and
+See :py:func:`compare_simulations`, :py:func:`compare_simulations_between_commits`, and
 :py:class:`CompareSimulationsTaskResult` for full details.
 """
 
@@ -407,7 +407,7 @@ def compare_simulations(**kwargs):
     multiple_simulation_tasks_2 = get_simulation_tasks(**kwargs_2, **kwargs)
     return compare_simulations_using_multiple_tasks(multiple_simulation_tasks_1, multiple_simulation_tasks_2, **kwargs)
 
-def compare_git_versions(simulation_project, git_hash_1, git_hash_2, **kwargs):
+def compare_simulations_between_commits(simulation_project, git_hash_1, git_hash_2, **kwargs):
     """Compare simulation results between two git versions of the same project.
 
     Creates git worktrees for each commit, builds both, and runs the
