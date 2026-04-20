@@ -5,7 +5,7 @@ import subprocess
 import xml
 
 from opp_repl.common.summary import *
-from opp_repl.project.inet import *
+
 from opp_repl.simulation.build import *
 from opp_repl.simulation.task import *
 from opp_repl.test.simulation import *

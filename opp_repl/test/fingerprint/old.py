@@ -8,7 +8,6 @@ import shlex
 from opp_repl.test.fingerprint import *
 
 from opp_repl.common import *
-from opp_repl.project.inet import *
 from opp_repl.simulation.project import *
 from opp_repl.test.fingerprint.store import *
 from opp_repl.test.fingerprint.task import *
@@ -74,8 +73,8 @@ def update_correct_fingerprints_from_csv(csv_file, correct_fingerprints, filter=
     f.close()
     return entries
 
-def update_correct_fingerprints_from_csvs(**kwargs):
-    correct_fingerprints = get_correct_fingerprint_store(inet_project)
-    for csv_file in glob.glob(inet_project.get_full_path("tests/fingerprint/*.csv"), recursive=True):
+def update_correct_fingerprints_from_csvs(simulation_project, **kwargs):
+    correct_fingerprints = get_correct_fingerprint_store(simulation_project)
+    for csv_file in glob.glob(simulation_project.get_full_path("tests/fingerprint/*.csv"), recursive=True):
         update_correct_fingerprints_from_csv(csv_file, correct_fingerprints, **kwargs)
     correct_fingerprints.write()

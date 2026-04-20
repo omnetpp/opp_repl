@@ -1,6 +1,6 @@
 import logging
 
-from opp_repl.project.inet import *
+
 from opp_repl.test.chart import *
 from opp_repl.test.feature import *
 from opp_repl.test.fingerprint import *

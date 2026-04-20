@@ -1,5 +1,4 @@
 from opp_repl.documentation.chart import *
-from opp_repl.documentation.html import *
 from opp_repl.documentation.ned import *
 
 __sphinx_mock__ = True # ignore this module in documentation
