@@ -14,9 +14,18 @@ pip install -e .
 Optional extras:
 
 ```bash
-pip install -e ".[all]"    # cluster, chart, optimize, github
-pip install -e ".[cluster]" # dask/distributed for SSH clusters
+pip install -e ".[all]"     # install every optional group
+pip install -e ".[cluster]" # just one group
 ```
+
+| Extra | Packages | Purpose |
+|---|---|---|
+| `cluster` | dask, distributed | SSH cluster execution via Dask |
+| `chart` | matplotlib, numpy | Chart tests and image export |
+| `mcp` | mcp | MCP server for AI assistant integration |
+| `optimize` | scipy, optimparallel | Parameter optimization |
+| `github` | requests | GitHub API integration |
+| `all` | *(all of the above)* | Everything |
 
 ## Quick Start
 
@@ -115,6 +124,34 @@ any overridden time limits, etc.
 Tasks are created by `get_simulation_tasks()` which expands each
 `SimulationConfig` into `num_runs` individual tasks (one per run number).
 
+### Build Modes
+
+Both `build_project()` and `run_simulations()` accept a `mode` parameter.
+The available modes are:
+
+| Mode | Suffix | Use case |
+|---|---|---|
+| `release` | `_release` | Normal optimized builds (default) |
+| `debug` | `_dbg` | Debug builds for stepping through code |
+| `sanitize` | `_sanitize` | AddressSanitizer / UBSan builds |
+| `coverage` | `_coverage` | Code coverage instrumented builds |
+| `profile` | `_profile` | Performance profiling builds |
+
+### Simulation Runners
+
+A simulation task can be executed by different **runners**, selected via
+the `simulation_runner` parameter of `run_simulations()`:
+
+- **`subprocess`** *(default)* — launches the simulation as a child
+  process.
+- **`opp_env`** — routes the command through `opp_env run` for
+  opp_env-managed installations (selected automatically when the project
+  has `opp_env_workspace` set).
+- **`inprocess`** — runs the simulation inside the Python process via
+  CFFI (requires `omnetpp.cffi`).
+- **`ide`** — attaches the IDE debugger to the simulation (selected
+  automatically when `debug=True`).
+
 ### SimulationTaskResult
 
 The **outcome of running a task** — captures the return code, stdout/stderr,
@@ -182,6 +219,32 @@ SimulationWorkspace
  └── SimulationProject  "simu5g"       (depends on inet)
       └── …
 ```
+
+### Filtering
+
+Most functions that operate on simulation configs accept **regex-based
+include/exclude filter pairs** to narrow down what is selected.  The
+filters are regular expressions matched against the corresponding
+property; a config is included only when all specified filters match.
+
+| Include filter | Exclude filter | Matches against |
+|---|---|---|
+| `filter` | `exclude_filter` | full config string representation |
+| `working_directory_filter` | `exclude_working_directory_filter` | working directory path |
+| `ini_file_filter` | `exclude_ini_file_filter` | INI file name |
+| `config_filter` | `exclude_config_filter` | config section name |
+| `run_number_filter` | `exclude_run_number_filter` | run number (as string) |
+
+In addition, the `simulation_config_filter` parameter accepts a
+**predicate function** that receives each `SimulationConfig` and returns
+`True`/`False`.  By default it excludes abstract and emulation configs.
+
+Setting `full_match=True` requires the regex to match the entire string
+rather than just a substring.
+
+These filters are available on `run_simulations()`, `run_smoke_tests()`,
+`run_fingerprint_tests()`, `compare_simulations()`, and all other
+functions that call `get_simulation_tasks()` internally.
 
 ## Project Descriptor Files (`.opp`)
 
@@ -388,12 +451,155 @@ update_correct_fingerprints(simulation_project=inet_project, sim_time_limit="1s"
 run_fingerprint_tests(simulation_project=inet_project, sim_time_limit="1s")
 ```
 
+### Other test types
+
+```python
+# Sanitizer tests — detect memory errors (requires sanitize build)
+run_sanitizer_tests(simulation_project=inet_project,
+                    working_directory_filter="examples/ethernet")
+
+# Statistical tests — detect regressions in scalar results
+run_statistical_tests(simulation_project=inet_project)
+
+# Chart tests — detect graphical regressions in plotted charts
+run_chart_tests(simulation_project=inet_project)
+
+# Speed tests — detect CPU instruction count regressions
+run_speed_tests(simulation_project=inet_project,
+                working_directory_filter="showcases")
+
+# Validation tests — compare simulation results to analytical models
+run_validation_tests(simulation_project=inet_project)
+```
+
+The full list of test types: `run_smoke_tests()`,
+`run_fingerprint_tests()`, `run_statistical_tests()`,
+`run_chart_tests()`, `run_sanitizer_tests()`, `run_speed_tests()`,
+`run_validation_tests()`, `run_module_tests()`, `run_packet_tests()`,
+`run_protocol_tests()`, `run_queueing_tests()`, `run_unit_tests()`,
+`run_release_tests()`, `run_all_tests()`.
+
+### Comparing simulations
+
+Compare simulation results between two projects or two git commits.
+The comparison checks stdout trajectories, fingerprint trajectories,
+and scalar statistical results.
+
+```python
+# Compare two projects
+results = compare_simulations(
+    simulation_project_1=inet_project,
+    simulation_project_2=inet_baseline_project,
+    working_directory_filter="examples/ethernet",
+    config_filter="General",
+    run_number=0)
+
+# Compare two git commits of the same project
+results = compare_simulations_between_commits(
+    inet_project, "HEAD~1", "HEAD",
+    config_filter="General",
+    run_number=0)
+
+# Inspect the results
+r = results.results[0]
+print(r.stdout_trajectory_comparison_result)       # IDENTICAL / DIVERGENT
+print(r.fingerprint_trajectory_comparison_result)   # IDENTICAL / DIVERGENT
+print(r.statistical_comparison_result)              # IDENTICAL / DIFFERENT
+r.print_different_statistical_results(include_relative_errors=True)
+
+# Interactive debugging at the divergence point
+r.debug_at_fingerprint_divergence_position()
+r.show_divergence_posisiton_in_sequence_chart()
+```
+
+### Overlay builds
+
+Overlay builds use `fuse-overlayfs` to create a writable layer on top
+of a read-only source tree, allowing out-of-tree builds without
+modifying the original checkout.
+
+```python
+# Projects with overlay_key in their .opp file use overlays automatically.
+# Manage overlays manually:
+from opp_repl.simulation.overlay import *
+
+list_overlays()          # list overlay keys under the build root
+cleanup_overlays()       # unmount all overlays
+clear_build_root()       # unmount and remove all overlay data
+```
+
+### SSH cluster execution
+
+Distribute simulation tasks across multiple machines using Dask
+(requires the `cluster` extra).
+
+```python
+from opp_repl.common.cluster import SSHCluster
+
+cluster = SSHCluster("node1", ["node1", "node2", "node3"])
+cluster.start()
+
+# Run simulations on the cluster
+run_simulations(simulation_project=inet_project,
+                scheduler="cluster")
+```
+
 ### Loading projects at runtime
 
 ```python
 load_opp_file("/path/to/project.opp")
 load_opp_file("/path/to/workspace/*/*.opp")  # glob patterns supported
 ```
+
+### Cleaning results
+
+```python
+clean_simulation_results(simulation_project=inet_project)
+clean_simulation_results(simulation_project=inet_project,
+                         working_directory_filter="examples/ethernet")
+```
+
+## MCP Server
+
+opp_repl can expose an **MCP (Model Context Protocol) server** that
+allows AI assistants to execute Python code in the live REPL session.
+The server starts automatically on port 9966 (disable with
+`--mcp-port 0`).
+
+- **Transport**: Streamable HTTP (stateless), endpoint `http://127.0.0.1:{port}/mcp`
+- **Tool**: `execute_python` — runs arbitrary Python code in the IPython session
+- **Resources**: `file:///opp_repl/packages` (package list),
+  `file:///opp_repl/api/{package_name}` (auto-generated API reference)
+
+Requires the `mcp` extra: `pip install -e ".[mcp]"`.
+
+## REPL Features
+
+### Autoreload
+
+IPython's `%autoreload 2` magic is enabled at REPL startup so that
+edited Python source files are automatically reloaded before each
+command.
+
+### User module
+
+At startup the REPL tries to import a Python module named after the
+current OS login user (e.g. `import levy`).  All public names from
+that module are injected into the REPL namespace.  This allows
+per-user customization — define helper functions, set project defaults,
+etc. — without modifying opp_repl itself.  If no such module exists, the
+import is silently skipped.
+
+### Convenience variables
+
+Every loaded simulation project is injected into the REPL namespace as
+`{name}_project` (hyphens and dots replaced by underscores).  For
+example, `inet_project`, `simu5g_project`, `aloha_project`.
+
+### stop_execution()
+
+Call `stop_execution()` (or `stop_execution(value)`) anywhere in a
+REPL script to abort the current cell without a full traceback.
 
 ## License
 
