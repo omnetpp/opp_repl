@@ -37,7 +37,7 @@ opp_repl --load ~/workspace/omnetpp/omnetpp.opp \
 Once inside the REPL:
 
 ```python
-In [1]: run_simulations(simulation_project=get_simulation_project("fifo"))
+In [1]: run_simulations(simulation_project=fifo_project)
 ```
 
 ## Command-Line Options
@@ -135,6 +135,37 @@ A **registry** that holds all loaded `OmnetppProject` and
 `SimulationProject` instances.  Projects are registered by loading `.opp`
 descriptor files via `--load` on the command line or `load_opp_file()` at
 runtime.
+
+### Defaults
+
+opp_repl maintains three global defaults so that most functions can be
+called without explicitly specifying a workspace or project:
+
+- **Default workspace** — a `SimulationWorkspace` instance created
+  automatically at startup.  All `.opp` files loaded via `--load` (or
+  `load_opp_file()` at runtime) are registered here.  Access it with
+  `get_default_simulation_workspace()`.
+
+- **Default simulation project** — set at startup to the loaded project
+  whose root folder contains the current working directory.  It can also
+  be set explicitly with `-p PROJECT` on the command line or
+  `set_default_simulation_project()` at runtime.  Functions like
+  `run_simulations()`, `run_smoke_tests()`, and `build_project()` use
+  it when no `simulation_project` argument is given.  Access it with
+  `get_default_simulation_project()`.
+
+- **Default OMNeT++ project** — set automatically when the default
+  simulation project is determined: if the simulation project references
+  an `OmnetppProject` (via its `omnetpp_project` parameter), that
+  becomes the default; otherwise the project registered under the name
+  `"omnetpp"` is used as a fallback.  Access it with
+  `get_default_omnetpp_project()`.
+
+At REPL startup, every loaded simulation project is also injected into
+the IPython namespace as a convenience variable named
+`{name}_project` (with hyphens and dots replaced by underscores).  For
+example, loading a project named `"inet"` creates a variable
+`inet_project`, and `"simu5g"` creates `simu5g_project`.
 
 ### How they fit together
 
@@ -317,33 +348,33 @@ SimulationProject(
 
 ```python
 # Run all simulations from a project
-run_simulations(simulation_project=get_simulation_project("fifo"))
+run_simulations(simulation_project=fifo_project)
 
 # Run with a filter and time limit
-run_simulations(filter="PureAloha", sim_time_limit="1s")
+run_simulations(simulation_project=aloha_project,
+                filter="PureAloha1", sim_time_limit="1s")
 
 # Run a specific config
-run_simulations(simulation_project=get_simulation_project("aloha"),
+run_simulations(simulation_project=aloha_project,
                 config_filter="PureAlohaExperiment", sim_time_limit="1s")
 
 # Re-run failed simulations
-r = run_simulations()
+r = run_simulations(...)
 r.get_error_results().rerun()
 ```
 
 ### Building projects
 
 ```python
-p = get_simulation_project("inet")
-build_project(simulation_project=p)
-build_project(simulation_project=p, mode="debug")
+build_project(simulation_project=inet_project)
+build_project(simulation_project=inet_project, mode="debug")
 ```
 
 ### Smoke tests
 
 ```python
 run_smoke_tests()
-run_smoke_tests(simulation_project=get_simulation_project("aloha"),
+run_smoke_tests(simulation_project=aloha_project,
                 config_filter="PureAlohaExperiment")
 ```
 
@@ -351,10 +382,10 @@ run_smoke_tests(simulation_project=get_simulation_project("aloha"),
 
 ```python
 # First, store correct fingerprints
-update_correct_fingerprints(sim_time_limit="1s")
+update_correct_fingerprints(simulation_project=inet_project, sim_time_limit="1s")
 
 # Then verify against stored values
-run_fingerprint_tests(sim_time_limit="1s")
+run_fingerprint_tests(simulation_project=inet_project, sim_time_limit="1s")
 ```
 
 ### Loading projects at runtime
