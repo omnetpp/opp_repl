@@ -21,6 +21,6 @@ if [ -f "$OPP_REPL_ROOT/.venv/bin/activate" ]; then
     . "$OPP_REPL_ROOT/.venv/bin/activate"
 fi
 
-export PATH="$OPP_REPL_ROOT/opp_repl:$PATH"
+export PATH="$OPP_REPL_ROOT/bin:$OPP_REPL_ROOT/opp_repl:$PATH"
 export PYTHONPATH="$OPP_REPL_ROOT:$PYTHONPATH"
 echo "opp_repl is ready (added $OPP_REPL_ROOT to PATH)."
