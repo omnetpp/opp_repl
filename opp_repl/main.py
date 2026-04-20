@@ -45,13 +45,17 @@ def parse_run_tasks_arguments(task_name):
     parser.add_argument("--handle-exception", action="store_true", help="disables displaying stacktraces for exceptions")
     parser.add_argument("--no-handle-exception", dest="handle_exception", action="store_false")
     parser.add_argument("--log-file", default=f"{task_name.replace(' ', '_')}.log", help="specifies the log file for all log messages")
+    parser.add_argument("--load", action="append", default=[], metavar="OPP_FILE", help="load .opp files (paths or glob patterns)")
     parser.set_defaults(concurrent=True, build=True, dry_run=False, handle_exception=True)
     return parser.parse_args(sys.argv[1:])
 
 def process_run_tasks_arguments(args):
     logging.getLogger("distributed.deploy.ssh").setLevel(args.log_level)
+    for opp_file in args.load:
+        load_opp_file(opp_file)
     simulation_project = determine_default_simulation_project(name=args.simulation_project)
     kwargs = {k: v for k, v in vars(args).items() if v is not None}
+    kwargs.pop("load", None)
     kwargs["simulation_project"] = simulation_project
     has_filter_kwarg = False
     for k in kwargs.keys():
@@ -151,12 +155,16 @@ def parse_build_project_arguments():
     parser.add_argument("--external-command-log-level", choices=["ERROR", "WARN", "INFO", "DEBUG"], default="INFO", help="specifies the log level for the external command logging categories")
     parser.add_argument("--log-file", default="build.log", help="specifies the log file for all log messages")
     parser.add_argument("--handle-exception", default=True, action=argparse.BooleanOptionalAction, help="disables displaying stacktraces for exceptions")
+    parser.add_argument("--load", action="append", default=[], metavar="OPP_FILE", help="load .opp files (paths or glob patterns)")
     return parser.parse_args(sys.argv[1:])
 
 def process_build_project_arguments(args):
     initialize_logging(args.log_level, args.external_command_log_level, args.log_file, args.log_file)
+    for opp_file in args.load:
+        load_opp_file(opp_file)
     simulation_project = determine_default_simulation_project(name=args.simulation_project)
     kwargs = {k: v for k, v in vars(args).items() if v is not None}
+    kwargs.pop("load", None)
     kwargs["simulation_project"] = simulation_project
     return kwargs
 
