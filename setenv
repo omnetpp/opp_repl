@@ -1,6 +1,17 @@
 #!/usr/bin/env -S sh -c "echo >&2 \"Error: You are running this script instead of sourcing it. Make sure to use it as 'source setenv' or '. setenv', otherwise its settings won't take effect.\"; exit 1"
 
-export OPP_REPL_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+# Resolve the path of this script whether it was sourced from bash or zsh.
+# Under bash, BASH_SOURCE[0] is the sourced file; under zsh, %x expands to it.
+if [ -n "$BASH_VERSION" ]; then
+    _OPP_REPL_SETENV_FILE="${BASH_SOURCE[0]}"
+elif [ -n "$ZSH_VERSION" ]; then
+    _OPP_REPL_SETENV_FILE="${(%):-%x}"
+else
+    _OPP_REPL_SETENV_FILE="$0"
+fi
+
+export OPP_REPL_ROOT="$(cd "$(dirname "$_OPP_REPL_SETENV_FILE")" && pwd)"
+unset _OPP_REPL_SETENV_FILE
 export PATH="$OPP_REPL_ROOT/opp_repl:$PATH"
 export PYTHONPATH="$OPP_REPL_ROOT:$PYTHONPATH"
 echo "opp_repl is ready (added $OPP_REPL_ROOT to PATH)."
