@@ -4,7 +4,6 @@ import socket
 import sys
 
 # from opp_repl.common.cluster import *
-from opp_repl.project.omnetpp import *
 from opp_repl.simulation.project import *
 from opp_repl.simulation.task import *
 # from opp_repl.test import *
