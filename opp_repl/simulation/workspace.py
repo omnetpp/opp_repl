@@ -374,7 +374,7 @@ _default_simulation_workspace = None
 def get_default_simulation_workspace():
     global _default_simulation_workspace
     if _default_simulation_workspace is None:
-        _default_simulation_workspace = SimulationWorkspace(os.path.expanduser("~/workspace"))
+        _default_simulation_workspace = SimulationWorkspace()
     return _default_simulation_workspace
 
 def set_default_simulation_workspace(workspace):
