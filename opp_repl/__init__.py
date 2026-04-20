@@ -610,7 +610,10 @@ often, etc. So it is highly advisable to start writing your own Python package w
 """
 
 # from opp_repl.documentation import *
-from opp_repl.common.mcp import mcp_calls
+try:
+    from opp_repl.common.mcp import mcp_calls
+except Exception:
+    mcp_calls = []
 # from opp_repl.scave import *
 from opp_repl.simulation import *
 from opp_repl.test.fingerprint import *

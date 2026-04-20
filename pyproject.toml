@@ -5,11 +5,13 @@ description = "OMNeT++ Python read-eval-print-loop for running and testing simul
 requires-python = ">=3.10"
 dependencies = [
     "ipython",
-    "mcp",
     "pandas",
 ]
 
 [project.optional-dependencies]
+mcp = [
+    "mcp",
+]
 cluster = [
     "dask",
     "distributed",
@@ -29,6 +31,7 @@ all = [
     "dask",
     "distributed",
     "matplotlib",
+    "mcp",
     "numpy",
     "optimparallel",
     "requests",

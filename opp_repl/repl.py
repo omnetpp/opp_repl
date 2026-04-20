@@ -42,8 +42,11 @@ def run_repl_main():
             sys.exit(0)
         else:
             if args.mcp_port != 0:
-                from opp_repl.common.mcp import start_mcp_server
-                start_mcp_server(port=args.mcp_port)
+                try:
+                    from opp_repl.common.mcp import start_mcp_server
+                    start_mcp_server(port=args.mcp_port)
+                except ImportError:
+                    _logger.warning("MCP server not available (install with: pip install opp_repl[mcp])")
             app = IPython.terminal.ipapp.TerminalIPythonApp.instance()
             app.interactive_shell_class = TerminalInteractiveShell
             app.display_banner = False
