@@ -7,6 +7,7 @@ The main function is :py:func:`build_project`.
 import logging
 import multiprocessing
 import os
+import shlex
 import shutil
 import signal
 import subprocess
@@ -19,7 +20,14 @@ _logger = logging.getLogger(__name__)
 def make_makefiles(simulation_project=None, **kwargs):
     if simulation_project is None:
         simulation_project = get_default_simulation_project()
-    run_command_with_logging(["make", "makefiles"], cwd=simulation_project.get_full_path("."), error_message=f"Making {simulation_project.get_name()} makefiles failed")
+    args = ["make", "makefiles"]
+    cwd = simulation_project.get_full_path(".")
+    if simulation_project.opp_env_workspace:
+        shell_cmd = "cd " + shlex.quote(cwd) + " && " + shlex.join(args)
+        args = ["opp_env", "run", simulation_project.opp_env_project, "-w", simulation_project.opp_env_workspace, "-c", shell_cmd]
+        run_command_with_logging(args, error_message=f"Making {simulation_project.get_name()} makefiles failed")
+    else:
+        run_command_with_logging(args, cwd=cwd, env=simulation_project.get_env(), error_message=f"Making {simulation_project.get_name()} makefiles failed")
 
 def build_project(build_mode="makefile", **kwargs):
     """
@@ -63,7 +71,13 @@ def build_project_using_makefile(simulation_project=None, mode="release", **kwar
         simulation_project = get_default_simulation_project()
     _logger.info(f"Building {simulation_project.get_name()} in {mode} mode started")
     args = ["make", "MODE=" + mode, "-j", str(multiprocessing.cpu_count())]
-    run_command_with_logging(args, cwd=simulation_project.get_full_path("."), env=simulation_project.get_env(), error_message=f"Building {simulation_project.get_name()} failed")
+    cwd = simulation_project.get_full_path(".")
+    if simulation_project.opp_env_workspace:
+        shell_cmd = "cd " + shlex.quote(cwd) + " && " + shlex.join(args)
+        args = ["opp_env", "run", simulation_project.opp_env_project, "-w", simulation_project.opp_env_workspace, "-c", shell_cmd]
+        run_command_with_logging(args, error_message=f"Building {simulation_project.get_name()} failed")
+    else:
+        run_command_with_logging(args, cwd=cwd, env=simulation_project.get_env(), error_message=f"Building {simulation_project.get_name()} failed")
     _logger.info(f"Building {simulation_project.get_name()} in {mode} mode ended")
 
 class MultipleBuildTasks(MultipleTasks):
@@ -313,5 +327,11 @@ def clean_project(simulation_project=None, mode="release", **kwargs):
         simulation_project = get_default_simulation_project()
     _logger.info(f"Cleaning {simulation_project.get_name()} started")
     args = ["make", "MODE=" + mode, "-j", str(multiprocessing.cpu_count()), "clean"]
-    run_command_with_logging(args, cwd=simulation_project.get_full_path("."), error_message=f"Cleaning {simulation_project.get_name()} failed")
+    cwd = simulation_project.get_full_path(".")
+    if simulation_project.opp_env_workspace:
+        shell_cmd = "cd " + shlex.quote(cwd) + " && " + shlex.join(args)
+        args = ["opp_env", "run", simulation_project.opp_env_project, "-w", simulation_project.opp_env_workspace, "-c", shell_cmd]
+        run_command_with_logging(args, error_message=f"Cleaning {simulation_project.get_name()} failed")
+    else:
+        run_command_with_logging(args, cwd=cwd, env=simulation_project.get_env(), error_message=f"Cleaning {simulation_project.get_name()} failed")
     _logger.info(f"Cleaning {simulation_project.get_name()} ended")

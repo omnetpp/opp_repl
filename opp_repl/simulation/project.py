@@ -20,6 +20,7 @@ import logging
 import multiprocessing
 import os
 import re
+import shlex
 import shutil
 import socket
 import subprocess
@@ -45,7 +46,7 @@ class OmnetppProject:
     """
 
     def __init__(self, environment_variable="__omnetpp_root_dir", root_folder=None,
-                 overlay_key=None, build_root=None):
+                 overlay_key=None, build_root=None, opp_env_workspace=None, opp_env_project=None):
         """
         Initializes a new OMNeT++ project.
 
@@ -66,6 +67,8 @@ class OmnetppProject:
         """
         self.environment_variable = environment_variable
         self.root_folder = root_folder
+        self.opp_env_workspace = opp_env_workspace
+        self.opp_env_project = opp_env_project
         self._overlay = None
         if overlay_key is not None:
             from opp_repl.simulation.overlay import OverlayMount
@@ -130,7 +133,13 @@ class OmnetppProject:
             env["LD_LIBRARY_PATH"] = lib_dir + os.pathsep + env.get("LD_LIBRARY_PATH", "")
         args = ["make", "MODE=" + mode, "-j", str(multiprocessing.cpu_count())]
         _logger.info("Building OMNeT++ in %s mode at %s", mode, root)
-        run_command_with_logging(args, cwd=root, env=env, error_message="Building OMNeT++ failed")
+        if self.opp_env_workspace:
+            opp_env_project = self.opp_env_project or self.name
+            shell_cmd = "cd " + shlex.quote(root) + " && " + shlex.join(args)
+            args = ["opp_env", "run", opp_env_project, "-w", self.opp_env_workspace, "-c", shell_cmd]
+            run_command_with_logging(args, error_message="Building OMNeT++ failed")
+        else:
+            run_command_with_logging(args, cwd=root, env=env, error_message="Building OMNeT++ failed")
 
     def ensure_mounted(self):
         if self._overlay is not None:
