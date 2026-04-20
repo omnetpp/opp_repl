@@ -37,3 +37,9 @@ all = [
     "requests",
     "scipy",
 ]
+
+[project.scripts]
+opp_repl = "opp_repl.repl:run_repl_main"
+
+[tool.setuptools.packages.find]
+include = ["opp_repl*"]
