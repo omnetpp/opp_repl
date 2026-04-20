@@ -10,7 +10,7 @@ import sys
 from opp_repl.common import *
 from opp_repl.simulation import *
 from opp_repl.test.fingerprint import *
-# from opp_repl.test import *
+from opp_repl.test import *
 
 __sphinx_mock__ = True # ignore this module in documentation
 

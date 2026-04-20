@@ -617,7 +617,7 @@ except Exception:
 # from opp_repl.scave import *
 from opp_repl.simulation import *
 from opp_repl.test.fingerprint import *
-# from opp_repl.test import *
+from opp_repl.test import *
 
 __all__ = [k for k,v in locals().items() if k[0] != "_" and v.__class__.__name__ != "module"]
 
