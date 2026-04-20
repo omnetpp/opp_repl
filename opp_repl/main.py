@@ -6,7 +6,7 @@ import sys
 # from opp_repl.common.cluster import *
 from opp_repl.simulation.project import *
 from opp_repl.simulation.task import *
-# from opp_repl.test import *
+from opp_repl.test import *
 
 __sphinx_mock__ = True # ignore this module in documentation
 
