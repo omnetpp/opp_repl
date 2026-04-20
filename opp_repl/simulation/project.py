@@ -539,8 +539,11 @@ class SimulationProject:
             inifile_contents = InifileContents(ini_path)
             return inifile_contents.getNumRunsInConfig(config)
         except Exception as e:
-            inifile_contents = read_file(ini_path)
-            if configuration_class_regex.search(inifile_contents):
+            inifile_text = read_file(ini_path)
+            if configuration_class_regex.search(inifile_text):
+                if self.opp_env_workspace:
+                    _logger.warn("Cannot determine number of runs for opp_env project with configuration-class in " + working_directory)
+                    return None
                 self.build(mode="release")
                 executable = self.get_executable(mode="release")
                 if not os.path.exists(executable):
@@ -548,13 +551,15 @@ class SimulationProject:
                 default_args = self.get_default_args()
                 args = [executable, *default_args, "-s", "-f", ini_file, "-c", config, "-q", "numruns"]
             else:
-                executable = self.get_omnetpp_project().get_executable(mode="release")
+                if self.opp_env_workspace:
+                    executable = shutil.which("opp_run_release") or shutil.which("opp_run")
+                else:
+                    executable = self.get_omnetpp_project().get_executable(mode="release")
+                if executable is None or not os.path.exists(executable):
+                    _logger.warn("Cannot determine number of runs: opp_run not found in " + working_directory)
+                    return None
                 args = [executable, "-s", "-f", ini_file, "-c", config, "-q", "numruns"]
-            if self.opp_env_workspace:
-                _logger.warn("Cannot determine number of runs using opp_env")
-                return None
-            else:
-                result = run_command_with_logging(args, cwd=working_directory, env=self.get_env())
+            result = run_command_with_logging(args, cwd=working_directory)
             if result.returncode == 0:
                 # KLUDGE: this was added to test source dependency based task result caching
                 result.stdout = re.sub(r"INI dependency: (.*)", "", result.stdout)
