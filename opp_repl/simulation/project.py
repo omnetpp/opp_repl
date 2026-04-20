@@ -136,7 +136,7 @@ class OmnetppProject:
         if self.opp_env_workspace:
             opp_env_project = self.opp_env_project or self.name
             shell_cmd = "cd " + shlex.quote(root) + " && " + shlex.join(args)
-            args = ["opp_env", "run", opp_env_project, "-w", self.opp_env_workspace, "-c", shell_cmd]
+            args = ["opp_env", "-l", "WARN", "run", opp_env_project, "-w", self.opp_env_workspace, "-c", shell_cmd]
             run_command_with_logging(args, error_message="Building OMNeT++ failed")
         else:
             run_command_with_logging(args, cwd=root, env=env, error_message="Building OMNeT++ failed")

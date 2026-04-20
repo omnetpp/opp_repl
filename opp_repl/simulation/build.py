@@ -24,7 +24,7 @@ def make_makefiles(simulation_project=None, **kwargs):
     cwd = simulation_project.get_full_path(".")
     if simulation_project.opp_env_workspace:
         shell_cmd = "cd " + shlex.quote(cwd) + " && " + shlex.join(args)
-        args = ["opp_env", "run", simulation_project.opp_env_project, "-w", simulation_project.opp_env_workspace, "-c", shell_cmd]
+        args = ["opp_env", "-l", "WARN", "run", simulation_project.opp_env_project, "-w", simulation_project.opp_env_workspace, "-c", shell_cmd]
         run_command_with_logging(args, error_message=f"Making {simulation_project.get_name()} makefiles failed")
     else:
         run_command_with_logging(args, cwd=cwd, env=simulation_project.get_env(), error_message=f"Making {simulation_project.get_name()} makefiles failed")
@@ -74,7 +74,7 @@ def build_project_using_makefile(simulation_project=None, mode="release", **kwar
     cwd = simulation_project.get_full_path(".")
     if simulation_project.opp_env_workspace:
         shell_cmd = "cd " + shlex.quote(cwd) + " && " + shlex.join(args)
-        args = ["opp_env", "run", simulation_project.opp_env_project, "-w", simulation_project.opp_env_workspace, "-c", shell_cmd]
+        args = ["opp_env", "-l", "WARN", "run", simulation_project.opp_env_project, "-w", simulation_project.opp_env_workspace, "-c", shell_cmd]
         run_command_with_logging(args, error_message=f"Building {simulation_project.get_name()} failed")
     else:
         run_command_with_logging(args, cwd=cwd, env=simulation_project.get_env(), error_message=f"Building {simulation_project.get_name()} failed")
@@ -330,7 +330,7 @@ def clean_project(simulation_project=None, mode="release", **kwargs):
     cwd = simulation_project.get_full_path(".")
     if simulation_project.opp_env_workspace:
         shell_cmd = "cd " + shlex.quote(cwd) + " && " + shlex.join(args)
-        args = ["opp_env", "run", simulation_project.opp_env_project, "-w", simulation_project.opp_env_workspace, "-c", shell_cmd]
+        args = ["opp_env", "-l", "WARN", "run", simulation_project.opp_env_project, "-w", simulation_project.opp_env_workspace, "-c", shell_cmd]
         run_command_with_logging(args, error_message=f"Cleaning {simulation_project.get_name()} failed")
     else:
         run_command_with_logging(args, cwd=cwd, env=simulation_project.get_env(), error_message=f"Cleaning {simulation_project.get_name()} failed")
