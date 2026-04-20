@@ -527,6 +527,42 @@ class SimulationProject:
         if self._overlay is not None:
             self._overlay.clean()
 
+    def get_num_runs_in_config(self, ini_path, config):
+        num_runs_fast_regex = re.compile(r"(?m).*^\s*(include\s+.*\.ini|repeat\s*=\s*[0-9]+|.*\$\{.*\})")
+        inifile_text = read_file(ini_path)
+        if not num_runs_fast_regex.search(inifile_text):
+            return 1
+        working_directory = os.path.dirname(ini_path)
+        ini_file = os.path.basename(ini_path)
+        configuration_class_regex = re.compile(r"\s*configuration-class\s*=\s*(\w+)")
+        try:
+            inifile_contents = InifileContents(ini_path)
+            return inifile_contents.getNumRunsInConfig(config)
+        except Exception as e:
+            inifile_contents = read_file(ini_path)
+            if configuration_class_regex.search(inifile_contents):
+                self.build(mode="release")
+                executable = self.get_executable(mode="release")
+                if not os.path.exists(executable):
+                    executable = self.get_executable(mode="release")
+                default_args = self.get_default_args()
+                args = [executable, *default_args, "-s", "-f", ini_file, "-c", config, "-q", "numruns"]
+            else:
+                executable = self.get_omnetpp_project().get_executable(mode="release")
+                args = [executable, "-s", "-f", ini_file, "-c", config, "-q", "numruns"]
+            if self.opp_env_workspace:
+                _logger.warn("Cannot determine number of runs using opp_env")
+                return None
+            else:
+                result = run_command_with_logging(args, cwd=working_directory, env=self.get_env())
+            if result.returncode == 0:
+                # KLUDGE: this was added to test source dependency based task result caching
+                result.stdout = re.sub(r"INI dependency: (.*)", "", result.stdout)
+                return int(result.stdout)
+            else:
+                _logger.warn("Cannot determine number of runs: " + result.stderr + " in " + working_directory)
+                return None
+
     # KLUDGE TODO replace this with a Python binding to the C++ configuration reader
     def collect_ini_file_simulation_configs(self, ini_path):
         def get_sim_time_limit(config_dicts, config):
@@ -543,12 +579,8 @@ class SimulationProject:
             return config_dicts["General"].get("sim_time_limit")
         def create_config_dict(config):
             return {"config": config, "abstract": False, "emulation": False, "expected_result": "DONE", "user_interface": None, "description": None, "network": None}
-        num_runs_fast_regex = re.compile(r"(?m).*^\s*(include\s+.*\.ini|repeat\s*=\s*[0-9]+|.*\$\{.*\})")
-        configuration_class_regex = re.compile(r"\s*configuration-class\s*=\s*(\w+)")
         simulation_configs = []
         working_directory = os.path.dirname(ini_path)
-        inifile_contents = read_file(ini_path)
-        num_runs_fast = None if num_runs_fast_regex.search(inifile_contents) else 1
         ini_file = os.path.basename(ini_path)
         file = open(ini_path, encoding="utf-8")
         config_dicts = {"General": create_config_dict("General")}
@@ -587,35 +619,9 @@ class SimulationProject:
         general_config_dict = config_dicts["General"]
         for config, config_dict in config_dicts.items():
             config = config_dict["config"]
-            if num_runs_fast:
-                num_runs = num_runs_fast
-            else:
-                try:
-                    inifile_contents = InifileContents(ini_path)
-                    num_runs = inifile_contents.getNumRunsInConfig(config)
-                except Exception as e:
-                    if configuration_class_regex.search(inifile_contents):
-                        self.build(mode="release")
-                        executable = self.get_executable(mode="release")
-                        if not os.path.exists(executable):
-                            executable = self.get_executable(mode="release")
-                        default_args = self.get_default_args()
-                        args = [executable, *default_args, "-s", "-f", ini_file, "-c", config, "-q", "numruns"]
-                    else:
-                        executable = self.get_omnetpp_project().get_executable(mode="release")
-                        args = [executable, "-s", "-f", ini_file, "-c", config, "-q", "numruns"]
-                    if self.opp_env_workspace:
-                        _logger.warn("Cannot determine number of runs using opp_env")
-                        continue
-                    else:
-                        result = run_command_with_logging(args, cwd=working_directory, env=self.get_env())
-                    if result.returncode == 0:
-                        # KLUDGE: this was added to test source dependency based task result caching
-                        result.stdout = re.sub(r"INI dependency: (.*)", "", result.stdout)
-                        num_runs = int(result.stdout)
-                    else:
-                        _logger.warn("Cannot determine number of runs: " + result.stderr + " in " + working_directory)
-                        continue
+            num_runs = self.get_num_runs_in_config(ini_path, config)
+            if num_runs is None:
+                continue
             sim_time_limit = get_sim_time_limit(config_dicts, config)
             description = config_dict["description"]
             description_abstract = (re.search(r"\((a|A)bstract\)", description) is not None) if description else False
