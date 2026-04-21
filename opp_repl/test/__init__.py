@@ -14,7 +14,7 @@ It provides several functions to run various tests:
 # from opp_repl.test.coverage import *
 # from opp_repl.test.feature import *
 from opp_repl.test.fingerprint import *
-# from opp_repl.test.opp import *
+from opp_repl.test.opp import *
 # from opp_repl.test.profile import *
 # from opp_repl.test.release import *
 # from opp_repl.test.sanitizer import *
