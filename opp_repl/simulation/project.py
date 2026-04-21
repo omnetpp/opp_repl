@@ -434,7 +434,8 @@ class SimulationProject:
         if dynamic_loading:
             return self.get_omnetpp_project().get_executable(mode=mode)
         else:
-            executable = os.path.join(self.folder, self.executables[0])
+            suffix = "" if mode == "release" else self.get_omnetpp_project().get_library_suffix(mode=mode)
+            executable = os.path.join(self.folder, self.executables[0] + suffix)
             root = self.get_root_path()
             return os.path.abspath(os.path.join(root, executable)) if root is not None else None
 
