@@ -10,7 +10,6 @@ from opp_repl.test.simulation import *
 from opp_repl.test.smoke import *
 from opp_repl.test.speed import *
 from opp_repl.test.statistical import *
-from opp_repl.test.validation import *
 
 __sphinx_mock__ = True # ignore this module in documentation
 

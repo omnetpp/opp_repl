@@ -9,21 +9,20 @@ It provides several functions to run various tests:
  - :py:func:`run_validation_tests <opp_repl.test.validation.run_validation_tests()>`: compare simulation results to analytical models
 """
 
-# from opp_repl.test.all import *
+from opp_repl.test.all import *
 from opp_repl.test.chart import *
 from opp_repl.test.coverage import *
-# from opp_repl.test.feature import *
+from opp_repl.test.feature import *
 from opp_repl.test.fingerprint import *
 from opp_repl.test.opp import *
 from opp_repl.test.profile import *
-# from opp_repl.test.release import *
+from opp_repl.test.release import *
 from opp_repl.test.sanitizer import *
 from opp_repl.test.simulation import *
 from opp_repl.test.smoke import *
 from opp_repl.test.speed import *
 from opp_repl.test.statistical import *
 from opp_repl.test.task import *
-# from opp_repl.test.validation import *
 
 __all__ = [k for k,v in locals().items() if k[0] != "_" and v.__class__.__name__ != "module"]
 
