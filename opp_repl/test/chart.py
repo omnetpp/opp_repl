@@ -3,9 +3,7 @@ This module provides functionality for chart testing of multiple simulations.
 
 The main function is :py:func:`run_chart_tests`. It allows running multiple chart tests matching the
 provided filter criteria. Chart tests check if charts of the result analysis are the same as the saved
-baseline charts. The baseline charts can be found in the media folder of the simulation project. For
-the INET Framework the media folder can be found at https://github.com/inet-framework/media in a separate
-GitHub repository.
+baseline charts. The baseline charts can be found in the media folder of the simulation project.
 """
 
 import filecmp

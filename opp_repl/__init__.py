@@ -1,15 +1,15 @@
 """
-This is the main package for the INET Framework Python library.
+This is the main package for the opp_repl Python library.
 
 It provides sub-packages for running simulations, analyzing simulation results, generating documentation, automated
 testing, etc.
 
 Please note that undocumented features are not supposed to be used by the user.
 
-INET Framework Python Package
-#############################
+opp_repl Python Package
+#######################
 
-The following sections give an overview of the INET Framework Python package.
+The following sections give an overview of the opp_repl Python package.
 
 Using Python Interactively
 ==========================
@@ -18,13 +18,12 @@ The Python programming language is a very adequate tool for interactive developm
 Python code doesn't require compilation, the interactive code execution creates a bidirectional communication channel
 between the user and the system, and the interactive development session is stateful, remembering code blocks executed
 earlier and also their results. Moreover, Python comes with a plethora of open source libraries which are easy to install,
-and they can be used in combination with the functions provided by the INET Python package.
+and they can be used in combination with the functions provided by the opp_repl package.
 
-The simplest way to start using INET in the interactive Python environment is to start the :command:`inet_python_repl`
+The simplest way to start using opp_repl in the interactive Python environment is to start the :command:`opp_repl`
 shell script. This script is pretty simple, it loads the :py:mod:`opp_repl.repl` Python module and launches an IPython
 interpreter. Alternatively, it's also possible to use any other Python interpreter, and also to import the desired
-individual INET packages as needed. A good place to see how to setup the INET Python packages after importing them,
-is to look at how the aforementioned INET package is implemented.
+individual opp_repl packages as needed.
 
 .. TODO
    The OMNeT++ IDE contains built-in interactive Python development support. This is provided in the form of a IPython
@@ -34,21 +33,20 @@ is to look at how the aforementioned INET package is implemented.
 Once the Python interpreter is up and running, the user can immediately start interacting with it and run simulations
 and carry out many other tasks. The easiest way to get used to the interactive development, is to run the code fragments
 presented in this document. Later with more experience, the user can run any other Python code that is developed with
-the help of the INET Python API reference documentation.
+the help of the opp_repl API reference documentation.
 
 Installation
 ============
 
-The INET Python package requires certain other Python libraries to be installed before it can be used. The following
+The opp_repl package requires certain other Python libraries to be installed before it can be used. The following
 command installs all such required and optional libraries:
 
 .. code-block:: console
 
-    levy@valardohaeris:~/workspace/inet$ python3 -m pip install -r python/requirements.txt cppyy seaborn
-    Collecting cppyy
+    levy@valardohaeris:~/workspace/opp_repl$ pip install -e '.[all]'
     ...
 
-After the installation is completed, starting the INET Python interpreter from a terminal is pretty straightforward: 
+After the installation is completed, starting the opp_repl interpreter from a terminal is pretty straightforward: 
 
 .. code-block:: console
 
@@ -56,7 +54,7 @@ After the installation is completed, starting the INET Python interpreter from a
     Environment for 'omnetpp-6.0' in directory '/home/levy/workspace/omnetpp' is ready.
     levy@valardohaeris:~/workspace/inet$ . setenv
     Environment for INET 4.5.0 in directory '/home/levy/workspace/inet' is ready.
-    levy@valardohaeris:~/workspace/inet$ inet_python_repl
+    levy@valardohaeris:~/workspace/inet$ opp_repl --load inet.opp
     INFO opp_repl.simulation.project Default project is set to inet (project.py:532)
     INFO opp_repl.repl OMNeT++ Python support is loaded. (repl.py:38)
 
@@ -79,7 +77,7 @@ the returned result:
 Main Concepts
 =============
 
-The INET Python package contains many useful classes and functions. The following lists the most important concepts
+The opp_repl package contains many useful classes and functions. The following lists the most important concepts
 represented by Python classes:
 
 - :py:class:`SimulationProject <opp_repl.simulation.project.SimulationProject>`: represents a project that usually comes
@@ -97,12 +95,12 @@ fingerprint tests, and so on.
 Defining Projects
 =================
 
-The simulation project is an essential concept of the INET Python package. Many functions take a simulation project
-as parameter. The INET python package contains several predefined simulation projects: all omnetpp sample projects
-and the INET simulation project itself.
+The simulation project is an essential concept of the opp_repl package. Many functions take a simulation project
+as parameter. Simulation projects are loaded from ``.opp`` files and can include OMNeT++ sample projects,
+the INET simulation project, or any other custom project.
 
 .. TODO
-   OMNeT++ comes with a set of sample projects which are already defined in the INET Python package.
+   OMNeT++ comes with a set of sample projects which can be loaded into opp_repl.
 
    For example, the following `.omnetpp` project definition file describes the sample simulation project called `aloha`.
    The file can be found under the `aloha` sample project directory. It simply defines a simulation project with a root
@@ -121,7 +119,7 @@ and the INET simulation project itself.
    same set of parameters.
 
 An important concept related to simulation projects is the default simulation project. Having a default project greatly
-simplifies using several functions of the INET Python package by implicitly using the default project without always
+simplifies using several functions of the opp_repl package by implicitly using the default project without always
 explicitly passing it in as a parameter. The default simulation project is automatically set to the one enclosing the
 current working directory when the Python interpreter is started. Alternatively, the default simulation project can also
 be set explicitly using the :py:func:`set_default_simulation_project <opp_repl.simulation.project.set_default_simulation_project>`
@@ -136,7 +134,7 @@ can also use the OMNeT++ IDE, which has built-in support for automatically build
 simulation. Alternatively, you can also start the build manually from the IDE.
 
 Unfortunately, none of the above can be done easily when you are working from the Python interpreter. To avoid running
-a stale binary, the INET Python package also supports building the simulation project using Python functions:
+a stale binary, opp_repl also supports building the simulation project using Python functions:
 
 .. code-block:: ipython
 
@@ -156,7 +154,7 @@ modes:
     ...
 
 .. TODO
-   The INET Python package also contains a new build system that uses tasks instead of the :command:`make` command based
+   The opp_repl package also contains a new build system that uses tasks instead of the :command:`make` command based
    build system.
 
    .. code-block:: ipython
@@ -181,7 +179,7 @@ example, running multiple simulations on a cluster of computers connected to a L
 including running single simulations, repetitions and parameter studies, should be provided for the users by a single
 entry point in the toolchain.
 
-The INET Python library contains a single function that covers all of the above tasks. This function is called
+The opp_repl package contains a single function that covers all of the above tasks. This function is called
 :py:meth:`run_simulations <opp_repl.simulation.task.run_simulations>` and it is capable of running multiple simulations
 matching the provided filter criteria. The simulations can be run sequentially or concurrently, on the local computer
 or on an SSH cluster.
@@ -227,7 +225,7 @@ project:
 
 .. code-block:: console
 
-    levy@valardohaeris:~/workspace/omnetpp/samples/fifo$ inet_python_repl
+    levy@valardohaeris:~/workspace/omnetpp/samples/fifo$ opp_repl
     INFO opp_repl.simulation.project Default project is set to fifo (project.py:533)
     INFO opp_repl.repl OMNeT++ Python support is loaded. (repl.py:40)
 
@@ -315,8 +313,8 @@ functions, and run at any later moment, even multiple times if desired.
 Running Simulations on a Cluster
 ================================
 
-Running multiple simulations can be drastically sped up by utilizing multiple computers called a cluster. The INET
-Python package provides direct support to use SSH clusters. An SSH cluster is a set of network nodes usually connected
+Running multiple simulations can be drastically sped up by utilizing multiple computers called a cluster. The opp_repl
+package provides direct support to use SSH clusters. An SSH cluster is a set of network nodes usually connected
 to a single LAN, all of which can login into each other using SSH passwordless login. The SSH cluster utilizes all
 network nodes with automatic and transparent load balancing as if it were a single computer.
 
@@ -485,54 +483,24 @@ Command Line Tools
 Some of the tasks that can be carried out using the Python interpreter, can also be done directly from the command line.
 The following list gives a brief overview of these command line tools:
 
-- :command:`inet_python_repl`: starts the INET Python interpreter
-- :command:`inet_build_project`: builds a simulation project using tasks
-- :command:`inet_run_simulations`: runs multiple simulations matching a filter criteria
-- :command:`inet_run_smoke_tests`: runs multiple smoke tests matching a filter criteria
-- :command:`inet_run_fingerprint_tests`: runs multiple fingerprint tests matching a filter criteria
-- :command:`inet_update_correct_fingerprints`: updates stored correct fingerprints matching a filter criteria
+- :command:`opp_repl`: starts the interactive Python interpreter
+- :command:`opp_run_simulations`: runs multiple simulations matching a filter criteria
+- :command:`opp_run_smoke_tests`: runs multiple smoke tests matching a filter criteria
+- :command:`opp_run_fingerprint_tests`: runs multiple fingerprint tests matching a filter criteria
+- :command:`opp_run_statistical_tests`: runs multiple statistical tests matching a filter criteria
+- :command:`opp_run_chart_tests`: runs multiple chart tests matching a filter criteria
+- :command:`opp_run_speed_tests`: runs multiple speed tests matching a filter criteria
+- :command:`opp_run_all_tests`: runs all tests matching a filter criteria
 
 .. note::
 
      All command line tools print a detailed description of their options when run with the `-h` option.
 
-Building the simulation project enclosing the current working directory:
-
-.. code-block:: console
-
-    levy@valardohaeris:~/workspace/omnetpp/samples/aloha$ inet_build_project
-    [1/2] Compiling Host.cc DONE
-    [2/2] Compiling Server.cc DONE
-    [1/1] Linking libaloha.so DONE
-    [1/1] Copying dynamic libraries DONE
-    Multiple build task results: DONE, summary: 3 DONE in 0:00:00.455684
-
-Of course, building the same project again skips all subtasks because everything is up to date.
-
-.. code-block:: console
-
-    levy@valardohaeris:~/workspace/omnetpp/samples/aloha$ inet_build_project
-    Multiple build task results: SKIP, summary: 3 SKIP (expected) in 0:00:00.000395
-
-Building a project outside the current working directory is also possible:
-
-.. code-block:: console
-
-    levy@valardohaeris:~/workspace/omnetpp$ inet_build_project -p tictoc
-    [15/24] Compiling txc13.cc DONE
-    [11/24] Compiling txc14.cc DONE
-    ...
-    [18/24] Compiling txc6.cc DONE
-    [24/24] Compiling txc15.cc DONE
-    [1/1] Linking libtictoc.so DONE
-    [1/1] Copying dynamic libraries DONE
-    Multiple build task results: DONE, summary: 4 TOTAL, 3 DONE, 1 SKIP (expected) in 0:00:00.104676
-
 Running all simulations from the `fifo` sample project using the current working directory:
 
 .. code-block:: console
 
-    levy@valardohaeris:~/workspace/omnetpp/samples/fifo$ inet_run_simulations
+    levy@valardohaeris:~/workspace/omnetpp/samples/fifo$ opp_run_simulations
     [3/7] . -c TandemQueueExperiment DONE
     [5/7] . -c TandemQueueExperiment -r 2 DONE
     ...
@@ -544,14 +512,14 @@ Running all simulation runs from the `PureAlohaExperiment` config for 1 second o
 
 .. code-block:: console
 
-    levy@valardohaeris:~/workspace/omnetpp/samples/aloha$ inet_run_simulations -m debug -t 1s --filter PureAlohaExperiment --hosts valarmorghulis.local,valardohaeris.local
+    levy@valardohaeris:~/workspace/omnetpp/samples/aloha$ opp_run_simulations -m debug -t 1s --filter PureAlohaExperiment --hosts valarmorghulis.local,valardohaeris.local
     Multiple simulation results: DONE, summary: 42 DONE in 0:00:01.196147
 
 Running the fingerprint tests from the `fifo` sample project using the default fingerprint database:
 
 .. code-block:: console
 
-    levy@valardohaeris:~/workspace/omnetpp/samples/fifo$ inet_run_fingerprint_tests -t 1s
+    levy@valardohaeris:~/workspace/omnetpp/samples/fifo$ opp_run_fingerprint_tests -t 1s
     Multiple fingerprint test results: SKIP, summary: 7 SKIP (unexpected) in 0:00:00.004558
 
 Not surprisingly all tests are skipped because the database doesn't have any correct fingerprints yet.
@@ -559,7 +527,7 @@ We first need to update the correct fingerprints in the database:
 
 .. code-block:: console
 
-    levy@valardohaeris:~/workspace/omnetpp/samples/fifo$ inet_update_correct_fingerprints -t 1s
+    levy@valardohaeris:~/workspace/omnetpp/samples/fifo$ opp_update_correct_fingerprints -t 1s
     [2/7] Updating fingerprint . -c Fifo2 for 1s INSERT 6593-438a/tplx
     [3/7] Updating fingerprint . -c TandemQueueExperiment for 1s INSERT 4cbd-3dae/tplx
     ...
@@ -579,7 +547,7 @@ Now, we can run all fingerprint tests comparing the fingerprints against the lat
 
 .. code-block:: console
 
-    levy@valardohaeris:~/workspace/omnetpp/samples/fifo$ inet_run_fingerprint_tests -t 1s
+    levy@valardohaeris:~/workspace/omnetpp/samples/fifo$ opp_run_fingerprint_tests -t 1s
     [3/7] Checking fingerprint . -c TandemQueueExperiment for 1s PASS
     [5/7] Checking fingerprint . -c TandemQueueExperiment -r 2 for 1s PASS
     ...
@@ -591,7 +559,7 @@ Of course, trying to update the correct fingerprints again doesn't change the st
 
 .. code-block:: console
 
-    levy@valardohaeris:~/workspace/omnetpp/samples/fifo$ inet_update_correct_fingerprints -t 1s
+    levy@valardohaeris:~/workspace/omnetpp/samples/fifo$ opp_update_correct_fingerprints -t 1s
     [5/7] Updating fingerprint . -c TandemQueueExperiment -r 2 for 1s KEEP 4cbd-3dae/tplx
     [7/7] Updating fingerprint . -c TandemQueues for 1s KEEP 4cbd-3dae/tplx
     ...

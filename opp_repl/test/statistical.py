@@ -3,9 +3,8 @@ This module provides functionality for statistical testing of multiple simulatio
 
 The main function is :py:func:`run_statistical_tests`. It allows running multiple statistical tests
 matching the provided filter criteria. Statistical tests check if scalar results of the simulations
-are the same as the saved baseline results. The baseline results can be found in the statistics folder 
-of the simulation project.  For the INET Framework the media folder can be found at
-https://github.com/inet-framework/statistics in a separate GitHub repository.
+are the same as the saved baseline results. The baseline results can be found in the statistics folder
+of the simulation project.
 """
 
 import glob
