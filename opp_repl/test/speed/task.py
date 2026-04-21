@@ -32,8 +32,8 @@ class SpeedTestTask(SimulationTestTask):
     def run_protected(self, **kwargs):
         return super().run_protected(nice=-10, append_args=_speed_test_append_args, **kwargs)
 
-def get_speed_test_tasks(mode="profile", run_number=0, working_directory_filter="showcases", **kwargs):
-    multiple_simulation_tasks = get_simulation_tasks(name="speed test", mode=mode, run_number=run_number, working_directory_filter=working_directory_filter, **kwargs)
+def get_speed_test_tasks(mode="profile", run_number=0, **kwargs):
+    multiple_simulation_tasks = get_simulation_tasks(name="speed test", mode=mode, run_number=run_number, **kwargs)
     simulation_project = multiple_simulation_tasks.simulation_project
     speed_measurement_store = get_speed_measurement_store(simulation_project)
     tasks = []
@@ -123,9 +123,9 @@ class SpeedUpdateTaskResult(SimulationUpdateTaskResult):
     def print_result(self, complete_error_message=True, output_stream=sys.stdout, **kwargs):
         print(self.get_description(complete_error_message=complete_error_message), file=output_stream)
 
-def get_update_speed_test_results_tasks(mode="profile", run_number=0, working_directory_filter="showcases", **kwargs):
+def get_update_speed_test_results_tasks(mode="profile", run_number=0, **kwargs):
     update_tasks = []
-    multiple_simulation_tasks = get_simulation_tasks(mode=mode, run_number=run_number, working_directory_filter=working_directory_filter, **kwargs)
+    multiple_simulation_tasks = get_simulation_tasks(mode=mode, run_number=run_number, **kwargs)
     for simulation_task in multiple_simulation_tasks.tasks:
         update_task = SpeedUpdateTask(simulation_task=simulation_task, **kwargs)
         update_tasks.append(update_task)
