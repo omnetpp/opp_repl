@@ -10,7 +10,7 @@ separate processes and also in the same Python process loading the simulation mo
 
 from opp_repl.simulation.compare import *
 from opp_repl.simulation.overlay import *
-# from opp_repl.simulation.optimize import *
+from opp_repl.simulation.optimize import *
 from opp_repl.simulation.project import *
 from opp_repl.simulation.workspace import *
 from opp_repl.simulation.task import *
