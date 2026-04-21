@@ -497,6 +497,7 @@ class Task:
         task_result.print_result(complete_error_message=False, output_stream=output_stream)
 
     def run(self, context=None, progress=None, index=0, count=1, print_run_start_separately=False, dry_run=False, keyboard_interrupt_handler=None, handle_exception=True, **kwargs):
+        self.run_kwargs = kwargs
         """
         Runs the task.
 
@@ -570,10 +571,11 @@ class Task:
         Returns (:py:class:`TaskResult`):
             The task result.
         """
+        stored = getattr(self, 'run_kwargs', {})
         if len(kwargs) == 0:
-            return self.run()
+            return self.run(**stored)
         else:
-            return self.recreate(**kwargs).run()
+            return self.recreate(**kwargs).run(**stored)
 
 def _run_task(task):
     return task.run()
@@ -652,6 +654,7 @@ class MultipleTasks:
         return f"{self.name}s ({concurrency_description})"
 
     def run(self, context=None, progress=None, index=0, count=1, **kwargs):
+        self.run_kwargs = kwargs
         """
         Runs all tasks sequentially or concurrently.
 
@@ -741,10 +744,11 @@ class MultipleTasks:
         Returns (:py:class:`MultipleTaskResults`):
             The task results.
         """
+        stored = getattr(self, 'run_kwargs', {})
         if len(kwargs) == 0:
-            return self.run()
+            return self.run(**stored)
         else:
-            return self.recreate(**kwargs).run()
+            return self.recreate(**kwargs).run(**stored)
 
 def run_task_with_capturing_output(task, tasks=None, task_count=None, output_stream=sys.stdout, **kwargs):
     try:
