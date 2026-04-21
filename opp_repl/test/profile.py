@@ -1,8 +1,9 @@
 import logging
 import os
 
-from opp_repl.common import *
-from opp_repl.simulation import *
+from opp_repl.common.util import *
+from opp_repl.simulation.project import *
+from opp_repl.simulation.task import *
 
 __sphinx_mock__ = True # ignore this module in documentation
 
