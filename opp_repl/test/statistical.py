@@ -97,7 +97,7 @@ class StatisticalTestTask(SimulationTestTask):
         simulation_config = self.simulation_task.simulation_config
         return f"{simulation_config.ini_file}-{simulation_config.config}-#{self.simulation_task.run_number}.{extension}"
 
-    def check_simulation_task_result(self, simulation_task_result, result_name_filter=None, exclude_result_name_filter=None, result_module_filter=None, exclude_result_module_filter=None, full_match=False, **kwargs):
+    def check_simulation_task_result(self, simulation_task_result, result_name_filter=None, exclude_result_name_filter=None, result_module_filter=None, exclude_result_module_filter=None, full_match=False, relative_error_threshold=None, **kwargs):
         simulation_config = self.simulation_task.simulation_config
         simulation_project = simulation_config.simulation_project
         working_directory = simulation_config.working_directory
@@ -136,7 +136,13 @@ class StatisticalTestTask(SimulationTestTask):
                     df["relative_error"] = df.apply(lambda row: _unbounded_relative_error(row["value_stored"], row["value_current"]), axis=1)
                     df = df[df.apply(lambda row: matches_filter(row["name"], result_name_filter, exclude_result_name_filter, full_match) and \
                                                  matches_filter(row["module"], result_module_filter, exclude_result_module_filter, full_match), axis=1)]
+                    if relative_error_threshold is not None:
+                        df_before_threshold = df
+                        df = df[df["relative_error"].abs() >= relative_error_threshold]
                     if df.empty:
+                        if relative_error_threshold is not None and not df_before_threshold.empty:
+                            max_error = df_before_threshold["relative_error"].abs().max()
+                            return self.task_result_class(task=self, simulation_task_result=simulation_task_result, result="PASS", reason=f"All differences below relative error threshold {relative_error_threshold} (max relative error {max_error:.6g})")
                         return self.task_result_class(task=self, simulation_task_result=simulation_task_result, result="PASS", reason="All differences filtered out")
                     sorted_df = df.loc[df["relative_error"].abs().sort_values(ascending=False).index]
                     scalar_result_csv_file_name = re.sub(r".sca$", ".csv", stored_scalar_result_file_name)
