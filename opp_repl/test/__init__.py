@@ -17,7 +17,7 @@ from opp_repl.test.fingerprint import *
 from opp_repl.test.opp import *
 from opp_repl.test.profile import *
 # from opp_repl.test.release import *
-# from opp_repl.test.sanitizer import *
+from opp_repl.test.sanitizer import *
 from opp_repl.test.simulation import *
 from opp_repl.test.smoke import *
 # from opp_repl.test.speed import *
