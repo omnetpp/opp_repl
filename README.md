@@ -307,10 +307,17 @@ SimulationProject(
 | `ned_exclusions` | `list[str]` | `[]` | Excluded NED packages |
 | `ini_file_folders` | `list[str]` | `["."]` | Directories containing INI files |
 | `used_projects` | `list[str]` | `[]` | Names of dependent simulation projects |
+| `media_folder` | `str` | `"."` | Directory for chart test baseline images |
+| `statistics_folder` | `str` | `"."` | Directory for statistical test baseline results |
+| `fingerprint_store` | `str` | `"fingerprint.json"` | Path to the JSON fingerprint store |
+| `speed_store` | `str` | `"speed.json"` | Path to the JSON speed measurement store |
 | `overlay_key` | `str` | `None` | Enable overlay builds with this key |
 | `build_root` | `str` | `None` | Override overlay build root |
 | `opp_env_workspace` | `str` | `None` | Path to opp_env workspace |
 | `opp_env_project` | `str` | `None` | opp_env project identifier (e.g. `"inet-4.6.0"`) |
+| `github_owner` | `str` | `None` | GitHub owner/organization for workflow dispatch |
+| `github_repository` | `str` | `None` | GitHub repository name for workflow dispatch |
+| `github_workflows` | `list[str]` | `None` | GitHub Actions workflow file names (e.g. `["fingerprint-tests.yml"]`) |
 
 ## Example `.opp` Files
 
@@ -338,7 +345,18 @@ SimulationProject(
     build_types=["dynamic library"],
     dynamic_libraries=["INET"],
     ned_folders=["src", "examples", "showcases", "tutorials", "tests/networks"],
-    ini_file_folders=["examples"],
+    ini_file_folders=["examples", "showcases", "tutorials", "tests/fingerprint"],
+    media_folder="doc/media",
+    statistics_folder="statistics",
+    fingerprint_store="tests/fingerprint/store.json",
+    speed_store="tests/speed/store.json",
+    github_owner="inet-framework",
+    github_repository="inet",
+    github_workflows=[
+        "fingerprint-tests.yml",
+        "statistical-tests.yml",
+        "chart-tests.yml",
+    ],
 )
 ```
 
@@ -421,6 +439,11 @@ run_simulations(simulation_project=aloha_project,
 run_simulations(simulation_project=aloha_project,
                 config_filter="PureAlohaExperiment", sim_time_limit="1s")
 
+# Run in debug mode
+run_simulations(simulation_project=inet_project,
+                working_directory_filter="examples/ethernet",
+                mode="debug", sim_time_limit="10s")
+
 # Re-run failed simulations
 r = run_simulations(...)
 r.get_error_results().rerun()
@@ -435,6 +458,9 @@ build_project(simulation_project=inet_project, mode="debug")
 
 ### Smoke tests
 
+Quick sanity checks — run every simulation for a short time to catch
+crashes and obvious errors.
+
 ```python
 run_smoke_tests()
 run_smoke_tests(simulation_project=aloha_project,
@@ -443,41 +469,143 @@ run_smoke_tests(simulation_project=aloha_project,
 
 ### Fingerprint tests
 
+Fingerprint tests detect unintended behavioral changes by comparing a
+hash of selected simulation state (trajectory, packet counts, etc.)
+against stored baseline values.  The baseline is kept in a JSON store
+file configured via the `fingerprint_store` project parameter.
+
 ```python
-# First, store correct fingerprints
+# Store correct fingerprints (first time, or after intentional changes)
 update_correct_fingerprints(simulation_project=inet_project, sim_time_limit="1s")
 
-# Then verify against stored values
-run_fingerprint_tests(simulation_project=inet_project, sim_time_limit="1s")
+# Verify against stored values
+r = run_fingerprint_tests(simulation_project=inet_project, sim_time_limit="1s")
+
+# Re-run only the failures
+r.get_fail_results().rerun()
+
+# Filter to a specific area of the project
+run_fingerprint_tests(simulation_project=inet_project,
+                      working_directory_filter="examples/ethernet",
+                      sim_time_limit="10s")
+
+# Update fingerprints for a subset after intentional changes
+update_correct_fingerprints(simulation_project=inet_project,
+                            working_directory_filter="examples/ethernet",
+                            sim_time_limit="10s")
 ```
 
-### Other test types
+### Statistical tests
+
+Statistical tests detect regressions in simulation scalar results by
+comparing them against saved baseline values.  The baseline is stored
+in the `statistics_folder` of the project.
 
 ```python
-# Sanitizer tests — detect memory errors (requires sanitize build)
-run_sanitizer_tests(simulation_project=inet_project,
-                    working_directory_filter="examples/ethernet")
+# Store baseline results (first time, or after intentional changes)
+update_statistical_results(simulation_project=inet_project)
 
-# Statistical tests — detect regressions in scalar results
+# Run tests — compares current results against the baseline
 run_statistical_tests(simulation_project=inet_project)
 
-# Chart tests — detect graphical regressions in plotted charts
-run_chart_tests(simulation_project=inet_project)
-
-# Speed tests — detect CPU instruction count regressions
-run_speed_tests(simulation_project=inet_project,
-                working_directory_filter="showcases")
-
-# Validation tests — compare simulation results to analytical models
-run_validation_tests(simulation_project=inet_project)
+# Filter to a specific area
+run_statistical_tests(simulation_project=inet_project,
+                      working_directory_filter="examples/ethernet")
 ```
 
-The full list of test types: `run_smoke_tests()`,
-`run_fingerprint_tests()`, `run_statistical_tests()`,
-`run_chart_tests()`, `run_sanitizer_tests()`, `run_speed_tests()`,
-`run_validation_tests()`, `run_module_tests()`, `run_packet_tests()`,
-`run_protocol_tests()`, `run_queueing_tests()`, `run_unit_tests()`,
-`run_release_tests()`, `run_all_tests()`.
+### Chart tests
+
+Chart tests detect visual regressions in result analysis charts by
+comparing rendered images against saved baseline images.  The baseline
+is stored in the `media_folder` of the project.
+
+```python
+# Store baseline charts (first time, or after intentional changes)
+update_charts(simulation_project=inet_project)
+
+# Run tests — compares current charts against the baseline
+run_chart_tests(simulation_project=inet_project)
+
+# Filter by working directory or chart name
+run_chart_tests(simulation_project=inet_project,
+                working_directory_filter="showcases")
+```
+
+### Speed tests
+
+Speed tests detect performance regressions by measuring CPU instruction
+counts and comparing them against stored baseline values.  Uses the
+`profile` build mode and the `speed_store` JSON file.
+
+```python
+# Store baseline measurements (first time, or after intentional changes)
+update_speed_test_results(simulation_project=inet_project)
+
+# Run tests — compares current measurements against the baseline
+run_speed_tests(simulation_project=inet_project)
+
+# Filter to specific simulations
+run_speed_tests(simulation_project=inet_project,
+                working_directory_filter="showcases")
+```
+
+### Sanitizer tests
+
+Sanitizer tests detect memory errors, undefined behavior, and other
+bugs by running simulations with AddressSanitizer / UBSan instrumentation.
+Uses the `sanitize` build mode.
+
+```python
+run_sanitizer_tests(simulation_project=inet_project)
+
+# Filter to a specific area with a longer time limit
+run_sanitizer_tests(simulation_project=inet_project,
+                    working_directory_filter="examples/ethernet",
+                    cpu_time_limit="10s")
+```
+
+### Coverage reports
+
+Coverage reports show which lines of C++ source code are exercised by
+simulations.  Uses the `coverage` build mode and LLVM's coverage tools.
+
+```python
+# Generate and open a coverage report in the browser
+open_coverage_report(simulation_project=inet_project,
+                     working_directory_filter="examples/ethernet",
+                     sim_time_limit="10s")
+
+# Just generate the report without opening it
+generate_coverage_report(simulation_project=inet_project,
+                         working_directory_filter="examples/ethernet",
+                         sim_time_limit="10s")
+```
+
+### Running all tests
+
+```python
+# Run every configured test type sequentially
+run_all_tests(simulation_project=inet_project)
+```
+
+### GitHub Actions integration
+
+Dispatch CI workflows on the project's GitHub repository.  Requires a
+personal access token in `~/.ssh/github_repo_token` with `repo` and
+`workflow` scopes, and the `github_owner`, `github_repository`, and
+`github_workflows` parameters in the project's `.opp` file.
+
+```python
+# Dispatch a single workflow
+dispatch_workflow("fingerprint-tests.yml")
+
+# Dispatch all configured workflows
+dispatch_all_workflows()
+
+# Target a specific project and branch
+dispatch_workflow("fingerprint-tests.yml",
+                  simulation_project=inet_project, ref="topic/my-feature")
+```
 
 ### Comparing simulations
 
