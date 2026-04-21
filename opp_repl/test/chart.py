@@ -130,7 +130,7 @@ class MultipleChartTestTasks(MultipleTestTasks):
         # avoid reusing the processes from the process pool because matplotlib can generate different images due to tight layout
         return super().run_protected(**kwargs, maxtasksperchild=1)
 
-def get_chart_test_tasks(simulation_project=None, run_simulations=True, filter="showcases", working_directory_filter=None, chart_filter=None, exclude_chart_filter=None, **kwargs):
+def get_chart_test_tasks(simulation_project=None, run_simulations=True, filter=None, working_directory_filter=None, chart_filter=None, exclude_chart_filter=None, **kwargs):
     """
     Returns multiple chart test tasks matching the provided filter criteria. The returned tasks can be run by
     calling the :py:meth:`run <opp_repl.common.task.MultipleTasks.run>` method.

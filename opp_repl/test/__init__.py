@@ -10,7 +10,7 @@ It provides several functions to run various tests:
 """
 
 # from opp_repl.test.all import *
-# from opp_repl.test.chart import *
+from opp_repl.test.chart import *
 from opp_repl.test.coverage import *
 # from opp_repl.test.feature import *
 from opp_repl.test.fingerprint import *
