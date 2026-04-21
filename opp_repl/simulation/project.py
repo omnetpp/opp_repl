@@ -181,7 +181,8 @@ class SimulationProject:
                  include_folders=["."], cpp_folders=["."], cpp_defines=[], msg_folders=["."],
                  media_folder=".", statistics_folder=".", fingerprint_store="fingerprint.json", speed_store="speed.json",
                  used_projects=[], external_bin_folders=[], external_library_folders=[], external_libraries=[], external_include_folders=[],
-                 simulation_configs=None, overlay_key=None, build_root=None, opp_env_workspace=None, opp_env_project=None, **kwargs):
+                 simulation_configs=None, overlay_key=None, build_root=None, opp_env_workspace=None, opp_env_project=None,
+                 github_owner=None, github_repository=None, github_workflows=None, **kwargs):
         """
         Initializes a new simulation project.
 
@@ -303,6 +304,19 @@ class SimulationProject:
                 The opp_env project identifier (e.g. ``"inet-4.6.0"``).
                 Defaults to the project name if not specified.
 
+            github_owner (str or None):
+                GitHub owner or organization (e.g. ``"inet-framework"``).
+                Used by :py:func:`dispatch_workflow <opp_repl.common.github.dispatch_workflow>`.
+
+            github_repository (str or None):
+                GitHub repository name (e.g. ``"inet"``).
+                Used by :py:func:`dispatch_workflow <opp_repl.common.github.dispatch_workflow>`.
+
+            github_workflows (list of str or None):
+                List of GitHub Actions workflow file names
+                (e.g. ``["fingerprint-tests.yml"]``).  Used by
+                :py:func:`dispatch_all_workflows <opp_repl.common.github.dispatch_all_workflows>`.
+
             kwargs (dict):
                 Ignored.
         """
@@ -347,6 +361,9 @@ class SimulationProject:
         self.simulation_configs = simulation_configs
         self.opp_env_workspace = opp_env_workspace
         self.opp_env_project = opp_env_project or name
+        self.github_owner = github_owner
+        self.github_repository = github_repository
+        self.github_workflows = github_workflows
         self.binary_simulation_distribution_file_paths = None
         self._overlay = None
         if overlay_key is not None:

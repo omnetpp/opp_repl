@@ -4,7 +4,10 @@ This package provides generally useful functionality.
 
 # from opp_repl.common.cluster import *
 from opp_repl.common.compile import *
-# from opp_repl.common.github import *
+try:
+    from opp_repl.common.github import *
+except ImportError:
+    pass
 # from opp_repl.common.ide import *
 # from opp_repl.common.summary import *
 from opp_repl.common.task import *
