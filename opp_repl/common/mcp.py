@@ -84,6 +84,13 @@ def _register_mcp_handlers():
             lines.append(f"{pkg_name}\n    {first_line}")
         return "\n\n".join(lines)
 
+    @_mcp.resource("file:///opp_repl/readme")
+    def readme() -> str:
+        """The opp_repl README with installation instructions, usage examples, and feature overview."""
+        readme_path = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(__file__))), "README.md")
+        with open(readme_path, "r") as f:
+            return f.read()
+
     @_mcp.resource("file:///opp_repl/api/{package_name}")
     def api_reference(package_name: str) -> str:
         """Public API reference for a specific opp_repl package, auto-generated from docstrings."""
@@ -150,7 +157,8 @@ def _register_mcp_handlers():
         Do NOT import packages that are already pre-loaded.
 
         To discover the API:
-        - Read the file:///opp_repl/packages resource for a list of sub-packages
+        - Read file:///opp_repl/readme for the project README with usage examples
+        - Read file:///opp_repl/packages for a list of sub-packages
         - Read file:///opp_repl/api/{package_name} for the API of a specific package
         - Call help(function_name) to get detailed documentation
 

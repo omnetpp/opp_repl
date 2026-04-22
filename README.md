@@ -791,7 +791,8 @@ Start it with `--mcp-port 9966` (disabled by default).
 
 - **Transport**: Streamable HTTP (stateless), endpoint `http://127.0.0.1:{port}/mcp`
 - **Tool**: `execute_python` — runs arbitrary Python code in the IPython session
-- **Resources**: `file:///opp_repl/packages` (package list),
+- **Resources**: `file:///opp_repl/readme` (project README),
+  `file:///opp_repl/packages` (package list),
   `file:///opp_repl/api/{package_name}` (auto-generated API reference)
 
 Requires the `mcp` extra: `pip install -e ".[mcp]"`.
