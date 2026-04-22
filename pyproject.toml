@@ -1,12 +1,44 @@
 [project]
 name = "opp_repl"
-version = "0.1.0"
+authors = [
+    {name = "Levente Mészáros", email = "levy@omnetpp.org"},
+]
+maintainers = [
+    {name = "Levente Mészáros", email = "levy@omnetpp.org"},
+    {name = "Rudolf Hornig", email = "rudi@omnetpp.org"},
+]
 description = "OMNeT++ Python read-eval-print-loop for running and testing simulations"
+keywords = ["omnetpp", "omnest", "simulation", "discrete", "event", "model", "repl"]
+readme = "README.md"
+dynamic = ["version"]
 requires-python = ">=3.10"
 dependencies = [
     "ipython",
     "pandas",
 ]
+classifiers = [
+    "Development Status :: 4 - Beta",
+    "Operating System :: MacOS",
+    "Operating System :: POSIX :: Linux",
+    "Environment :: Console",
+    "Programming Language :: C++",
+    "Intended Audience :: Developers",
+    "Intended Audience :: Science/Research",
+    "Intended Audience :: Telecommunications Industry",
+    "Intended Audience :: Education",
+    "License :: OSI Approved :: GNU Lesser General Public License v3 or later (LGPLv3+)",
+    "Topic :: Education",
+    "Topic :: Software Development :: Build Tools",
+    "Topic :: Software Development :: Libraries",
+]
+
+[project.urls]
+Homepage = "https://omnetpp.org"
+Documentation = "https://github.com/omnetpp/opp_repl/blob/main/README.md"
+Changes = "https://github.com/omnetpp/opp_repl/blob/main/CHANGES.md"
+Repository = "https://github.com/omnetpp/opp_repl"
+Issues = "https://github.com/omnetpp/opp_repl/issues"
+Changelog = "https://github.com/omnetpp/opp_repl/commits/main"
 
 [project.optional-dependencies]
 mcp = [
@@ -62,3 +94,10 @@ opp_update_statistical_results = "opp_repl.main:update_statistical_results_main"
 
 [tool.setuptools.packages.find]
 include = ["opp_repl*"]
+
+[tool.setuptools_scm]
+write_to = "opp_repl/_version.py"
+
+[build-system]
+requires = ["setuptools>=61.0"]
+build-backend = "setuptools.build_meta"
