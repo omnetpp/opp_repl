@@ -119,20 +119,58 @@ class OmnetppProject:
         suffix = self.get_library_suffix(mode=mode)
         return os.path.abspath(os.path.join(root, "bin/opp_run" + suffix))
 
+    def ensure_configured(self):
+        """Run ``./configure`` if ``Makefile.inc`` does not yet exist.
+
+        A fresh git worktree will not contain the generated ``Makefile.inc``.
+        If ``configure.user`` is also missing, it is copied from the original
+        source tree (falling back to ``configure.user.dist``).
+        """
+        root = self.get_root_path()
+        if root is None:
+            return
+        makefile_inc = os.path.join(root, "Makefile.inc")
+        if os.path.isfile(makefile_inc):
+            return
+        configure_user = os.path.join(root, "configure.user")
+        if not os.path.isfile(configure_user):
+            git_root = _get_git_root(root)
+            source_configure_user = os.path.join(git_root, "configure.user")
+            if os.path.isfile(source_configure_user):
+                shutil.copy2(source_configure_user, configure_user)
+            else:
+                dist = os.path.join(root, "configure.user.dist")
+                if os.path.isfile(dist):
+                    shutil.copy2(dist, configure_user)
+        _logger.info("Running ./configure in %s", root)
+        env = os.environ.copy()
+        env["__omnetpp_root_dir"] = root
+        env["PATH"] = os.path.join(root, "bin") + os.pathsep + env.get("PATH", "")
+        env["PYTHONPATH"] = os.path.join(root, "python") + os.pathsep + env.get("PYTHONPATH", "")
+        run_command_with_logging(["./configure"], cwd=root, env=env, error_message="Configuring OMNeT++ failed")
+
+    def get_env(self):
+        env = os.environ.copy()
+        root = self.get_root_path()
+        if root is not None:
+            bin_dir = os.path.join(root, "bin")
+            lib_dir = os.path.join(root, "lib")
+            if bin_dir not in env.get("PATH", "").split(os.pathsep):
+                env["PATH"] = bin_dir + os.pathsep + env.get("PATH", "")
+            if lib_dir not in env.get("LD_LIBRARY_PATH", "").split(os.pathsep):
+                env["LD_LIBRARY_PATH"] = lib_dir + os.pathsep + env.get("LD_LIBRARY_PATH", "")
+            env.setdefault("CCACHE_BASEDIR", root)
+        return env
+
     def build(self, mode="release"):
         self.ensure_mounted()
+        self.ensure_configured()
         root = self.get_root_path()
         if root is None:
             raise RuntimeError("Cannot build OMNeT++: root path is not set")
-        env = os.environ.copy()
-        bin_dir = os.path.join(root, "bin")
-        lib_dir = os.path.join(root, "lib")
-        if bin_dir not in env.get("PATH", "").split(os.pathsep):
-            env["PATH"] = bin_dir + os.pathsep + env.get("PATH", "")
-        if lib_dir not in env.get("LD_LIBRARY_PATH", "").split(os.pathsep):
-            env["LD_LIBRARY_PATH"] = lib_dir + os.pathsep + env.get("LD_LIBRARY_PATH", "")
+        env = self.get_env()
         args = ["make", "MODE=" + mode, "-j", str(multiprocessing.cpu_count())]
-        _logger.info("Building OMNeT++ in %s mode at %s", mode, root)
+        _logger.info("Building OMNeT++ in %s mode at %s started", mode, root)
         if self.opp_env_workspace:
             opp_env_project = self.opp_env_project or self.name
             shell_cmd = "cd " + shlex.quote(root) + " && " + shlex.join(args)
@@ -140,6 +178,7 @@ class OmnetppProject:
             run_command_with_logging(args, error_message="Building OMNeT++ failed")
         else:
             run_command_with_logging(args, cwd=root, env=env, error_message="Building OMNeT++ failed")
+        _logger.info("Building OMNeT++ in %s mode at %s ended", mode, root)
 
     def ensure_mounted(self):
         if self._overlay is not None:
