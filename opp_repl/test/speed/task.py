@@ -123,7 +123,7 @@ class SpeedUpdateTaskResult(SimulationUpdateTaskResult):
     def print_result(self, complete_error_message=True, output_stream=sys.stdout, **kwargs):
         print(self.get_description(complete_error_message=complete_error_message), file=output_stream)
 
-def get_update_speed_test_results_tasks(mode="profile", run_number=0, **kwargs):
+def get_update_speed_results_tasks(mode="profile", run_number=0, **kwargs):
     update_tasks = []
     multiple_simulation_tasks = get_simulation_tasks(mode=mode, run_number=run_number, **kwargs)
     for simulation_task in multiple_simulation_tasks.tasks:
@@ -131,6 +131,6 @@ def get_update_speed_test_results_tasks(mode="profile", run_number=0, **kwargs):
         update_tasks.append(update_task)
     return MultipleSpeedUpdateTasks(multiple_simulation_tasks, tasks=update_tasks, **kwargs)
 
-def update_speed_test_results(**kwargs):
-    multiple_speed_update_tasks = get_update_speed_test_results_tasks(**kwargs)
+def update_speed_results(**kwargs):
+    multiple_speed_update_tasks = get_update_speed_results_tasks(**kwargs)
     return multiple_speed_update_tasks.run(**kwargs)

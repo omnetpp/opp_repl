@@ -72,7 +72,7 @@ class CompareSimulationsTaskResult(TaskResult):
         r.fingerprint_trajectory_divergence_position  # divergence event or None
         r.fingerprint_trajectory_divergence_position.get_description()
         r.print_divergence_position_cause_chain()
-        r.show_divergence_posisiton_in_sequence_chart()
+        r.show_divergence_position_in_sequence_chart()
         r.debug_at_fingerprint_divergence_position()
         r.run_until_fingerprint_divergence_position()
 
@@ -237,7 +237,7 @@ class CompareSimulationsTaskResult(TaskResult):
             task_2.wait = False
             task_2.run(append_args=append_args + [f"-Xev={event_number_2}"], **kwargs)
 
-    def show_divergence_posisiton_in_sequence_chart(self):
+    def show_divergence_position_in_sequence_chart(self):
         if self.fingerprint_trajectory_divergence_position:
             self.fingerprint_trajectory_divergence_position.show_in_sequence_chart()
 

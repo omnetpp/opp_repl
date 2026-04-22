@@ -140,7 +140,7 @@ def update_statistical_results_main():
     run_tasks_main(update_statistical_results, "update statistical results")
 
 def update_speed_results_main():
-    run_tasks_main(update_speed_test_results, "update speed results")
+    run_tasks_main(update_speed_results, "update speed results")
 
 def parse_build_project_arguments():
     description = "Builds the specified or enclosing simulation project."
