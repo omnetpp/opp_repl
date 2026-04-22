@@ -121,6 +121,7 @@ class StatisticalTestTask(SimulationTestTask):
             stored_df = _read_scalar_result_file(stored_scalar_result_file_name)
             if not current_df.equals(stored_df):
                 _write_diff_file(stored_scalar_result_file_name, current_scalar_result_file_name, scalar_result_diff_file_name)
+                _logger.debug(f"Writing diff file {scalar_result_diff_file_name}")
                 if current_df.empty:
                     task_result = self.task_result_class(task=self, simulation_task_result=simulation_task_result, result="FAIL", reason="Current statistical results are empty")
                 elif stored_df.empty:
@@ -144,6 +145,7 @@ class StatisticalTestTask(SimulationTestTask):
                         return self.task_result_class(task=self, simulation_task_result=simulation_task_result, result="PASS", reason="All differences filtered out")
                     sorted_df = df.loc[df["relative_error"].abs().sort_values(ascending=False).index]
                     scalar_result_csv_file_name = re.sub(r".sca$", ".csv", stored_scalar_result_file_name)
+                    _logger.debug(f"Writing CSV file {scalar_result_csv_file_name}")
                     sorted_df.to_csv(scalar_result_csv_file_name, float_format="%.17g")
                     id = df["relative_error"].idxmax()
                     if math.isnan(id):
