@@ -17,6 +17,8 @@ import sys
 import threading
 import time
 
+pandas.set_option('display.float_format', lambda x: '%g' % x)
+
 __sphinx_mock__ = True # ignore this module in documentation
 
 COLOR_GRAY = "\033[90m"
