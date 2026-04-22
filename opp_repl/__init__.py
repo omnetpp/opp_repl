@@ -43,20 +43,20 @@ command installs all such required and optional libraries:
 
 .. code-block:: console
 
-    levy@valardohaeris:~/workspace/opp_repl$ pip install -e '.[all]'
+    levy@valarmorghulis:~/workspace/opp_repl$ pip install -e '.[all]'
     ...
 
 After the installation is completed, starting the opp_repl interpreter from a terminal is pretty straightforward: 
 
 .. code-block:: console
 
-    levy@valardohaeris:~/workspace/omnetpp$ . setenv
-    Environment for 'omnetpp-6.0' in directory '/home/levy/workspace/omnetpp' is ready.
-    levy@valardohaeris:~/workspace/inet$ . setenv
-    Environment for INET 4.5.0 in directory '/home/levy/workspace/inet' is ready.
-    levy@valardohaeris:~/workspace/inet$ opp_repl --load inet.opp
-    INFO opp_repl.simulation.project Default project is set to inet (project.py:532)
-    INFO opp_repl.repl OMNeT++ Python support is loaded. (repl.py:38)
+    levy@valarmorghulis:~/workspace/omnetpp$ . setenv
+    Environment for 'omnetpp-6.4.0' in directory '/home/levy/workspace/omnetpp' is ready.
+    levy@valarmorghulis:~/workspace/opp_repl$ . setenv
+    opp_repl is ready (added /home/levy/workspace/opp_repl to PATH).
+    levy@valarmorghulis:~/workspace/opp_repl$ opp_repl --load ~/workspace/inet/inet.opp
+    INFO opp_repl.simulation.project Default project is set to inet
+    INFO opp_repl.repl OMNeT++ Python support is loaded.
 
 When the Python interpreter starts the following prompt is displayed:
 
@@ -99,24 +99,22 @@ The simulation project is an essential concept of the opp_repl package. Many fun
 as parameter. Simulation projects are loaded from ``.opp`` files and can include OMNeT++ sample projects,
 the INET simulation project, or any other custom project.
 
-.. TODO
-   OMNeT++ comes with a set of sample projects which can be loaded into opp_repl.
+For example, the following ``.opp`` project definition file describes the sample simulation project called ``aloha``.
+The file can be found under the ``aloha`` sample project directory:
 
-   For example, the following `.omnetpp` project definition file describes the sample simulation project called `aloha`.
-   The file can be found under the `aloha` sample project directory. It simply defines a simulation project with a root
-   director set to `samples/aloha` relative to the value of the `__omnetpp_root_dir` environment variable.
+.. code-block:: python
 
-   .. code-block:: json
+    SimulationProject(
+        name="aloha",
+        omnetpp_project="omnetpp",
+        build_types=["executable"],
+        ned_folders=["."],
+        ini_file_folders=["."],
+    )
 
-       {"name": "aloha",
-        "folder_environment_variable": "__omnetpp_root_dir",
-        "folder": "samples/aloha"}
-
-   There are many other options that can be used in the project definition: C++ include folders, NED folders, external
-   libraries, etc. The simulation project could also be defined by calling the
-   :py:func:`define_simulation_project <opp_repl.simulation.project.define_simulation_project>`
-   function. The :py:class:`SimulationProject <opp_repl.simulation.project.SimulationProject>` class constructor has the
-   same set of parameters.
+There are many other options that can be used in the project definition: NED folders, library folders, external
+dependencies, etc. See the :py:class:`SimulationProject <opp_repl.simulation.project.SimulationProject>` class
+constructor for the full set of parameters.
 
 An important concept related to simulation projects is the default simulation project. Having a default project greatly
 simplifies using several functions of the opp_repl package by implicitly using the default project without always
@@ -225,9 +223,9 @@ project:
 
 .. code-block:: console
 
-    levy@valardohaeris:~/workspace/omnetpp/samples/fifo$ opp_repl
-    INFO opp_repl.simulation.project Default project is set to fifo (project.py:533)
-    INFO opp_repl.repl OMNeT++ Python support is loaded. (repl.py:40)
+    levy@valarmorghulis:~/workspace/omnetpp/samples/fifo$ opp_repl
+    INFO opp_repl.simulation.project Default project is set to fifo
+    INFO opp_repl.repl OMNeT++ Python support is loaded.
 
 After the default simulation project is set, running all simulations can be done with a single parameterless function call:
 
@@ -322,12 +320,12 @@ The first step to use an SSH cluster is to create one by specifying the schedule
 
 .. code-block:: ipython
 
-    In [1]: c = SSHCluster(scheduler_hostname="valardohaeris.local", worker_hostnames=["valardohaeris.local", "valarmorghulis.local"])
+    In [1]: c = SSHCluster(scheduler_hostname="node1.local", worker_hostnames=["node1.local", "node2.local"])
 
     In [2]: c.start()
-    INFO opp_repl.common.cluster Starting SSH cluster: scheduler=valardohaeris, workers=['valardohaeris', 'valarmorghulis'] ...
-    INFO asyncssh Opening SSH connection to valardohaeris.local, port 22 (logging.py:92)
-    INFO asyncssh [conn=0] Connected to SSH server at valardohaeris.local, port 22 (logging.py:92)
+    INFO opp_repl.common.cluster Starting SSH cluster: scheduler=node1, workers=['node1', 'node2'] ...
+    INFO asyncssh Opening SSH connection to node1.local, port 22
+    INFO asyncssh [conn=0] Connected to SSH server at node1.local, port 22
     ...
 
 After the SSH cluster is started, open the http://localhost:8797 web page and see the live dashboard. The dashboard
@@ -338,7 +336,7 @@ It is easy to check if the cluster is operating correctly by running the followi
 .. code-block:: ipython
 
     In [1]: c.run_gethostname(12)
-    Out[1]: 'valardohaeris, valarmorghulis, valarmorghulis, valarmorghulis, valarmorghulis, valardohaeris, valarmorghulis, valardohaeris, valardohaeris, valarmorghulis, valardohaeris, valardohaeris'
+    Out[1]: 'node1, node2, node2, node1, node2, node1, node2, node1, node2, node1, node2, node1'
 
 The result should contain a permutation of the hostnames of all worker nodes similarly to the above.
 
@@ -354,7 +352,7 @@ and debug mode, and distribute the binary files to all worker nodes:
     ...
     INFO opp_repl.simulation.build Building aloha ended (build.py:67)
 
-    In [3]: p.copy_binary_simulation_distribution_to_cluster(["valardohaeris.local", "valarmorghulis.local"])
+    In [3]: p.copy_binary_simulation_distribution_to_cluster(["node1.local", "node2.local"])
 
 The binary distribution files are incrementally copied using the :command:`rsync` command.
 
@@ -477,6 +475,81 @@ When the fingerprints are already present in the database, then the fingerprint 
 
 The PASS result means that the calculated fingerprint of the simulation matches the fingerprint stored in the database.
 
+Statistical Testing
+-------------------
+
+Statistical tests detect regressions in simulation scalar results by comparing them against saved baseline values.
+The baseline is stored in the ``statistics_folder`` of the simulation project.
+
+.. code-block:: ipython
+
+    In [1]: update_statistical_results(simulation_project=p, sim_time_limit="1s")
+
+    In [2]: run_statistical_tests(simulation_project=p, sim_time_limit="1s")
+
+Chart Testing
+-------------
+
+Chart tests detect visual regressions in result analysis charts by comparing rendered images against saved baseline
+images. The baseline is stored in the ``media_folder`` of the simulation project. Requires the ``chart`` optional
+dependency group (matplotlib, numpy).
+
+.. code-block:: ipython
+
+    In [1]: update_charts(simulation_project=p)
+
+    In [2]: run_chart_tests(simulation_project=p)
+
+Speed Testing
+-------------
+
+Speed tests detect performance regressions by measuring CPU instruction counts and comparing them against stored
+baseline values. Uses the ``profile`` build mode and the ``speed_store`` JSON file.
+
+.. code-block:: ipython
+
+    In [1]: update_speed_results(simulation_project=p)
+
+    In [2]: run_speed_tests(simulation_project=p)
+
+Feature Testing
+---------------
+
+Feature tests check that simulation projects build and their simulations can be set up with different combinations
+of optional features enabled or disabled.
+
+.. code-block:: ipython
+
+    In [1]: run_feature_tests(simulation_project=p)
+
+Sanitizer Testing
+-----------------
+
+Sanitizer tests detect memory errors and undefined behavior by running simulations with AddressSanitizer / UBSan
+instrumentation. Uses the ``sanitize`` build mode.
+
+.. code-block:: ipython
+
+    In [1]: run_sanitizer_tests(simulation_project=p, cpu_time_limit="10s")
+
+Release Testing
+---------------
+
+Release tests run a comprehensive set of checks suitable for validating a release build.
+
+.. code-block:: ipython
+
+    In [1]: run_release_tests(simulation_project=p)
+
+Running All Tests
+-----------------
+
+All configured test types can be run sequentially with a single call:
+
+.. code-block:: ipython
+
+    In [1]: run_all_tests(simulation_project=p)
+
 Command Line Tools
 ==================
 
@@ -484,13 +557,21 @@ Some of the tasks that can be carried out using the Python interpreter, can also
 The following list gives a brief overview of these command line tools:
 
 - :command:`opp_repl`: starts the interactive Python interpreter
+- :command:`opp_build_project`: builds the simulation project
 - :command:`opp_run_simulations`: runs multiple simulations matching a filter criteria
-- :command:`opp_run_smoke_tests`: runs multiple smoke tests matching a filter criteria
-- :command:`opp_run_fingerprint_tests`: runs multiple fingerprint tests matching a filter criteria
-- :command:`opp_run_statistical_tests`: runs multiple statistical tests matching a filter criteria
-- :command:`opp_run_chart_tests`: runs multiple chart tests matching a filter criteria
-- :command:`opp_run_speed_tests`: runs multiple speed tests matching a filter criteria
 - :command:`opp_run_all_tests`: runs all tests matching a filter criteria
+- :command:`opp_run_chart_tests`: runs multiple chart tests matching a filter criteria
+- :command:`opp_run_feature_tests`: runs multiple feature tests matching a filter criteria
+- :command:`opp_run_fingerprint_tests`: runs multiple fingerprint tests matching a filter criteria
+- :command:`opp_run_release_tests`: runs multiple release tests matching a filter criteria
+- :command:`opp_run_sanitizer_tests`: runs multiple sanitizer tests matching a filter criteria
+- :command:`opp_run_smoke_tests`: runs multiple smoke tests matching a filter criteria
+- :command:`opp_run_speed_tests`: runs multiple speed tests matching a filter criteria
+- :command:`opp_run_statistical_tests`: runs multiple statistical tests matching a filter criteria
+- :command:`opp_update_charts`: updates baseline charts for chart tests
+- :command:`opp_update_correct_fingerprints`: updates stored correct fingerprints
+- :command:`opp_update_speed_results`: updates baseline speed measurements
+- :command:`opp_update_statistical_results`: updates baseline statistical results
 
 .. note::
 
@@ -500,7 +581,7 @@ Running all simulations from the `fifo` sample project using the current working
 
 .. code-block:: console
 
-    levy@valardohaeris:~/workspace/omnetpp/samples/fifo$ opp_run_simulations
+    levy@valarmorghulis:~/workspace/omnetpp/samples/fifo$ opp_run_simulations
     [3/7] . -c TandemQueueExperiment DONE
     [5/7] . -c TandemQueueExperiment -r 2 DONE
     ...
@@ -512,14 +593,14 @@ Running all simulation runs from the `PureAlohaExperiment` config for 1 second o
 
 .. code-block:: console
 
-    levy@valardohaeris:~/workspace/omnetpp/samples/aloha$ opp_run_simulations -m debug -t 1s --filter PureAlohaExperiment --hosts valarmorghulis.local,valardohaeris.local
+    levy@valarmorghulis:~/workspace/omnetpp/samples/aloha$ opp_run_simulations -m debug -t 1s --filter PureAlohaExperiment --hosts node1.local,node2.local
     Multiple simulation results: DONE, summary: 42 DONE in 0:00:01.196147
 
 Running the fingerprint tests from the `fifo` sample project using the default fingerprint database:
 
 .. code-block:: console
 
-    levy@valardohaeris:~/workspace/omnetpp/samples/fifo$ opp_run_fingerprint_tests -t 1s
+    levy@valarmorghulis:~/workspace/omnetpp/samples/fifo$ opp_run_fingerprint_tests -t 1s
     Multiple fingerprint test results: SKIP, summary: 7 SKIP (unexpected) in 0:00:00.004558
 
 Not surprisingly all tests are skipped because the database doesn't have any correct fingerprints yet.
@@ -527,7 +608,7 @@ We first need to update the correct fingerprints in the database:
 
 .. code-block:: console
 
-    levy@valardohaeris:~/workspace/omnetpp/samples/fifo$ opp_update_correct_fingerprints -t 1s
+    levy@valarmorghulis:~/workspace/omnetpp/samples/fifo$ opp_update_correct_fingerprints -t 1s
     [2/7] Updating fingerprint . -c Fifo2 for 1s INSERT 6593-438a/tplx
     [3/7] Updating fingerprint . -c TandemQueueExperiment for 1s INSERT 4cbd-3dae/tplx
     ...
@@ -547,7 +628,7 @@ Now, we can run all fingerprint tests comparing the fingerprints against the lat
 
 .. code-block:: console
 
-    levy@valardohaeris:~/workspace/omnetpp/samples/fifo$ opp_run_fingerprint_tests -t 1s
+    levy@valarmorghulis:~/workspace/omnetpp/samples/fifo$ opp_run_fingerprint_tests -t 1s
     [3/7] Checking fingerprint . -c TandemQueueExperiment for 1s PASS
     [5/7] Checking fingerprint . -c TandemQueueExperiment -r 2 for 1s PASS
     ...
@@ -559,7 +640,7 @@ Of course, trying to update the correct fingerprints again doesn't change the st
 
 .. code-block:: console
 
-    levy@valardohaeris:~/workspace/omnetpp/samples/fifo$ opp_update_correct_fingerprints -t 1s
+    levy@valarmorghulis:~/workspace/omnetpp/samples/fifo$ opp_update_correct_fingerprints -t 1s
     [5/7] Updating fingerprint . -c TandemQueueExperiment -r 2 for 1s KEEP 4cbd-3dae/tplx
     [7/7] Updating fingerprint . -c TandemQueues for 1s KEEP 4cbd-3dae/tplx
     ...

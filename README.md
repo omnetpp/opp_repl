@@ -25,6 +25,7 @@ pip install -e ".[cluster]" # just one group
 | `mcp` | mcp | MCP server for AI assistant integration |
 | `optimize` | scipy, optimparallel | Parameter optimization |
 | `github` | requests | GitHub API integration |
+| `ide` | py4j | OMNeT++ IDE integration |
 | `all` | *(all of the above)* | Everything |
 
 ## Quick Start
@@ -56,7 +57,7 @@ opp_repl [-h]
          [-p PROJECT]              # set default simulation project by name
          [-l {ERROR,WARN,INFO,DEBUG}]  # log level (default: INFO)
          [--external-command-log-level {ERROR,WARN,INFO,DEBUG}]
-         [--mcp-port PORT]         # MCP server port, 0 to disable (default: 9966)
+         [--mcp-port PORT]         # MCP server port, 0 to disable (default: 0)
          [--load OPP_FILE]         # load .opp file(s), repeatable, supports globs
          [--handle-exception | --no-handle-exception]
 ```
@@ -565,7 +566,7 @@ counts and comparing them against stored baseline values.  Uses the
 
 ```python
 # Store baseline measurements (first time, or after intentional changes)
-update_speed_test_results(simulation_project=inet_project)
+update_speed_results(simulation_project=inet_project)
 
 # Run tests — compares current measurements against the baseline
 run_speed_tests(simulation_project=inet_project)
@@ -732,7 +733,7 @@ r.print_different_statistical_results(include_relative_errors=True)
 
 # Interactive debugging at the divergence point
 r.debug_at_fingerprint_divergence_position()
-r.show_divergence_posisiton_in_sequence_chart()
+r.show_divergence_position_in_sequence_chart()
 ```
 
 ### Overlay builds
@@ -786,8 +787,7 @@ clean_simulation_results(simulation_project=inet_project,
 
 opp_repl can expose an **MCP (Model Context Protocol) server** that
 allows AI assistants to execute Python code in the live REPL session.
-The server starts automatically on port 9966 (disable with
-`--mcp-port 0`).
+Start it with `--mcp-port 9966` (disabled by default).
 
 - **Transport**: Streamable HTTP (stateless), endpoint `http://127.0.0.1:{port}/mcp`
 - **Tool**: `execute_python` — runs arbitrary Python code in the IPython session
