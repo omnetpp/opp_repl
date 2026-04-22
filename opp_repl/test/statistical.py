@@ -95,9 +95,10 @@ class StatisticalTestTask(SimulationTestTask):
         simulation_config = self.simulation_task.simulation_config
         return f"{simulation_config.ini_file}-{simulation_config.config}-#{self.simulation_task.run_number}.{extension}"
 
-    def check_simulation_task_result(self, simulation_task_result, result_name_filter=None, exclude_result_name_filter=None, result_module_filter=None, exclude_result_module_filter=None, full_match=False, relative_error_threshold=None, **kwargs):
+    def check_simulation_task_result(self, simulation_task_result, baseline_simulation_project=None, result_name_filter=None, exclude_result_name_filter=None, result_module_filter=None, exclude_result_module_filter=None, full_match=False, relative_error_threshold=None, **kwargs):
         simulation_config = self.simulation_task.simulation_config
         simulation_project = simulation_config.simulation_project
+        baseline_project = baseline_simulation_project or simulation_project
         working_directory = simulation_config.working_directory
         current_scalar_result_file_name = simulation_project.get_full_path(os.path.join(working_directory, "results", self.get_result_file_name("sca")))
         current_vector_result_file_name = simulation_project.get_full_path(os.path.join(working_directory, "results", self.get_result_file_name("vec")))
@@ -110,7 +111,7 @@ class StatisticalTestTask(SimulationTestTask):
         if os.path.exists(current_index_result_file_name):
             os.remove(current_index_result_file_name)
         _remove_attr_lines(current_scalar_result_file_name)
-        stored_scalar_result_file_name = simulation_project.get_full_path(os.path.join(simulation_project.statistics_folder, working_directory, self.get_result_file_name("sca")))
+        stored_scalar_result_file_name = baseline_project.get_full_path(os.path.join(baseline_project.statistics_folder, working_directory, self.get_result_file_name("sca")))
         _logger.debug(f"Reading result file {current_scalar_result_file_name}")
         current_df = _read_scalar_result_file(current_scalar_result_file_name)
         scalar_result_diff_file_name = re.sub(r".sca$", ".diff", stored_scalar_result_file_name)
@@ -205,11 +206,12 @@ class StatisticalResultsUpdateTask(SimulationUpdateTask):
         simulation_config = self.simulation_task.simulation_config
         return f"{simulation_config.ini_file}-{simulation_config.config}-#{self.simulation_task.run_number}.{extension}"
 
-    def run_protected(self, **kwargs):
+    def run_protected(self, baseline_simulation_project=None, **kwargs):
         simulation_config = self.simulation_task.simulation_config
         simulation_project = simulation_config.simulation_project
+        baseline_project = baseline_simulation_project or simulation_project
         working_directory = simulation_config.working_directory
-        target_results_directory = simulation_project.get_full_path(os.path.join(simulation_project.statistics_folder, working_directory))
+        target_results_directory = baseline_project.get_full_path(os.path.join(baseline_project.statistics_folder, working_directory))
         os.makedirs(target_results_directory, exist_ok=True)
         update_result = super().run_protected(**kwargs)
         stored_scalar_result_file_name = simulation_project.get_full_path(os.path.join(working_directory, "results", self.get_result_file_name("sca")))
@@ -219,9 +221,10 @@ class StatisticalResultsUpdateTask(SimulationUpdateTask):
             os.remove(stored_scalar_result_file_name)
         return update_result
 
-    def check_simulation_task_result(self, simulation_task_result, result_name_filter=None, exclude_result_name_filter=None, result_module_filter=None, exclude_result_module_filter=None, full_match=False, **kwargs):
+    def check_simulation_task_result(self, simulation_task_result, baseline_simulation_project=None, result_name_filter=None, exclude_result_name_filter=None, result_module_filter=None, exclude_result_module_filter=None, full_match=False, **kwargs):
         simulation_config = self.simulation_task.simulation_config
         simulation_project = simulation_config.simulation_project
+        baseline_project = baseline_simulation_project or simulation_project
         working_directory = simulation_config.working_directory
         current_scalar_result_file_name = simulation_project.get_full_path(os.path.join(working_directory, "results", self.get_result_file_name("sca")))
         current_vector_result_file_name = simulation_project.get_full_path(os.path.join(working_directory, "results", self.get_result_file_name("vec")))
@@ -234,7 +237,7 @@ class StatisticalResultsUpdateTask(SimulationUpdateTask):
         if os.path.exists(current_index_result_file_name):
             os.remove(current_index_result_file_name)
         _remove_attr_lines(current_scalar_result_file_name)
-        stored_scalar_result_file_name = simulation_project.get_full_path(os.path.join(simulation_project.statistics_folder, working_directory, self.get_result_file_name("sca")))
+        stored_scalar_result_file_name = baseline_project.get_full_path(os.path.join(baseline_project.statistics_folder, working_directory, self.get_result_file_name("sca")))
         _logger.debug(f"Reading result file {current_scalar_result_file_name}")
         current_df = _read_scalar_result_file(current_scalar_result_file_name)
         scalar_result_diff_file_name = re.sub(r".sca$", ".diff", stored_scalar_result_file_name)

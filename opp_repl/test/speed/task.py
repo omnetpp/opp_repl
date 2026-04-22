@@ -32,10 +32,11 @@ class SpeedTestTask(SimulationTestTask):
     def run_protected(self, **kwargs):
         return super().run_protected(nice=-10, append_args=_speed_test_append_args, **kwargs)
 
-def get_speed_test_tasks(mode="profile", run_number=0, **kwargs):
+def get_speed_test_tasks(mode="profile", run_number=0, baseline_simulation_project=None, **kwargs):
     multiple_simulation_tasks = get_simulation_tasks(name="speed test", mode=mode, run_number=run_number, **kwargs)
     simulation_project = multiple_simulation_tasks.simulation_project
-    speed_measurement_store = get_speed_measurement_store(simulation_project)
+    baseline_project = baseline_simulation_project or simulation_project
+    speed_measurement_store = get_speed_measurement_store(baseline_project)
     tasks = []
     for simulation_task in multiple_simulation_tasks.tasks:
         simulation_config = simulation_task.simulation_config

@@ -59,7 +59,7 @@ def pad_to_size_centered(img, height, width):
     return np.pad(img, pad_width, mode="constant", constant_values=0)
 
 class ChartTestTask(TestTask):
-    def __init__(self, analysis_file_name, id, chart_name, simulation_project=None, name="chart test", **kwargs):
+    def __init__(self, analysis_file_name, id, chart_name, simulation_project=None, baseline_simulation_project=None, name="chart test", **kwargs):
         super().__init__(name=name, **kwargs)
         self.locals = locals()
         self.locals.pop("self")
@@ -68,11 +68,13 @@ class ChartTestTask(TestTask):
         self.id = id
         self.chart_name = chart_name
         self.simulation_project = simulation_project
+        self.baseline_simulation_project = baseline_simulation_project
 
     def get_parameters_string(self, **kwargs):
         return self.analysis_file_name + ": " + self.chart_name
 
     def run_protected(self, keep_charts=True, output_stream=sys.stdout, **kwargs):
+        baseline_project = self.baseline_simulation_project or self.simulation_project
         workspace = omnetpp.scave.analysis.Workspace(get_workspace_path("."), [])
         analysis = omnetpp.scave.analysis.load_anf_file(self.simulation_project.get_full_path(self.analysis_file_name))
         for chart in analysis.collect_charts():
@@ -83,7 +85,8 @@ class ChartTestTask(TestTask):
                 folder = os.path.dirname(self.simulation_project.get_full_path(self.analysis_file_name))
                 file_name = analysis.export_image(chart, folder, workspace, format="png", dpi=150, target_folder=self.simulation_project.media_folder, filename=image_export_filename + "-new")
                 new_file_name = os.path.join(folder, file_name)
-                old_file_name = os.path.join(folder, re.sub(r"-new\.png$", ".png", file_name))
+                baseline_folder = os.path.dirname(baseline_project.get_full_path(self.analysis_file_name))
+                old_file_name = os.path.join(baseline_folder, re.sub(r"-new\.png$", ".png", file_name))
                 diff_file_name = os.path.join(folder, re.sub(r"-new\.png$", "-diff.png", file_name))
                 if os.path.exists(diff_file_name):
                     os.remove(diff_file_name)
@@ -128,7 +131,7 @@ class MultipleChartTestTasks(MultipleTestTasks):
         # avoid reusing the processes from the process pool because matplotlib can generate different images due to tight layout
         return super().run_protected(**kwargs, maxtasksperchild=1)
 
-def get_chart_test_tasks(simulation_project=None, run_simulations=True, filter=None, working_directory_filter=None, chart_filter=None, exclude_chart_filter=None, **kwargs):
+def get_chart_test_tasks(simulation_project=None, baseline_simulation_project=None, run_simulations=True, filter=None, working_directory_filter=None, chart_filter=None, exclude_chart_filter=None, **kwargs):
     """
     Returns multiple chart test tasks matching the provided filter criteria. The returned tasks can be run by
     calling the :py:meth:`run <opp_repl.common.task.MultipleTasks.run>` method.
@@ -157,7 +160,7 @@ def get_chart_test_tasks(simulation_project=None, run_simulations=True, filter=N
                         if not list(builtins.filter(lambda element: element.simulation_config == simulation_task.simulation_config and element.run_number == simulation_task.run_number, simulation_tasks)):
                             simulation_tasks.append(simulation_task)
                 if multiple_simulation_tasks.tasks:
-                    test_tasks.append(ChartTestTask(simulation_project=simulation_project, analysis_file_name=analysis_file_name, id=chart.id, chart_name=chart.name, task_result_class=TestTaskResult))
+                    test_tasks.append(ChartTestTask(simulation_project=simulation_project, baseline_simulation_project=baseline_simulation_project, analysis_file_name=analysis_file_name, id=chart.id, chart_name=chart.name, task_result_class=TestTaskResult))
     return MultipleChartTestTasks(tasks=test_tasks, multiple_simulation_tasks=MultipleSimulationTasks(tasks=simulation_tasks, simulation_project=simulation_project, **kwargs), **dict(kwargs, scheduler="process"))
 
 def run_chart_tests(**kwargs):

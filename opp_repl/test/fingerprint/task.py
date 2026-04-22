@@ -226,12 +226,13 @@ def select_fingerprint_with_smallest_sim_time_limit(fingerprint_entries):
 def select_fingerprint_with_largest_sim_time_limit(fingerprint_entries):
     return select_fingerprint_by_sim_time_limit(fingerprint_entries, True)
 
-def get_fingerprint_test_task(simulation_task, ingredients="tplx", sim_time_limit=None, select_fingerprint=select_fingerprint_with_smallest_sim_time_limit, **kwargs):
+def get_fingerprint_test_task(simulation_task, ingredients="tplx", sim_time_limit=None, select_fingerprint=select_fingerprint_with_smallest_sim_time_limit, baseline_simulation_project=None, **kwargs):
     # TODO take sim_time_limit into account and also select_fingerprint
     if sim_time_limit is None:
         sim_time_limit = simulation_task.sim_time_limit
     simulation_config = simulation_task.simulation_config
-    correct_fingerprint_store = get_correct_fingerprint_store(simulation_config.simulation_project)
+    baseline_project = baseline_simulation_project or simulation_config.simulation_project
+    correct_fingerprint_store = get_correct_fingerprint_store(baseline_project)
     stored_fingerprint_entries = correct_fingerprint_store.filter_entries(ingredients=ingredients, sim_time_limit=sim_time_limit,
                                                                           working_directory=simulation_config.working_directory, ini_file=simulation_config.ini_file, config=simulation_config.config, run_number=simulation_task.run_number)
     selected_fingerprint_entry = select_fingerprint(stored_fingerprint_entries) if stored_fingerprint_entries else None
