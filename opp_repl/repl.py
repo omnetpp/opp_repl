@@ -7,8 +7,9 @@ import sys
 if importlib.util.find_spec("omnetpp"):
     import omnetpp
 
-    from omnetpp.scave.analysis import *
-    from omnetpp.scave.results import *
+    if importlib.util.find_spec("matplotlib"):
+        from omnetpp.scave.analysis import *
+        from omnetpp.scave.results import *
 
 from opp_repl.common import *
 from opp_repl.simulation import *
