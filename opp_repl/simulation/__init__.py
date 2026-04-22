@@ -8,11 +8,15 @@ single computer or on an SSH cluster. Besides, the simulations can be run as
 separate processes and also in the same Python process loading the simulation model as a library.
 """
 
+import importlib.util
+
 from opp_repl.simulation.compare import *
 from opp_repl.simulation.overlay import *
-from opp_repl.simulation.optimize import *
 from opp_repl.simulation.project import *
 from opp_repl.simulation.workspace import *
 from opp_repl.simulation.task import *
+
+if importlib.util.find_spec("scipy"):
+    from opp_repl.simulation.optimize import *
 
 __all__ = [k for k,v in locals().items() if k[0] != "_" and v.__class__.__name__ != "module"]

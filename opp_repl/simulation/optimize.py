@@ -17,10 +17,9 @@ import math
 import sys
 import time
 
+import importlib.util
 import numpy as np
 import scipy.optimize
-
-import importlib.util
 
 if importlib.util.find_spec('optimparallel'):
     import optimparallel

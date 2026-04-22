@@ -20,10 +20,7 @@ Similarly, creating a multiple tasks object containing two empty tasks and runni
     mt.run()
 """
 
-try:
-    import dask
-except ImportError:
-    pass
+import importlib.util
 import datetime
 import functools
 import hashlib
@@ -36,6 +33,9 @@ import sys
 import threading
 import time
 import traceback
+
+if importlib.util.find_spec("dask"):
+    import dask
 
 from opp_repl.common.util import *
 

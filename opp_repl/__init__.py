@@ -577,14 +577,15 @@ Python packages, adding specific functions tailored to your needs, adding state 
 often, etc. So it is highly advisable to start writing your own Python package where you can add what is required.
 """
 
+import importlib.util
+
 from opp_repl.documentation import *
-try:
-    from opp_repl.common.mcp import mcp_calls
-except Exception:
-    mcp_calls = []
 from opp_repl.simulation import *
 from opp_repl.test.fingerprint import *
 from opp_repl.test import *
+
+if importlib.util.find_spec("mcp"):
+    from opp_repl.common.mcp import *
 
 __all__ = [k for k,v in locals().items() if k[0] != "_" and v.__class__.__name__ != "module"]
 

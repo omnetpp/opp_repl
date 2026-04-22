@@ -9,9 +9,9 @@ baseline charts. The baseline charts can be found in the media folder of the sim
 import filecmp
 import io
 import logging
+import importlib.util
 import matplotlib
 import numpy
-import importlib.util
 
 try:
     import omnetpp

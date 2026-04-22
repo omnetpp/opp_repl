@@ -1,7 +1,6 @@
+import importlib.util
 import logging
 
-
-from opp_repl.test.chart import *
 from opp_repl.test.feature import *
 from opp_repl.test.fingerprint import *
 from opp_repl.test.opp import *
@@ -11,13 +10,16 @@ from opp_repl.test.smoke import *
 from opp_repl.test.speed import *
 from opp_repl.test.statistical import *
 
+if importlib.util.find_spec("matplotlib"):
+    from opp_repl.test.chart import *
+
 __sphinx_mock__ = True # ignore this module in documentation
 
 _logger = logging.getLogger(__name__)
 
 def get_all_test_tasks(**kwargs):
     test_task_functions = [
-                           get_chart_test_tasks,
+                           *([get_chart_test_tasks] if importlib.util.find_spec("matplotlib") else []),
                            get_feature_test_tasks,
                            get_fingerprint_test_tasks,
                            get_sanitizer_test_tasks,

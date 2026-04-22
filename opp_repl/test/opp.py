@@ -21,7 +21,7 @@ from opp_repl.test.simulation import *
 
 _logger = logging.getLogger(__name__)
 
-if importlib.util.find_spec("omnetpp.test"):
+if importlib.util.find_spec("omnetpp") and importlib.util.find_spec("omnetpp.test"):
     from omnetpp.test import *
 
     class IdeOppTest(OppTest):
