@@ -38,12 +38,11 @@ See :py:func:`compare_simulations`, :py:func:`compare_simulations_between_commit
 """
 
 import copy
+import importlib.util
 import pandas as pd
 
-try:
+if importlib.util.find_spec("omnetpp"):
     from omnetpp.scave.results import *
-except ImportError:
-    pass
 
 from opp_repl.common.util import *
 from opp_repl.simulation.task import *

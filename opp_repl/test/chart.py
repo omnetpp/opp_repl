@@ -13,12 +13,10 @@ import importlib.util
 import matplotlib
 import numpy
 
-try:
+if importlib.util.find_spec("omnetpp"):
     import omnetpp
     import omnetpp.scave
     import omnetpp.scave.analysis
-except ImportError:
-    pass
 
 from opp_repl.common import *
 from opp_repl.documentation.chart import *

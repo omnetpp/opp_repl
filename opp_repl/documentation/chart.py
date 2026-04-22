@@ -3,12 +3,11 @@ import functools
 import glob
 import logging
 import os
+import importlib.util
 import re
 
-try:
+if importlib.util.find_spec("omnetpp"):
     import omnetpp.scave.analysis
-except ImportError:
-    pass
 
 from opp_repl.simulation.project import *
 

@@ -24,10 +24,8 @@ import scipy.optimize
 if importlib.util.find_spec('optimparallel'):
     import optimparallel
 
-try:
+if importlib.util.find_spec("omnetpp"):
     from omnetpp.scave.results import *
-except ImportError:
-    pass
 
 from opp_repl.simulation.config import *
 from opp_repl.simulation.task import *
