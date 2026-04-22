@@ -440,6 +440,9 @@ class SimulationProject:
                 env["PATH"] = bin_dir + os.pathsep + env.get("PATH", "")
             if lib_dir not in env.get("LD_LIBRARY_PATH", "").split(os.pathsep):
                 env["LD_LIBRARY_PATH"] = lib_dir + os.pathsep + env.get("LD_LIBRARY_PATH", "")
+        root = self.get_root_path()
+        if root is not None:
+            env.setdefault("CCACHE_BASEDIR", root)
         ws = getattr(self, '_workspace', None) or get_default_simulation_workspace()
         for used_project_name in self.used_projects:
             used_project = ws.get_simulation_project(used_project_name, None)
@@ -728,12 +731,43 @@ from opp_repl.simulation.workspace import *  # noqa: F401,F403 — re-export wor
 
 # -- Git worktree helpers -------------------------------------------------
 
+def _get_git_root(path):
+    """Return the absolute path of the git repository root containing *path*."""
+    result = subprocess.run(
+        ["git", "rev-parse", "--show-toplevel"],
+        cwd=path, capture_output=True, text=True, check=True,
+    )
+    return os.path.abspath(result.stdout.strip())
+
+def _make_git_worktree(git_root, git_hash):
+    """Ensure a worktree of *git_root* at *git_hash* exists and return its path.
+
+    The worktree is placed next to *git_root*, named
+    ``<basename>-<short_hash>``.  If it already exists it is reused.
+    """
+    short_hash = git_hash[:10]
+    worktree_path = os.path.join(os.path.dirname(git_root),
+                                 os.path.basename(git_root) + "-" + short_hash)
+    if not os.path.isdir(worktree_path):
+        subprocess.run(
+            ["git", "worktree", "add", worktree_path, git_hash],
+            cwd=git_root, check=True,
+        )
+    return worktree_path
+
 def make_worktree_simulation_project(simulation_project, git_hash):
     """Create a git worktree at *git_hash* and return a new :py:class:`SimulationProject` for it.
 
-    The worktree is placed next to the original project folder, named
+    The worktree is placed next to the git repository root, named
     ``<basename>-<short_hash>``.  If the worktree already exists, it is
     reused.
+
+    Sub-projects whose root folder is a subdirectory of the git repository
+    (e.g. ``samples/histograms`` inside *omnetpp*) are handled automatically:
+    the worktree is created at the repository level and the returned project
+    points to the matching subdirectory within it.  If the project's
+    :py:class:`OmnetppProject` lives in the same repository, it is similarly
+    redirected to the worktree.
 
     Parameters:
         simulation_project (:py:class:`SimulationProject`):
@@ -747,19 +781,33 @@ def make_worktree_simulation_project(simulation_project, git_hash):
     src_root = simulation_project.get_root_path()
     if src_root is None:
         raise RuntimeError("Source project has no root path")
+    src_root = os.path.abspath(src_root)
+
+    git_root = _get_git_root(src_root)
+    worktree_path = _make_git_worktree(git_root, git_hash)
+
     short_hash = git_hash[:10]
-    worktree_path = os.path.join(os.path.dirname(src_root),
-                                 os.path.basename(src_root) + "-" + short_hash)
-    if not os.path.isdir(worktree_path):
-        subprocess.run(
-            ["git", "worktree", "add", worktree_path, git_hash],
-            cwd=src_root, check=True,
-        )
     import copy
     project = copy.copy(simulation_project)
     project.name = simulation_project.name + "-" + short_hash
-    project.root_folder = worktree_path
+    rel_path = os.path.relpath(src_root, git_root)
+    project.root_folder = worktree_path if rel_path == "." else os.path.join(worktree_path, rel_path)
     project.simulation_configs = None
     project._overlay = None
+
+    # If the OMNeT++ installation lives in the same git repo, redirect it
+    # into the worktree so that builds use the matching OMNeT++ version.
+    omnetpp_project = simulation_project.get_omnetpp_project()
+    if omnetpp_project is not None:
+        omnetpp_root = omnetpp_project.get_root_path()
+        if omnetpp_root is not None:
+            omnetpp_root = os.path.abspath(omnetpp_root)
+            omnetpp_git_root = _get_git_root(omnetpp_root)
+            if omnetpp_git_root == git_root:
+                omnetpp_project_copy = copy.copy(omnetpp_project)
+                omnetpp_rel = os.path.relpath(omnetpp_root, git_root)
+                omnetpp_project_copy.root_folder = worktree_path if omnetpp_rel == "." else os.path.join(worktree_path, omnetpp_rel)
+                project.omnetpp_project = omnetpp_project_copy
+
     return project
 
