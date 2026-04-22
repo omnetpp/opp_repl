@@ -44,6 +44,21 @@ all = [
 
 [project.scripts]
 opp_repl = "opp_repl.repl:run_repl_main"
+opp_build_project = "opp_repl.main:build_project_main"
+opp_run_simulations = "opp_repl.main:run_simulations_main"
+opp_run_all_tests = "opp_repl.main:run_all_tests_main"
+opp_run_chart_tests = "opp_repl.main:run_chart_tests_main"
+opp_run_feature_tests = "opp_repl.main:run_feature_tests_main"
+opp_run_fingerprint_tests = "opp_repl.main:run_fingerprint_tests_main"
+opp_run_release_tests = "opp_repl.main:run_release_tests_main"
+opp_run_sanitizer_tests = "opp_repl.main:run_sanitizer_tests_main"
+opp_run_smoke_tests = "opp_repl.main:run_smoke_tests_main"
+opp_run_speed_tests = "opp_repl.main:run_speed_tests_main"
+opp_run_statistical_tests = "opp_repl.main:run_statistical_tests_main"
+opp_update_charts = "opp_repl.main:update_charts_main"
+opp_update_correct_fingerprints = "opp_repl.main:update_correct_fingerprints_main"
+opp_update_speed_results = "opp_repl.main:update_speed_results_main"
+opp_update_statistical_results = "opp_repl.main:update_statistical_results_main"
 
 [tool.setuptools.packages.find]
 include = ["opp_repl*"]

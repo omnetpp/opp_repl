@@ -109,32 +109,17 @@ def run_fingerprint_tests_main():
 def run_chart_tests_main():
     run_tasks_main(run_chart_tests, "chart tests")
 
+def run_feature_tests_main():
+    run_tasks_main(run_feature_tests, "feature tests")
+
 def run_sanitizer_tests_main():
     run_tasks_main(run_sanitizer_tests, "sanitizer tests")
-
-def run_module_tests_main():
-    run_tasks_main(run_module_tests, "module tests")
-
-def run_packet_tests_main():
-    run_tasks_main(run_packet_tests, "packet tests")
-
-def run_protocol_tests_main():
-    run_tasks_main(run_protocol_tests, "protocol tests")
-
-def run_queueing_tests_main():
-    run_tasks_main(run_queueing_tests, "queueing tests")
 
 def run_speed_tests_main():
     run_tasks_main(run_speed_tests, "speed tests")
 
 def run_statistical_tests_main():
     run_tasks_main(run_statistical_tests, "statistical tests")
-
-def run_unit_tests_main():
-    run_tasks_main(run_unit_tests, "unit tests")
-
-def run_validation_tests_main():
-    run_tasks_main(run_validation_tests, "validation tests")
 
 def run_all_tests_main():
     run_tasks_main(run_all_tests, "tests")
@@ -144,6 +129,15 @@ def run_release_tests_main():
 
 def update_correct_fingerprints_main():
     run_tasks_main(update_correct_fingerprints, "update correct fingerprints")
+
+def update_charts_main():
+    run_tasks_main(update_charts, "update charts")
+
+def update_statistical_results_main():
+    run_tasks_main(update_statistical_results, "update statistical results")
+
+def update_speed_results_main():
+    run_tasks_main(update_speed_test_results, "update speed results")
 
 def parse_build_project_arguments():
     description = "Builds the specified or enclosing simulation project."
