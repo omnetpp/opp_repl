@@ -27,6 +27,9 @@ optimize = [
 github = [
     "requests",
 ]
+ide = [
+    "py4j",
+]
 all = [
     "dask",
     "distributed",
@@ -34,6 +37,7 @@ all = [
     "mcp",
     "numpy",
     "optimparallel",
+    "py4j",
     "requests",
     "scipy",
 ]
