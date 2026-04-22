@@ -477,6 +477,21 @@ def load_opp_file(path):
     """
     return get_default_simulation_workspace().load_opp_file(path)
 
+def get_omnetpp_project_variables():
+    """Return a dict mapping ``{name}_project`` to each loaded OMNeT++ project.
+
+    Hyphens and dots in project names are replaced with underscores so that the
+    keys are valid Python identifiers.  This is intended to be injected into the
+    REPL namespace at startup, e.g.::
+
+        globals().update(get_omnetpp_project_variables())
+    """
+    result = {}
+    for name, project in get_default_simulation_workspace().get_omnetpp_projects().items():
+        var_name = name.replace('-', '_').replace('.', '_') + '_project'
+        result[var_name] = project
+    return result
+
 def get_simulation_project_variables():
     """Return a dict mapping ``{name}_project`` to each loaded simulation project.
 

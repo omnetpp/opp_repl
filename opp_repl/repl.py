@@ -54,7 +54,7 @@ def run_repl_main():
             app = IPython.terminal.ipapp.TerminalIPythonApp.instance()
             app.interactive_shell_class = TerminalInteractiveShell
             app.display_banner = False
-            app.exec_lines = ["import opp_repl", "from opp_repl import *", "enable_autoreload()", "import_user_module()", "globals().update(get_simulation_project_variables())"] # "register_key_bindings()"
+            app.exec_lines = ["import opp_repl", "from opp_repl import *", "enable_autoreload()", "import_user_module()", "globals().update(get_omnetpp_project_variables())", "globals().update(get_simulation_project_variables())"] # "register_key_bindings()"
             app.initialize(argv=[])
             _logger.info("OMNeT++ Python support is loaded.")
             app.start()
