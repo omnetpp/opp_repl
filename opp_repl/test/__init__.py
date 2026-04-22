@@ -12,6 +12,7 @@ It provides several functions to run various tests:
 import importlib.util
 
 from opp_repl.test.all import *
+from opp_repl.test.bisect import *
 from opp_repl.test.coverage import *
 from opp_repl.test.feature import *
 from opp_repl.test.fingerprint import *
