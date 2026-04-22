@@ -495,6 +495,32 @@ update_correct_fingerprints(simulation_project=inet_project,
                             sim_time_limit="10s")
 ```
 
+From the command line:
+
+```bash
+# Store correct fingerprints for the fifo sample project
+opp_update_correct_fingerprints --load "/home/levy/workspace/omnetpp/**/*.opp" -p fifo
+```
+
+```
+[0/8] ▶ 7 fifo update fingerprints (concurrently)
+[1/8]   ⏺ Updating fingerprint . -c TandemQueueExperiment -r 2 for 200s INSERT b654-75cc/tplx
+...
+[8/8] ◉ 7 fifo update fingerprints (concurrently) Multiple update fingerprints: 7 INSERT in 2.431
+```
+
+```bash
+# Verify against stored values
+opp_run_fingerprint_tests --load "/home/levy/workspace/omnetpp/**/*.opp" -p fifo
+```
+
+```
+[00/8] ▶ 7 fifo fingerprint tests (concurrently)
+[01/8]   ⏺ Checking fingerprint . -c TandemQueueExperiment -r 2 for 200s PASS in 0.015
+...
+[08/8] ◉ 7 fifo fingerprint tests (concurrently) Multiple fingerprint tests: 7 PASS in 3.01
+```
+
 ### Statistical tests
 
 Statistical tests detect regressions in simulation scalar results by
