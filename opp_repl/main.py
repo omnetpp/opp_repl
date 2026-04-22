@@ -1,12 +1,15 @@
 import argparse
+import importlib.util
 import logging
 import socket
 import sys
 
-# from opp_repl.common.cluster import *
 from opp_repl.simulation.project import *
 from opp_repl.simulation.task import *
 from opp_repl.test import *
+
+if importlib.util.find_spec("dask"):
+    from opp_repl.common.cluster import *
 
 __sphinx_mock__ = True # ignore this module in documentation
 
