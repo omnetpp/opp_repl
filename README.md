@@ -25,11 +25,13 @@ First, source the OMNeT++ environment:
 . /path/to/omnetpp/setenv
 ```
 
-Then launch the REPL:
+Then launch the REPL using existing omnetpp installation:
 
 ```bash
 opp_repl --load "etc/*.opp"
 ```
+
+Then run simulations from the REPL:
 
 ```python
 In [1]: run_simulations(simulation_project=fifo_project)

@@ -1,25 +1,25 @@
 # Overview
 
-opp_repl is an interactive Python environment for OMNeT++ — run simulations,
-analyze results, and automate testing from an IPython shell or the command
-line.  See [Installation](installation.md) for setup and
-[Getting started](getting_started.md) for a hands-on walkthrough.
+This page lists the full feature set, the interactive workflow, and the
+available command-line tools.  See [Installation](installation.md) for setup
+and [Getting started](getting_started.md) for a hands-on walkthrough.
 
 ## Features
 
+- **Build projects** — build simulation binaries from Python
 - **Run simulations** — run all or filtered simulations from a project,
   sequentially or concurrently, on localhost or an SSH cluster
-- **Build projects** — build simulation binaries from Python
 - **Simulation comparison** — compare stdout trajectories, fingerprint trajectories, and scalar results between two projects or git commits
 - **Parameter optimization** — find simulation parameter values that produce desired results using derivative-free optimization
 - **Smoke tests** — verify that simulations start and terminate without crashing
 - **Fingerprint tests** — detect behavioral regressions by comparing event fingerprints against a stored baseline
 - **Statistical tests** — detect regressions in scalar results by comparing against stored baseline values
-- **Chart tests** — detect visual regressions by comparing rendered analysis charts against baseline images
 - **Speed tests** — detect performance regressions by comparing CPU instruction counts against a baseline
-- **Feature tests** — verify that projects build and simulations set up correctly with different optional feature combinations
+- **Chart tests** — detect visual regressions by comparing rendered analysis charts against baseline images
 - **Sanitizer tests** — find memory errors and undefined behavior using AddressSanitizer / UBSan instrumentation
+- **Feature tests** — verify that projects build and simulations set up correctly with different optional feature combinations
 - **Release tests** — run a comprehensive validation suite for release builds
+- **Test bisect** — find the git commit that introduced a test failure using binary search
 - **Coverage reports** — generate C++ line-coverage reports using LLVM's coverage tools
 - **Overlay builds** — out-of-tree builds using fuse-overlayfs on top of read-only source trees
 - **SSH cluster execution** — distribute simulation tasks across multiple machines using Dask
@@ -55,13 +55,23 @@ convenience variables, user modules, etc.).
 
 ## Command-line tools
 
-Every REPL function has a corresponding command-line tool:
+Many REPL functions have corresponding command-line tools:
 
 - `opp_repl` — interactive Python interpreter
 - `opp_build_project` — build a simulation project
 - `opp_run_simulations` — run simulations matching a filter
 - `opp_run_all_tests` — run all tests
-- `opp_run_smoke_tests`, `opp_run_fingerprint_tests`, `opp_run_statistical_tests`, `opp_run_speed_tests`, `opp_run_chart_tests`, `opp_run_sanitizer_tests`, `opp_run_feature_tests`, `opp_run_release_tests` — run specific test types
-- `opp_update_correct_fingerprints`, `opp_update_speed_results`, `opp_update_statistical_results`, `opp_update_charts` — update baselines
+- `opp_run_smoke_tests` — verify simulations start and terminate without crashing
+- `opp_run_fingerprint_tests` — detect behavioral regressions via event fingerprints
+- `opp_run_statistical_tests` — detect regressions in scalar results
+- `opp_run_speed_tests` — detect performance regressions via CPU instruction counts
+- `opp_run_chart_tests` — detect visual regressions in analysis charts
+- `opp_run_sanitizer_tests` — find memory errors and undefined behavior
+- `opp_run_feature_tests` — verify builds with different optional feature combinations
+- `opp_run_release_tests` — run a comprehensive validation suite
+- `opp_update_correct_fingerprints` — update the fingerprint baseline
+- `opp_update_speed_results` — update the speed test baseline
+- `opp_update_statistical_results` — update the statistical test baseline
+- `opp_update_charts` — update the chart test baseline images
 
 All tools print their options when run with `-h`.
