@@ -107,6 +107,25 @@ OmnetppProject(
 )
 ```
 
+## Automatic detection
+
+When a simulation project references an OMNeT++ project by name (e.g.
+`omnetpp_project="omnetpp"`) and no project with that name has been
+registered, opp_repl automatically creates one from the
+`__omnetpp_root_dir` environment variable.  This means you do not need to
+write or load an `omnetpp.opp` file for the standard case — as long as
+`__omnetpp_root_dir` is set (which is done by the OMNeT++ `setenv` script),
+everything works out of the box:
+
+```bash
+cd ~/workspace/omnetpp/samples/aloha
+opp_run_simulations --filter PureAloha -t 1s
+```
+
+If you need to customize the OMNeT++ project (e.g. overlay builds or
+opp_env integration), define it explicitly via a `.opp` file or
+`define_omnetpp_project()`.
+
 ## Looking up projects
 
 At REPL startup, every loaded OMNeT++ project is injected as a convenience

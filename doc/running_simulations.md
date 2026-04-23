@@ -85,9 +85,17 @@ concurrency options, cancellation, and `get_simulation_tasks()`.
 cd ~/workspace/omnetpp/samples/fifo
 opp_run_simulations
 
+# Load a standalone .opp file — no omnetpp.opp needed when __omnetpp_root_dir is set
+opp_run_simulations --load aloha.opp --filter PureAloha -t 1s
+
 # Run on a SSH cluster in debug mode with a filter and time limit
 opp_run_simulations -m debug -t 1s --filter PureAlohaExperiment --hosts node1.local,node2.local
 ```
+
+> **Note:** The OMNeT++ project is auto-detected from the `__omnetpp_root_dir`
+> environment variable (set by the OMNeT++ `setenv` script).  You only need to
+> load an `omnetpp.opp` file explicitly when using a non-standard installation.
+> See [OMNeT++ projects — Automatic detection](omnetpp_projects.md#automatic-detection).
 
 ## Loading projects at runtime
 
