@@ -19,6 +19,14 @@ and environment setup.
 
 ## Quick Start
 
+First, source the OMNeT++ environment:
+
+```bash
+. /path/to/omnetpp/setenv
+```
+
+Then launch the REPL:
+
 ```bash
 opp_repl --load "etc/*.opp"
 ```
