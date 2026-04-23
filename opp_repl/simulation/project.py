@@ -160,6 +160,7 @@ class OmnetppProject:
             if lib_dir not in env.get("LD_LIBRARY_PATH", "").split(os.pathsep):
                 env["LD_LIBRARY_PATH"] = lib_dir + os.pathsep + env.get("LD_LIBRARY_PATH", "")
             env.setdefault("CCACHE_BASEDIR", root)
+            env.setdefault("CCACHE_NOHASHDIR", "true")
         return env
 
     def build(self, mode="release"):
@@ -443,6 +444,7 @@ class SimulationProject:
         root = self.get_root_path()
         if root is not None:
             env.setdefault("CCACHE_BASEDIR", root)
+            env.setdefault("CCACHE_NOHASHDIR", "true")
         ws = getattr(self, '_workspace', None) or get_default_simulation_workspace()
         for used_project_name in self.used_projects:
             used_project = ws.get_simulation_project(used_project_name, None)
