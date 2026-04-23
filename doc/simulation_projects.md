@@ -7,7 +7,7 @@ Examples include INET, Simu5G, or any of the OMNeT++ sample projects.
 ## Defining a project
 
 Projects are defined in `.opp` descriptor files (see
-[opp_files.md](opp_files.md) for the full format).  A minimal example:
+[OPP files](opp_files.md) for the full format).  A minimal example:
 
 ```python
 SimulationProject(

@@ -61,5 +61,5 @@ is useful in multi-line REPL scripts where you want to bail out early.
 ## MCP server
 
 When started with `--mcp-port`, the REPL exposes its functions to AI
-assistants via the Model Context Protocol.  See [mcp_server.md](mcp_server.md)
+assistants via the Model Context Protocol.  See [MCP server](mcp_server.md)
 for details.

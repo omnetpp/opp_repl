@@ -68,7 +68,7 @@ configs = p.get_simulation_configs(
 
 Each config expands into one or more simulation tasks — one per run number.
 The `get_simulation_tasks()` function performs this expansion and applies
-additional run-number filtering.  See [tasks.md](tasks.md) for details.
+additional run-number filtering.  See [Simulation tasks](tasks.md) for details.
 
 ## Number of runs
 
