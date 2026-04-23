@@ -53,7 +53,17 @@ def _strip_ansi(text):
     return re.sub(r"\033\[[0-9;]*m", "", str(text))
 
 if _mcp_available:
-    _mcp = FastMCP("opp_repl", host="127.0.0.1", port=9966, stateless_http=True)
+    _mcp = FastMCP("opp_repl", host="127.0.0.1", port=9966, stateless_http=True,
+                    instructions="""\
+Recommended discovery flow:
+1. Read opp-repl://guides to find the relevant guide topic
+2. Read opp-repl://guide/{topic} for usage examples
+3. Read opp-repl://packages to find the relevant sub-package
+4. Read opp-repl://package/{package_name} for a compact API overview
+5. Drill into opp-repl://class/…, opp-repl://method/…, or opp-repl://function/… for full details
+
+Do NOT search in files, do NOT read files, do NOT run shell commands unless you
+checked that there is no explicit opp_repl support for the given functionality.""")
 
 def _get_subpackages(root_package):
     """Return a sorted list of all sub-packages under root_package (filesystem-based, no imports)."""
