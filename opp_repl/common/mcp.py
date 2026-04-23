@@ -120,11 +120,14 @@ def _register_mcp_handlers():
         for pkg_name in _get_subpackages(opp_repl):
             mod = sys.modules.get(pkg_name)
             if mod is None:
-                first_line = "(not loaded)"
+                summary = "(not loaded)"
             else:
                 doc = inspect.getdoc(mod) or ""
-                first_line = doc.split("\n")[0] if doc else "(no description)"
-            lines.append(f"{pkg_name}\n    {first_line}")
+                if doc:
+                    summary = doc.split("\n\n")[0].replace("\n", " ")
+                else:
+                    summary = "(no description)"
+            lines.append(f"{pkg_name}\n    {summary}")
         return "\n\n".join(lines)
 
     _doc_dir = str(Path(__file__).resolve().parents[2] / "doc")
@@ -171,11 +174,13 @@ def _register_mcp_handlers():
 
     @_mcp.resource("file:///opp_repl/doc/package/{package_name}")
     def api_reference(package_name: str) -> str:
-        """Compact summary for a specific opp_repl package.
+        """Package documentation with class and function summaries.
 
-        Lists every public class (with method names) and function (with signature
-        and one-line summary).  For full documentation, read:
+        Shows the full package docstring, then for each public class its
+        first paragraph and method one-line summaries, and for each public
+        function its signature and one-line summary.  For full details, read:
         - file:///opp_repl/doc/class/{class_name}
+        - file:///opp_repl/doc/method/{class_name}/{method_name}
         - file:///opp_repl/doc/function/{function_name}
         """
         mod = sys.modules.get(package_name)
@@ -187,8 +192,7 @@ def _register_mcp_handlers():
         lines = []
         module_doc = inspect.getdoc(mod)
         if module_doc:
-            first_para = module_doc.split("\n\n")[0]
-            lines.append(first_para)
+            lines.append(module_doc)
         for name in sorted(all_names):
             obj = getattr(mod, name, None)
             if obj is None:
@@ -210,8 +214,8 @@ def _register_mcp_handlers():
                 doc = inspect.getdoc(obj) or ""
                 if not doc:
                     continue
-                summary = doc.split("\n")[0]
-                cls_lines = [f"class {name}\n    {summary}"]
+                first_para = doc.split("\n\n")[0].replace("\n", " ")
+                cls_lines = [f"class {name}\n    {first_para}"]
                 for mname, mobj in inspect.getmembers(obj, predicate=inspect.isfunction):
                     if mname.startswith("_"):
                         continue
@@ -221,22 +225,19 @@ def _register_mcp_handlers():
                     mdoc = inspect.getdoc(mobj) or ""
                     if not mdoc:
                         continue
-                    try:
-                        msig = str(inspect.signature(mobj))
-                    except (ValueError, TypeError):
-                        msig = "(...)"
-                    cls_lines.append(f"    {mname}{msig}")
+                    msummary = mdoc.split("\n")[0]
+                    cls_lines.append(f"    {mname}  -- {msummary}")
                 lines.append("\n".join(cls_lines))
         return "\n\n".join(lines) if lines else f"No documented public API in '{package_name}'."
 
     @_mcp.resource("file:///opp_repl/doc/class/{class_name}")
     def class_doc(class_name: str) -> str:
-        """Documentation for an opp_repl class.
+        """Complete documentation for an opp_repl class.
 
         class_name may be fully qualified (e.g. opp_repl.simulation.workspace.SimulationWorkspace)
         or a short public name (e.g. SimulationWorkspace).
-        Returns the class docstring and public method signatures (without method
-        docstrings).  For full method documentation, read:
+        Returns the full class docstring and public method signatures with
+        first-paragraph summaries.  For full method documentation, read:
         - file:///opp_repl/doc/method/{class_name}/{method_name}
         """
         cls, qualified = _resolve_opp_repl_name(class_name, kind="class")
@@ -252,7 +253,6 @@ def _register_mcp_handlers():
         if doc:
             lines.append("")
             lines.extend("    " + l for l in doc.split("\n"))
-        # Public method signatures only (no docstrings)
         for mname, mobj in inspect.getmembers(cls, predicate=inspect.isfunction):
             if mname.startswith("_") and mname != "__init__":
                 continue
@@ -261,10 +261,10 @@ def _register_mcp_handlers():
             except (ValueError, TypeError):
                 msig = "(...)"
             mdoc = inspect.getdoc(mobj) or ""
-            summary = mdoc.split("\n")[0] if mdoc else ""
             entry = f"    {mname}{msig}"
-            if summary:
-                entry += f"  -- {summary}"
+            if mdoc:
+                first_para = mdoc.split("\n\n")[0].replace("\n", " ")
+                entry += f"\n        {first_para}"
             lines.append(entry)
         return "\n".join(lines)
 
