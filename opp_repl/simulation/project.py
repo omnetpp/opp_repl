@@ -40,13 +40,13 @@ class OmnetppProject:
     Represents a specific OMNeT++ installation with all its options. Used to locate the OMNeT++ root directory,
     resolve executables like ``opp_run``, and determine library suffixes for different build modes.
 
-    Optionally supports overlay builds via fuse-overlayfs.  When *overlay_key*
+    Optionally supports overlay builds via fuse-overlayfs.  When *overlay_name*
     is given, an :py:class:`OverlayMount` is created and all paths resolve to
     the overlay's merged directory instead of the original source tree.
     """
 
     def __init__(self, root_folder_environment_variable="__omnetpp_root_dir", root_folder=None,
-                 overlay_key=None, build_root=None, opp_env_workspace=None, opp_env_project=None):
+                 overlay_name=None, overlay_build_root=None, opp_env_workspace=None, opp_env_project=None):
         """
         Initializes a new OMNeT++ project.
 
@@ -57,12 +57,12 @@ class OmnetppProject:
             root_folder (string or None):
                 The root folder of the OMNeT++ installation. If specified, it is used instead of the environment variable.
 
-            overlay_key (str or None):
+            overlay_name (str or None):
                 If set, enables overlay mode.  An :py:class:`OverlayMount` is
-                created with this key and all paths resolve to the overlay's
+                created with this name and all paths resolve to the overlay's
                 merged directory.
 
-            build_root (str or None):
+            overlay_build_root (str or None):
                 Override for the overlay build root directory.
         """
         self.root_folder_environment_variable = root_folder_environment_variable
@@ -70,12 +70,12 @@ class OmnetppProject:
         self.opp_env_workspace = opp_env_workspace
         self.opp_env_project = opp_env_project
         self._overlay = None
-        if overlay_key is not None:
+        if overlay_name is not None:
             from opp_repl.simulation.overlay import OverlayMount
             source_root = self._resolve_source_root()
             if source_root is None:
                 raise RuntimeError("Cannot create overlay: root path is not set")
-            self._overlay = OverlayMount(source_root, overlay_key, build_root)
+            self._overlay = OverlayMount(source_root, overlay_name, overlay_build_root)
             self.root_folder = self._overlay.merged_path
 
     def _resolve_source_root(self):
@@ -87,7 +87,7 @@ class OmnetppProject:
             return None
 
     def __repr__(self):
-        overlay = f", overlay={self._overlay.overlay_key!r}" if self._overlay else ""
+        overlay = f", overlay={self._overlay.overlay_name!r}" if self._overlay else ""
         return f"OmnetppProject(root_folder_environment_variable={self.root_folder_environment_variable!r}, root_folder={self.root_folder!r}{overlay})"
 
     def get_root_path(self):
@@ -241,7 +241,7 @@ class SimulationProject:
                  include_folders=["."], cpp_folders=["."], cpp_defines=[], msg_folders=["."],
                  media_folder=".", statistics_folder=".", fingerprint_store="fingerprint.json", speed_store="speed.json",
                  used_projects=[], external_bin_folders=[], external_library_folders=[], external_libraries=[], external_include_folders=[],
-                 simulation_configs=None, overlay_key=None, build_root=None, opp_env_workspace=None, opp_env_project=None,
+                 simulation_configs=None, overlay_name=None, overlay_build_root=None, opp_env_workspace=None, opp_env_project=None,
                  github_owner=None, github_repository=None, github_workflows=None, **kwargs):
         """
         Initializes a new simulation project.
@@ -348,12 +348,12 @@ class SimulationProject:
             simulation_configs (List of :py:class:`SimulationConfig <opp_repl.simulation.config.SimulationConfig>`):
                 The list of simulation configs available in this simulation project.
 
-            overlay_key (str or None):
+            overlay_name (str or None):
                 If set, enables overlay mode.  An :py:class:`OverlayMount` is
-                created with this key and all paths resolve to the overlay's
+                created with this name and all paths resolve to the overlay's
                 merged directory.
 
-            build_root (str or None):
+            overlay_build_root (str or None):
                 Override for the overlay build root directory.
 
             opp_env_workspace (str or None):
@@ -426,12 +426,12 @@ class SimulationProject:
         self.github_workflows = github_workflows
         self.binary_simulation_distribution_file_paths = None
         self._overlay = None
-        if overlay_key is not None:
+        if overlay_name is not None:
             from opp_repl.simulation.overlay import OverlayMount
             source_root = self.get_root_path()
             if source_root is None:
                 raise RuntimeError("Cannot create overlay: root path is not set")
-            self._overlay = OverlayMount(source_root, overlay_key, build_root)
+            self._overlay = OverlayMount(source_root, overlay_name, overlay_build_root)
             self.root_folder = self._overlay.merged_path
             self.simulation_configs = None
 

@@ -23,15 +23,15 @@ class OverlayMount:
 
     Parameters:
         lower_dir (str): Absolute path to the read-only source tree.
-        overlay_key (str): Unique key used as subdirectory name under the build root.
+        overlay_name (str): Unique name used as subdirectory under the build root.
         build_root (str or None): Override for the build root directory.
     """
 
-    def __init__(self, lower_dir, overlay_key, build_root=None):
+    def __init__(self, lower_dir, overlay_name, build_root=None):
         self.lower_dir = os.path.realpath(lower_dir)
-        self.overlay_key = overlay_key
+        self.overlay_name = overlay_name
         self.build_root = build_root or get_build_root()
-        self._base_dir = os.path.join(self.build_root, self.overlay_key)
+        self._base_dir = os.path.join(self.build_root, self.overlay_name)
         self.upper_dir = os.path.join(self._base_dir, "upper")
         self.work_dir = os.path.join(self._base_dir, "work")
         self._merged_dir = os.path.join(self._base_dir, "merged")
@@ -61,7 +61,7 @@ class OverlayMount:
             str: The merged mount-point path.
         """
         if self.is_mounted():
-            _logger.debug("Overlay %s already mounted at %s", self.overlay_key, self._merged_dir)
+            _logger.debug("Overlay %s already mounted at %s", self.overlay_name, self._merged_dir)
             return self._merged_dir
         for d in (self.upper_dir, self.work_dir, self._merged_dir):
             os.makedirs(d, exist_ok=True)
@@ -70,11 +70,11 @@ class OverlayMount:
             "-o", f"lowerdir={self.lower_dir},upperdir={self.upper_dir},workdir={self.work_dir}",
             self._merged_dir,
         ]
-        _logger.info("Mounting overlay %s: %s -> %s", self.overlay_key, self.lower_dir, self._merged_dir)
+        _logger.info("Mounting overlay %s: %s -> %s", self.overlay_name, self.lower_dir, self._merged_dir)
         result = subprocess.run(cmd, capture_output=True, text=True)
         if result.returncode != 0:
             raise RuntimeError(
-                f"fuse-overlayfs failed for {self.overlay_key}: {result.stderr.strip()}"
+                f"fuse-overlayfs failed for {self.overlay_name}: {result.stderr.strip()}"
             )
         return self._merged_dir
 
@@ -83,11 +83,11 @@ class OverlayMount:
         if not self.is_mounted():
             return
         cmd = ["fusermount", "-u", self._merged_dir]
-        _logger.info("Unmounting overlay %s at %s", self.overlay_key, self._merged_dir)
+        _logger.info("Unmounting overlay %s at %s", self.overlay_name, self._merged_dir)
         result = subprocess.run(cmd, capture_output=True, text=True)
         if result.returncode != 0:
             raise RuntimeError(
-                f"fusermount -u failed for {self.overlay_key}: {result.stderr.strip()}"
+                f"fusermount -u failed for {self.overlay_name}: {result.stderr.strip()}"
             )
 
     def clean(self):
@@ -97,18 +97,18 @@ class OverlayMount:
         for d in (self.upper_dir, self.work_dir):
             if os.path.isdir(d):
                 shutil.rmtree(d)
-        _logger.info("Cleaned overlay %s", self.overlay_key)
+        _logger.info("Cleaned overlay %s", self.overlay_name)
 
     def __repr__(self):
         mounted = " MOUNTED" if self.is_mounted() else ""
-        return f"OverlayMount(key={self.overlay_key!r}, lower={self.lower_dir!r}{mounted})"
+        return f"OverlayMount(name={self.overlay_name!r}, lower={self.lower_dir!r}{mounted})"
 
 
 def list_overlays(build_root=None):
-    """List overlay keys that have directories under the build root.
+    """List overlay names that have directories under the build root.
 
     Returns:
-        list of str: overlay key names.
+        list of str: overlay names.
     """
     root = build_root or get_build_root()
     if not os.path.isdir(root):
@@ -139,23 +139,23 @@ def clear_build_root(build_root=None):
         _logger.info("Removed build root %s", root)
 
 
-def make_overlay_simulation_project(project, overlay_key=None, omnetpp_project=None, build_root=None):
+def make_overlay_simulation_project(project, overlay_name=None, omnetpp_project=None, overlay_build_root=None):
     """Create an overlay-backed copy of a SimulationProject.
 
     .. deprecated::
-        Use ``SimulationProject(..., overlay_key=..., build_root=...)`` instead.
+        Use ``SimulationProject(..., overlay_name=..., overlay_build_root=...)`` instead.
     """
     import copy
     import warnings
     warnings.warn(
-        "make_overlay_simulation_project is deprecated; pass overlay_key to SimulationProject() instead",
+        "make_overlay_simulation_project is deprecated; pass overlay_name to SimulationProject() instead",
         DeprecationWarning, stacklevel=2,
     )
     clone = copy.copy(project)
     overlay = OverlayMount(
         project.get_root_path(),
-        overlay_key or project.name,
-        build_root,
+        overlay_name or project.name,
+        overlay_build_root,
     )
     clone._overlay = overlay
     clone.root_folder = overlay.merged_path
@@ -165,24 +165,24 @@ def make_overlay_simulation_project(project, overlay_key=None, omnetpp_project=N
     return clone
 
 
-def make_overlay_omnetpp_project(project, overlay_key=None, build_root=None):
+def make_overlay_omnetpp_project(project, overlay_name=None, overlay_build_root=None):
     """Create an overlay-backed copy of an OmnetppProject.
 
     .. deprecated::
-        Use ``OmnetppProject(..., overlay_key=..., build_root=...)`` instead.
+        Use ``OmnetppProject(..., overlay_name=..., overlay_build_root=...)`` instead.
     """
     import copy
     import warnings
     warnings.warn(
-        "make_overlay_omnetpp_project is deprecated; pass overlay_key to OmnetppProject() instead",
+        "make_overlay_omnetpp_project is deprecated; pass overlay_name to OmnetppProject() instead",
         DeprecationWarning, stacklevel=2,
     )
     root = project.get_root_path()
     clone = copy.copy(project)
     overlay = OverlayMount(
         root,
-        overlay_key or os.path.basename(root),
-        build_root,
+        overlay_name or os.path.basename(root),
+        overlay_build_root,
     )
     clone._overlay = overlay
     clone.root_folder = overlay.merged_path

@@ -362,7 +362,7 @@ def _parse_opp_file(path):
             raise ValueError(f"{path}: parameter '{kw.arg}' must be a literal value: {e}")
     return class_name, kwargs
 
-_OPP_PATH_KEYS = ("root_folder", "build_root", "opp_env_workspace")
+_OPP_PATH_KEYS = ("root_folder", "overlay_build_root", "opp_env_workspace")
 
 def _resolve_opp_paths(opp_file_path, kwargs):
     """Resolve relative path values in *kwargs* against the ``.opp`` file's directory."""
