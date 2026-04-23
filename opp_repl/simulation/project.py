@@ -159,7 +159,9 @@ class OmnetppProject:
                 env["PATH"] = bin_dir + os.pathsep + env.get("PATH", "")
             if lib_dir not in env.get("LD_LIBRARY_PATH", "").split(os.pathsep):
                 env["LD_LIBRARY_PATH"] = lib_dir + os.pathsep + env.get("LD_LIBRARY_PATH", "")
+            # CCACHE_BASEDIR: make paths relative so builds in different worktrees can share the cache
             env.setdefault("CCACHE_BASEDIR", root)
+            # CCACHE_NOHASHDIR: don't hash the CWD so worktrees at different absolute paths still hit the cache
             env.setdefault("CCACHE_NOHASHDIR", "true")
         return env
 
@@ -461,7 +463,9 @@ class SimulationProject:
                 env["LD_LIBRARY_PATH"] = lib_dir + os.pathsep + env.get("LD_LIBRARY_PATH", "")
         root = self.get_root_path()
         if root is not None:
+            # CCACHE_BASEDIR: make paths relative so builds in different worktrees can share the cache
             env.setdefault("CCACHE_BASEDIR", root)
+            # CCACHE_NOHASHDIR: don't hash the CWD so worktrees at different absolute paths still hit the cache
             env.setdefault("CCACHE_NOHASHDIR", "true")
         ws = getattr(self, '_workspace', None) or get_default_simulation_workspace()
         for used_project_name in self.used_projects:
