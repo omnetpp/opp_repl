@@ -194,9 +194,27 @@ class OmnetppProject:
             return self._overlay.is_mounted()
         return False
 
-    def clean(self):
+    def clean(self, mode="release"):
         if self._overlay is not None:
             self._overlay.clean()
+        else:
+            root = self.get_root_path()
+            if root is None:
+                raise RuntimeError("Cannot clean OMNeT++: root path is not set")
+            if not os.path.isfile(os.path.join(root, "Makefile")):
+                _logger.info("Cleaning OMNeT++ in %s mode at %s skipped (no Makefile)", mode, root)
+                return
+            env = self.get_env()
+            args = ["make", "MODE=" + mode, "-j", str(multiprocessing.cpu_count()), "clean"]
+            _logger.info("Cleaning OMNeT++ in %s mode at %s started", mode, root)
+            if self.opp_env_workspace:
+                opp_env_project = self.opp_env_project or self.name
+                shell_cmd = "cd " + shlex.quote(root) + " && " + shlex.join(args)
+                args = ["opp_env", "-l", "WARN", "run", opp_env_project, "-w", self.opp_env_workspace, "-c", shell_cmd]
+                run_command_with_logging(args, error_message="Cleaning OMNeT++ failed")
+            else:
+                run_command_with_logging(args, cwd=root, env=env, error_message="Cleaning OMNeT++ failed")
+            _logger.info("Cleaning OMNeT++ in %s mode at %s ended", mode, root)
 
 _default_omnetpp_project = None
 
