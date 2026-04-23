@@ -142,7 +142,8 @@ def bisect_simulations_between_commits(simulation_project, good_hash, bad_hash, 
     # Verify that good_hash is actually good
     good_project = make_worktree_simulation_project(simulation_project, good_hash)
     if update_good_results_function is not None:
-        run_with_log_levels(lambda: update_good_results_function(simulation_project=good_project, output_stream=io.StringIO(), **kwargs), python_log_level=build_log_level)
+        run_with_log_levels(good_project.build, python_log_level=build_log_level)
+        run_with_log_levels(lambda: update_good_results_function(simulation_project=good_project, output_stream=io.StringIO(), **kwargs), python_log_level=simulation_log_level)
     kwargs.setdefault("baseline_simulation_project", good_project)
     good_run_result, good_is_good = run_and_record(good_hash, "Verifying good")
     if not good_is_good:
