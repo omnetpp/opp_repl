@@ -133,11 +133,8 @@ class SimulationWorkspace:
         else:
             simulation_project = self.find_simulation_project_from_current_working_directory(**kwargs)
         if simulation_project is None:
-            message = "No enclosing simulation project is found from current working directory, and no simulation project is specified explicitly"
             if required:
-                raise Exception(message)
-            else:
-                _logger.warn(message)
+                raise Exception("No enclosing simulation project is found from current working directory, and no simulation project is specified explicitly")
         else:
             _logger.info(f"Default project is set to {simulation_project.name}")
         self.set_default_simulation_project(simulation_project)
