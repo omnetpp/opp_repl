@@ -45,13 +45,13 @@ class OmnetppProject:
     the overlay's merged directory instead of the original source tree.
     """
 
-    def __init__(self, environment_variable="__omnetpp_root_dir", root_folder=None,
+    def __init__(self, root_folder_environment_variable="__omnetpp_root_dir", root_folder=None,
                  overlay_key=None, build_root=None, opp_env_workspace=None, opp_env_project=None):
         """
         Initializes a new OMNeT++ project.
 
         Parameters:
-            environment_variable (string):
+            root_folder_environment_variable (string):
                 The operating system environment variable specifying the root folder of the OMNeT++ installation.
 
             root_folder (string or None):
@@ -65,7 +65,7 @@ class OmnetppProject:
             build_root (str or None):
                 Override for the overlay build root directory.
         """
-        self.environment_variable = environment_variable
+        self.root_folder_environment_variable = root_folder_environment_variable
         self.root_folder = root_folder
         self.opp_env_workspace = opp_env_workspace
         self.opp_env_project = opp_env_project
@@ -81,20 +81,20 @@ class OmnetppProject:
     def _resolve_source_root(self):
         if self.root_folder is not None:
             return os.path.abspath(self.root_folder)
-        elif self.environment_variable is not None and self.environment_variable in os.environ:
-            return os.path.abspath(os.environ[self.environment_variable])
+        elif self.root_folder_environment_variable is not None and self.root_folder_environment_variable in os.environ:
+            return os.path.abspath(os.environ[self.root_folder_environment_variable])
         else:
             return None
 
     def __repr__(self):
         overlay = f", overlay={self._overlay.overlay_key!r}" if self._overlay else ""
-        return f"OmnetppProject(environment_variable={self.environment_variable!r}, root_folder={self.root_folder!r}{overlay})"
+        return f"OmnetppProject(root_folder_environment_variable={self.root_folder_environment_variable!r}, root_folder={self.root_folder!r}{overlay})"
 
     def get_root_path(self):
         if self.root_folder is not None:
             return os.path.abspath(self.root_folder)
-        elif self.environment_variable is not None and self.environment_variable in os.environ:
-            return os.path.abspath(os.environ[self.environment_variable])
+        elif self.root_folder_environment_variable is not None and self.root_folder_environment_variable in os.environ:
+            return os.path.abspath(os.environ[self.root_folder_environment_variable])
         else:
             return None
 
@@ -235,7 +235,7 @@ class SimulationProject:
     Please note that undocumented features are not supposed to be called by the user.
     """
 
-    def __init__(self, name, version=None, git_hash=None, git_diff_hash=None, folder_environment_variable=None, root_folder=None, folder=".", omnetpp_project=None,
+    def __init__(self, name, version=None, git_hash=None, git_diff_hash=None, root_folder_environment_variable=None, root_folder=None, root_folder_environment_variable_relative_folder=".", omnetpp_project=None,
                  bin_folder=".", library_folder=".", executables=None, dynamic_libraries=None, static_libraries=None, build_types=["dynamic library"],
                  ned_folders=["."], ned_exclusions=[], ini_file_folders=["."], python_folders=["python"], image_folders=["."],
                  include_folders=["."], cpp_folders=["."], cpp_defines=[], msg_folders=["."],
@@ -259,25 +259,25 @@ class SimulationProject:
             git_diff_hash (string):
                 The hash of the local modifications on top of the clean checkout of from the git repository.
 
-            folder_environment_variable (string):
-                The operating system environment variable.
+            root_folder_environment_variable (string):
+                The operating system environment variable specifying the root folder.
 
             root_folder (string or None):
-                The root folder of the simulation project. If specified, it is used instead of the folder_environment_variable environment variable.
+                The root folder of the simulation project. If specified, it is used instead of the root_folder_environment_variable environment variable.
 
             omnetpp_project (:py:class:`OmnetppProject` or None):
                 The OMNeT++ project representing the OMNeT++ installation to use.
                 If unspecified, defaults to the global ``default_omnetpp_project``
                 when an executable is needed (e.g. for running simulations).
 
-            folder (string):
-                The directory of the simulation project relative to the value of the folder_environment_variable attribute.
+            root_folder_environment_variable_relative_folder (string):
+                The directory of the simulation project relative to the value of the root_folder_environment_variable environment variable.
 
             bin_folder (string):
-                The directory of the binary output files relative to the value of the folder_environment_variable attribute.
+                The directory of the binary output files relative to the root folder.
 
             library_folder (string):
-                The directory of the library output files relative to the value of the folder_environment_variable attribute.
+                The directory of the library output files relative to the root folder.
 
             executables (List of strings):
                 The list of executables that are built.
@@ -292,31 +292,31 @@ class SimulationProject:
                 The list of build output types. Valid values are "executable", "dynamic library", "static library".
 
             ned_folders (List of strings):
-                The list of folder_environment_variable relative directories for NED files.
+                The list of root folder relative directories for NED files.
 
             ned_exclusions (List of strings):
                 The list of excluded NED packages.
 
             ini_file_folders (List of strings):
-                The list of folder_environment_variable relative directories for INI files.
+                The list of root folder relative directories for INI files.
 
             python_folders (List of strings):
-                The list of folder_environment_variable relative directories for Python source files.
+                The list of root folder relative directories for Python source files.
 
             image_folders (List of strings):
-                The list of folder_environment_variable relative directories for image files.
+                The list of root folder relative directories for image files.
 
             include_folders (List of strings):
-                The list of folder_environment_variable relative directories for C++ include files.
+                The list of root folder relative directories for C++ include files.
 
             cpp_folders (List of strings):
-                The list of folder_environment_variable relative directories for C++ source files.
+                The list of root folder relative directories for C++ source files.
 
             cpp_defines (List of strings):
                 The list of C++ macro definitions that are passed to the C++ compiler.
 
             msg_folders (List of strings):
-                The list of folder_environment_variable relative directories for MSG files.
+                The list of root folder relative directories for MSG files.
 
             media_folder (String):
                 The relative path of chart image files for chart tests.
@@ -382,9 +382,9 @@ class SimulationProject:
         """
         self.name = name
         self.version = version
-        self.folder_environment_variable = folder_environment_variable
+        self.root_folder_environment_variable = root_folder_environment_variable
         self.root_folder = root_folder
-        self.folder = folder
+        self.root_folder_environment_variable_relative_folder = root_folder_environment_variable_relative_folder
         self.omnetpp_project = omnetpp_project
         # TODO this is commented out because it runs subprocesses, and it even does this from the IDE when some completely unrelated modules are loaded, sigh!
         # self.git_hash = git_hash or run_command_with_logging(["git", "rev-parse", "HEAD"], cwd=self.get_full_path(".")).stdout.strip()
@@ -485,19 +485,19 @@ class SimulationProject:
     def get_root_path(self):
         if self.root_folder is not None:
             return os.path.abspath(self.root_folder)
-        elif self.folder_environment_variable is not None and self.folder_environment_variable in os.environ:
-            return os.path.abspath(os.environ[self.folder_environment_variable])
+        elif self.root_folder_environment_variable is not None and self.root_folder_environment_variable in os.environ:
+            return os.path.abspath(os.environ[self.root_folder_environment_variable])
         else:
             return None
 
     def get_full_path(self, path):
         root = self.get_root_path()
-        base = os.path.join(root, self.folder) if root is not None else None
+        base = os.path.join(root, self.root_folder_environment_variable_relative_folder) if root is not None else None
         return os.path.abspath(os.path.join(base, path)) if base is not None else None
 
     def get_relative_path(self, path):
         root = self.get_root_path()
-        base = os.path.join(root, self.folder) if root is not None else None
+        base = os.path.join(root, self.root_folder_environment_variable_relative_folder) if root is not None else None
         return os.path.relpath(path, base)
 
     def get_omnetpp_project(self):
@@ -518,7 +518,7 @@ class SimulationProject:
             return self.get_omnetpp_project().get_executable(mode=mode)
         else:
             suffix = "" if mode == "release" else self.get_omnetpp_project().get_library_suffix(mode=mode)
-            executable = os.path.join(self.folder, self.executables[0] + suffix)
+            executable = os.path.join(self.root_folder_environment_variable_relative_folder, self.executables[0] + suffix)
             root = self.get_root_path()
             return os.path.abspath(os.path.join(root, executable)) if root is not None else None
 

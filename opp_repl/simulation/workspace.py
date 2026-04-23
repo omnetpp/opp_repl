@@ -26,12 +26,12 @@ functions below instead of accessing the workspace directly:
 Example usage::
 
     simu5g = get_simulation_project("simu5g")
-    print(simu5g.folder)
+    print(simu5g.root_folder_environment_variable_relative_folder)
     print(simu5g.get_simulation_configs())
 
     ws = get_default_simulation_workspace()
     for (name, version), proj in ws.get_simulation_projects().items():
-        print(name, proj.folder)
+        print(name, proj.root_folder_environment_variable_relative_folder)
 
 Loading additional projects
 ---------------------------

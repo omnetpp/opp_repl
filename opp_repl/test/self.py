@@ -133,8 +133,8 @@ def process_arguments(args):
     return kwargs
 
 def define_self_test_projects():
-    define_simulation_project("aloha", folder_environment_variable="__omnetpp_root_dir", folder="samples/aloha")
-    define_simulation_project("tictoc", folder_environment_variable="__omnetpp_root_dir", folder="samples/tictoc")
+    define_simulation_project("aloha", root_folder_environment_variable="__omnetpp_root_dir", root_folder_environment_variable_relative_folder="samples/aloha")
+    define_simulation_project("tictoc", root_folder_environment_variable="__omnetpp_root_dir", root_folder_environment_variable_relative_folder="samples/tictoc")
 
 def run_self_tests_main():
     args = parse_arguments()
