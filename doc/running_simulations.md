@@ -5,8 +5,14 @@ handle results, and manage project loading and cleanup.
 
 ## Building Projects
 
-It's essential to make sure that the simulation project is built before running a simulation.
-opp_repl supports building the simulation project using Python functions:
+Building is implicit: `run_simulations()` automatically builds the project
+before running any simulation, so there is no need to build manually.  Stale
+binaries are not used by default — the build step ensures the binary is
+up-to-date with the current sources.  Pass `build=False` to skip this step
+when you know the binary is already current.
+
+If you need to trigger a build without running simulations, use
+`build_project()` directly:
 
 ```python
 p = get_simulation_project("inet")
@@ -14,10 +20,7 @@ build_project(simulation_project=p)
 build_project(simulation_project=p, mode="debug")
 ```
 
-The `build_project()` function runs the `make` command in the project root directory.
 The `mode` parameter selects the build mode (see Concepts guide for available modes).
-
-Note: `run_simulations()` automatically builds the project unless `build=False` is passed.
 
 ## Running Simulations
 
