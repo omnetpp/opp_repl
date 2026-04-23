@@ -1,7 +1,7 @@
 SimulationProject(
     name="tictoc",
-    folder_environment_variable="__omnetpp_root_dir",
-    folder="samples/tictoc",
+    root_folder_environment_variable="__omnetpp_root_dir",
+    root_folder_environment_variable_relative_folder="samples/tictoc",
     omnetpp_project="omnetpp",
     build_types=["executable"],
     ned_folders=["."],

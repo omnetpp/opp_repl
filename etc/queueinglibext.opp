@@ -1,7 +1,7 @@
 SimulationProject(
     name="queueinglibext",
-    folder_environment_variable="__omnetpp_root_dir",
-    folder="samples/queueinglibext",
+    root_folder_environment_variable="__omnetpp_root_dir",
+    root_folder_environment_variable_relative_folder="samples/queueinglibext",
     omnetpp_project="omnetpp",
     used_projects=["queueinglib"],
     ned_folders=["."],

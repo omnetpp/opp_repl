@@ -1,6 +1,6 @@
 SimulationProject(
     name="inet",
-    folder_environment_variable="INET_ROOT",
+    root_folder_environment_variable="INET_ROOT",
     bin_folder="bin",
     library_folder="src",
     executables=["INET"],

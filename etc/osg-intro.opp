@@ -1,7 +1,7 @@
 SimulationProject(
     name="osg-intro",
-    folder_environment_variable="__omnetpp_root_dir",
-    folder="samples/osg-intro",
+    root_folder_environment_variable="__omnetpp_root_dir",
+    root_folder_environment_variable_relative_folder="samples/osg-intro",
     omnetpp_project="omnetpp",
     build_types=["executable"],
     ned_folders=["."],
