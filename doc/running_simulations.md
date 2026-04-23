@@ -24,6 +24,10 @@ Note: `run_simulations()` automatically builds the project unless `build=False` 
 The `run_simulations()` function can run multiple simulations matching filter criteria.
 Simulations can run sequentially or concurrently, on the local computer or on an SSH cluster.
 
+> **Tip:** Every loaded project is available as a `{name}_project` variable
+> (hyphens/dots become underscores).  Use `get_simulation_project_variable_names()`
+> to list them.
+
 ```python
 # Run all simulations from a project
 run_simulations(simulation_project=fifo_project)

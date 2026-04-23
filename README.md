@@ -83,7 +83,7 @@ Detailed guides are in the [`doc/`](doc/) folder:
 - [**Overview**](doc/overview.md) — features, installation, CLI options, REPL features, command-line tools
 - [**Concepts**](doc/concepts.md) — core concepts (OmnetppProject, SimulationProject, configs, tasks, filtering, etc.)
 - [**OPP files**](doc/opp_files.md) — `.opp` file format, parameters, and example files
-- [**Projects**](doc/projects.md) — listing, inspecting, and selecting simulation projects
+- [**Simulation Projects**](doc/projects.md) — listing, inspecting, and selecting simulation projects
 - [**Running simulations**](doc/running_simulations.md) — running simulations, building projects, loading, cleaning
 - [**Smoke tests**](doc/smoke_tests.md) — smoke tests
 - [**Fingerprint tests**](doc/fingerprint_tests.md) — fingerprint tests
