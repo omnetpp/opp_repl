@@ -498,7 +498,14 @@ class SimulationProject:
     def get_omnetpp_project(self):
         if isinstance(self.omnetpp_project, str):
             ws = getattr(self, '_workspace', None) or get_default_simulation_workspace()
-            self.omnetpp_project = ws.get_omnetpp_project(self.omnetpp_project)
+            try:
+                self.omnetpp_project = ws.get_omnetpp_project(self.omnetpp_project)
+            except KeyError:
+                root = os.environ.get("__omnetpp_root_dir")
+                if root:
+                    self.omnetpp_project = ws.define_omnetpp_project(self.omnetpp_project, root_folder=root)
+                else:
+                    raise
         result = self.omnetpp_project or get_default_omnetpp_project()
         if result is None:
             ws = getattr(self, '_workspace', None) or get_default_simulation_workspace()
