@@ -1,4 +1,5 @@
 import argparse
+import glob
 import importlib.util
 import logging
 import socket
@@ -18,7 +19,7 @@ _logger = logging.getLogger(__name__)
 def parse_run_tasks_arguments(task_name):
     description = "Runs all " + task_name + " concurrently in the enclosing project, recursively from the current working directory, as separate processes on localhost."
     parser = argparse.ArgumentParser(description=description)
-    parser.add_argument("--load", action="append", default=[], metavar="OPP_FILE", help="load one or more .opp configuration files at startup, can be specified multiple times and supports glob patterns (e.g. --load '*.opp')")
+    parser.add_argument("--load", action="append", default=[], metavar="OPP_FILE", help="load one or more .opp configuration files at startup, can be specified multiple times and supports glob patterns (e.g. --load '*.opp'); if not specified, all *.opp files in the current working directory are loaded automatically")
     parser.add_argument("-p", "--simulation-project", default=None, help="name of the simulation project to use (auto-detected from the working directory if not specified)")
     parser.add_argument("-m", "--mode", choices=["debug", "release"], help="build mode of the simulation binaries (debug or release)")
     parser.add_argument("--build", action="store_true", help="build the simulation executable before running (default: enabled)")
@@ -54,8 +55,12 @@ def parse_run_tasks_arguments(task_name):
 
 def process_run_tasks_arguments(args):
     logging.getLogger("distributed.deploy.ssh").setLevel(args.log_level)
-    for opp_file in args.load:
-        load_opp_file(opp_file)
+    if args.load:
+        for opp_file in args.load:
+            load_opp_file(opp_file)
+    else:
+        for opp_file in sorted(glob.glob(os.path.join(os.getcwd(), "*.opp"))):
+            load_opp_file(opp_file)
     simulation_project = determine_default_simulation_project(name=args.simulation_project)
     kwargs = {k: v for k, v in vars(args).items() if v is not None}
     kwargs.pop("load", None)
@@ -152,13 +157,17 @@ def parse_build_project_arguments():
     parser.add_argument("--external-command-log-level", choices=["ERROR", "WARN", "INFO", "DEBUG"], default="INFO", help="controls the verbosity of log messages from build tools and compilers (default: INFO)")
     parser.add_argument("--log-file", default="build.log", help="write all log messages to this file (default: build.log)")
     parser.add_argument("--handle-exception", default=True, action=argparse.BooleanOptionalAction, help="when enabled, errors are displayed as short messages; use --no-handle-exception to show full stack traces for debugging (default: enabled)")
-    parser.add_argument("--load", action="append", default=[], metavar="OPP_FILE", help="load one or more .opp configuration files at startup, can be specified multiple times and supports glob patterns (e.g. --load '*.opp')")
+    parser.add_argument("--load", action="append", default=[], metavar="OPP_FILE", help="load one or more .opp configuration files at startup, can be specified multiple times and supports glob patterns (e.g. --load '*.opp'); if not specified, all *.opp files in the current working directory are loaded automatically")
     return parser.parse_args(sys.argv[1:])
 
 def process_build_project_arguments(args):
     initialize_logging(args.log_level, args.external_command_log_level, args.log_file, args.log_file)
-    for opp_file in args.load:
-        load_opp_file(opp_file)
+    if args.load:
+        for opp_file in args.load:
+            load_opp_file(opp_file)
+    else:
+        for opp_file in sorted(glob.glob(os.path.join(os.getcwd(), "*.opp"))):
+            load_opp_file(opp_file)
     simulation_project = determine_default_simulation_project(name=args.simulation_project)
     kwargs = {k: v for k, v in vars(args).items() if v is not None}
     kwargs.pop("load", None)

@@ -80,13 +80,18 @@ concurrency options, cancellation, and `get_simulation_tasks()`.
 
 ## Command Line
 
+When no `--load` option is given, all `*.opp` files in the current working
+directory are loaded automatically.  This means you can simply `cd` into a
+project directory that contains `.opp` files and run simulations without any
+extra arguments:
+
 ```bash
-# Run all simulations from the fifo sample project (uses current working directory)
+# Run all simulations from the fifo sample project (*.opp files loaded from CWD)
 cd ~/workspace/omnetpp/samples/fifo
 opp_run_simulations
 
-# Load a standalone .opp file — no omnetpp.opp needed when __omnetpp_root_dir is set
-opp_run_simulations --load aloha.opp --filter PureAloha -t 1s
+# Explicitly load a .opp file from a different location
+opp_run_simulations --load /path/to/aloha.opp --filter PureAloha -t 1s
 
 # Run on a SSH cluster in debug mode with a filter and time limit
 opp_run_simulations -m debug -t 1s --filter PureAlohaExperiment --hosts node1.local,node2.local
