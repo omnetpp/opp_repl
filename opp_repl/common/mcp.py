@@ -8,10 +8,12 @@ compare_simulations, run_fingerprint_tests, etc.) are available directly.
 """
 
 import ctypes
+import glob
 import inspect
 import io
 import logging
 import os
+from pathlib import Path
 import pydoc
 import re
 import signal
@@ -125,16 +127,37 @@ def _register_mcp_handlers():
             lines.append(f"{pkg_name}\n    {first_line}")
         return "\n\n".join(lines)
 
-    @_mcp.resource("file:///opp_repl/readme")
-    def readme() -> str:
-        """The opp_repl README with installation instructions, usage examples, and feature overview."""
-        readme_path = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(__file__))), "README.md")
-        with open(readme_path, "r") as f:
+    _doc_dir = str(Path(__file__).resolve().parents[2] / "doc")
+
+    @_mcp.resource("file:///opp_repl/guides")
+    def guide_list() -> str:
+        """List available opp_repl guide topics.
+
+        Each topic can be read in full via file:///opp_repl/guide/{topic}.
+        """
+        lines = []
+        for path in sorted(glob.glob(os.path.join(_doc_dir, "*.md"))):
+            topic = os.path.splitext(os.path.basename(path))[0]
+            with open(path, "r") as f:
+                first_line = f.readline().strip().lstrip("# ")
+            lines.append(f"{topic}\n    {first_line}")
+        return "\n\n".join(lines)
+
+    @_mcp.resource("file:///opp_repl/guide/{topic}")
+    def guide(topic: str) -> str:
+        """Read a specific opp_repl guide topic.
+
+        Use file:///opp_repl/guides to list available topics.
+        """
+        path = os.path.join(_doc_dir, f"{topic}.md")
+        if not os.path.isfile(path):
+            return f"Guide '{topic}' not found. Use file:///opp_repl/guides to list available topics."
+        with open(path, "r") as f:
             return f.read()
 
     @_mcp.resource("file:///opp_repl/doc/package/{package_name}")
     def api_reference(package_name: str) -> str:
-        """Compact API summary for a specific opp_repl package.
+        """Compact summary for a specific opp_repl package.
 
         Lists every public class (with method names) and function (with signature
         and one-line summary).  For full documentation, read:
@@ -283,17 +306,18 @@ def _register_mcp_handlers():
         The code runs in the same namespace as the interactive REPL user.
         All public opp_repl packages, functions and classes are pre-loaded.
 
-        IMPORTANT: Before writing any code, always read the API resources first.
+        IMPORTANT: Before writing any code, always read the documentation resources first.
         Do NOT guess function names, parameter names, or signatures. Look them up.
         Do NOT import packages that are already pre-loaded.
 
-        To discover the API:
-        - Read file:///opp_repl/readme for the project README with usage examples
+        To discover the documentation:
+        - Read file:///opp_repl/guides for a list of guide topics
+        - Read file:///opp_repl/guide/{topic} for a specific guide
         - Read file:///opp_repl/packages for a list of sub-packages
-        - Read file:///opp_repl/doc/package/{package_name} for the API of a specific package
-        - Read file:///opp_repl/doc/class/{class_name} for detailed class documentation
-        - Read file:///opp_repl/doc/method/{class_name}/{method_name} for a specific method
-        - Read file:///opp_repl/doc/function/{function_name} for a specific function
+        - Read file:///opp_repl/doc/package/{package_name} for package documentation
+        - Read file:///opp_repl/doc/class/{class_name} for class documentation
+        - Read file:///opp_repl/doc/method/{class_name}/{method_name} for method documentation
+        - Read file:///opp_repl/doc/function/{function_name} for function documentation
 
         Args:
             code: Python code to execute.
