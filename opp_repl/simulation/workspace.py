@@ -249,7 +249,6 @@ class SimulationWorkspace:
     def _load_single_opp_file(self, path):
         """Load one ``.opp`` file and register the project."""
         class_name, kwargs = _parse_opp_file(path)
-        kwargs.setdefault("root_folder", os.path.dirname(os.path.abspath(path)))
         if class_name == "OmnetppProject":
             name = kwargs.pop("name", os.path.basename(os.path.dirname(os.path.abspath(path))))
             return self.define_omnetpp_project(name, **kwargs)
@@ -273,14 +272,12 @@ class SimulationWorkspace:
         results = {}
         for opp_file, class_name, kwargs in parsed:
             if class_name == "OmnetppProject":
-                kwargs.setdefault("root_folder", os.path.dirname(os.path.abspath(opp_file)))
                 name = kwargs.pop("name", os.path.basename(os.path.dirname(os.path.abspath(opp_file))))
                 proj = self.define_omnetpp_project(name, **kwargs)
                 results[name] = proj
                 _logger.info("Loaded omnetpp project '%s' from %s", name, opp_file)
         for opp_file, class_name, kwargs in parsed:
             if class_name == "SimulationProject":
-                kwargs.setdefault("root_folder", os.path.dirname(os.path.abspath(opp_file)))
                 kwargs.setdefault("name", os.path.splitext(os.path.basename(opp_file))[0])
                 proj = self.define_simulation_project(**kwargs)
                 results[proj.name] = proj
@@ -312,7 +309,6 @@ class SimulationWorkspace:
         # Pass 1: OmnetppProject (no dependencies)
         for opp_file, class_name, kwargs in parsed:
             if class_name == "OmnetppProject":
-                kwargs.setdefault("root_folder", os.path.dirname(os.path.abspath(opp_file)))
                 name = kwargs.pop("name", os.path.basename(os.path.dirname(os.path.abspath(opp_file))))
                 proj = self.define_omnetpp_project(name, **kwargs)
                 results[name] = proj
@@ -320,7 +316,6 @@ class SimulationWorkspace:
         # Pass 2: SimulationProject (may reference omnetpp by name — resolved lazily)
         for opp_file, class_name, kwargs in parsed:
             if class_name == "SimulationProject":
-                kwargs.setdefault("root_folder", os.path.dirname(os.path.abspath(opp_file)))
                 kwargs.setdefault("name", os.path.splitext(os.path.basename(opp_file))[0])
                 proj = self.define_simulation_project(**kwargs)
                 results[proj.name] = proj
