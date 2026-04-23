@@ -1,5 +1,8 @@
 # Running Simulations
 
+Build simulation projects, run simulations with various filters and modes,
+handle results, and manage project loading and cleanup.
+
 ## Building Projects
 
 It's essential to make sure that the simulation project is built before running a simulation.

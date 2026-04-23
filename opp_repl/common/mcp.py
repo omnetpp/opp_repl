@@ -139,8 +139,22 @@ def _register_mcp_handlers():
         for path in sorted(glob.glob(os.path.join(_doc_dir, "*.md"))):
             topic = os.path.splitext(os.path.basename(path))[0]
             with open(path, "r") as f:
-                first_line = f.readline().strip().lstrip("# ")
-            lines.append(f"{topic}\n    {first_line}")
+                content = f.read()
+            # Skip the heading line(s) and grab the first paragraph
+            para_lines = []
+            past_heading = False
+            for line in content.split("\n"):
+                stripped = line.strip()
+                if not past_heading:
+                    if stripped.startswith("#") or stripped == "":
+                        continue
+                    past_heading = True
+                if past_heading:
+                    if stripped == "":
+                        break
+                    para_lines.append(stripped)
+            summary = " ".join(para_lines) if para_lines else "(no description)"
+            lines.append(f"{topic}\n    {summary}")
         return "\n\n".join(lines)
 
     @_mcp.resource("file:///opp_repl/guide/{topic}")

@@ -1,4 +1,7 @@
-# opp_repl
+# Overview
+
+Features, installation, quick start, interactive usage, command-line options,
+CLI tools, and REPL features for opp_repl.
 
 An interactive Python REPL for OMNeT++ — run simulations, analyze results,
 and automate testing from an IPython shell or the command line.
