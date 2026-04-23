@@ -78,7 +78,7 @@ class BisectResult:
                 f" found in {self.num_steps} steps across {self.num_commits} commits"
                 f" ({self.good_hash[:10]}..{self.bad_hash[:10]}){time_str}")
 
-def bisect_simulations_between_commits(simulation_project, good_hash, bad_hash, run_function, good_result="PASS", is_good_result=None, **kwargs):
+def bisect_simulations_between_commits(simulation_project, good_hash, bad_hash, run_function, good_result="PASS", is_good_result=None, build_log_level="WARN", simulation_log_level="WARN", **kwargs):
     """Bisect to find the first commit that changes the result of a function.
 
     Uses binary search: given a good commit and a bad commit, finds the first
@@ -130,7 +130,8 @@ def bisect_simulations_between_commits(simulation_project, good_hash, bad_hash, 
 
     def run_and_record(commit, label):
         project = make_worktree_simulation_project(simulation_project, commit)
-        run_result = run_function(simulation_project=project, output_stream=io.StringIO(), **kwargs)
+        run_with_log_levels(project.build, python_log_level=build_log_level)
+        run_result = run_with_log_levels(lambda: run_function(simulation_project=project, output_stream=io.StringIO(), **kwargs), python_log_level=simulation_log_level)
         good = is_good_result(run_result)
         steps.append((commit, run_result, good))
         verdict = (COLOR_GREEN + "GOOD" + COLOR_RESET) if good else (COLOR_RED + "BAD" + COLOR_RESET)
