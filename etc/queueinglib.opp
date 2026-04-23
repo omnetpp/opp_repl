@@ -1,0 +1,9 @@
+SimulationProject(
+    name="queueinglib",
+    folder_environment_variable="__omnetpp_root_dir",
+    folder="samples/queueinglib",
+    omnetpp_project="omnetpp",
+    build_types=["dynamic library"],
+    dynamic_libraries=["queueinglib"],
+    ned_folders=["."],
+)

@@ -1,0 +1,4 @@
+OmnetppProject(
+    name="omnetpp",
+    environment_variable="__omnetpp_root_dir",
+)
