@@ -10,13 +10,13 @@ An OMNeT++ project is typically defined in a `.opp` file:
 
 ```python
 OmnetppProject(
-    environment_variable="__omnetpp_root_dir",
+    root_folder_environment_variable="__omnetpp_root_dir",
     root_folder="/home/user/workspace/omnetpp",
 )
 ```
 
 The `root_folder` takes precedence; if omitted, the path is resolved from
-the `environment_variable`.
+the `root_folder_environment_variable`.
 
 ## What it provides
 
