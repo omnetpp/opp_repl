@@ -68,6 +68,47 @@ def _get_subpackages(root_package):
                 packages.append(pkg_name)
     return sorted(packages)
 
+def _resolve_opp_repl_name(name, kind=None):
+    """Resolve *name* to a Python object by searching loaded opp_repl modules.
+
+    *name* may be fully qualified (e.g. ``opp_repl.simulation.workspace.SimulationWorkspace``)
+    or a short public name (e.g. ``SimulationWorkspace``).
+
+    *kind* may be ``"class"``, ``"function"``, or ``None`` (any).
+
+    Returns ``(obj, qualified_name)`` or ``(None, None)``.
+    """
+    # 1. Try direct attribute lookup for a fully-qualified name
+    parts = name.rsplit(".", 1)
+    if len(parts) == 2:
+        mod = sys.modules.get(parts[0])
+        if mod is not None:
+            obj = getattr(mod, parts[1], None)
+            if obj is not None:
+                if kind == "class" and not inspect.isclass(obj):
+                    return None, None
+                if kind == "function" and not inspect.isfunction(obj):
+                    return None, None
+                return obj, name
+
+    # 2. Search all loaded opp_repl modules for a short name
+    for mod_name, mod in sorted(sys.modules.items()):
+        if mod is None or not mod_name.startswith("opp_repl"):
+            continue
+        obj = getattr(mod, name, None)
+        if obj is None:
+            continue
+        obj_mod = getattr(obj, "__module__", None) or ""
+        if not obj_mod.startswith("opp_repl"):
+            continue
+        if kind == "class" and not inspect.isclass(obj):
+            continue
+        if kind == "function" and not inspect.isfunction(obj):
+            continue
+        qualified = f"{obj_mod}.{obj.__qualname__}"
+        return obj, qualified
+    return None, None
+
 def _register_mcp_handlers():
     @_mcp.resource("file:///opp_repl/packages")
     def package_list() -> str:
@@ -91,9 +132,15 @@ def _register_mcp_handlers():
         with open(readme_path, "r") as f:
             return f.read()
 
-    @_mcp.resource("file:///opp_repl/api/{package_name}")
+    @_mcp.resource("file:///opp_repl/doc/package/{package_name}")
     def api_reference(package_name: str) -> str:
-        """Public API reference for a specific opp_repl package, auto-generated from docstrings."""
+        """Compact API summary for a specific opp_repl package.
+
+        Lists every public class (with method names) and function (with signature
+        and one-line summary).  For full documentation, read:
+        - file:///opp_repl/doc/class/{class_name}
+        - file:///opp_repl/doc/function/{function_name}
+        """
         mod = sys.modules.get(package_name)
         if mod is None:
             return f"Package '{package_name}' not loaded."
@@ -103,7 +150,8 @@ def _register_mcp_handlers():
         lines = []
         module_doc = inspect.getdoc(mod)
         if module_doc:
-            lines.append(module_doc)
+            first_para = module_doc.split("\n\n")[0]
+            lines.append(first_para)
         for name in sorted(all_names):
             obj = getattr(mod, name, None)
             if obj is None:
@@ -119,14 +167,14 @@ def _register_mcp_handlers():
                     sig = str(inspect.signature(obj))
                 except (ValueError, TypeError):
                     sig = "(...)"
-                indented = "\n".join("    " + l for l in doc.split("\n"))
-                lines.append(f"{name}{sig}\n{indented}")
+                summary = doc.split("\n")[0]
+                lines.append(f"{name}{sig}\n    {summary}")
             elif inspect.isclass(obj):
                 doc = inspect.getdoc(obj) or ""
                 if not doc:
                     continue
-                indented = "\n".join("    " + l for l in doc.split("\n"))
-                cls_lines = [f"class {name}\n{indented}"]
+                summary = doc.split("\n")[0]
+                cls_lines = [f"class {name}\n    {summary}"]
                 for mname, mobj in inspect.getmembers(obj, predicate=inspect.isfunction):
                     if mname.startswith("_"):
                         continue
@@ -140,10 +188,93 @@ def _register_mcp_handlers():
                         msig = str(inspect.signature(mobj))
                     except (ValueError, TypeError):
                         msig = "(...)"
-                    mindented = "\n".join("        " + l for l in mdoc.split("\n"))
-                    cls_lines.append(f"    {mname}{msig}\n{mindented}")
-                lines.append("\n\n".join(cls_lines))
+                    cls_lines.append(f"    {mname}{msig}")
+                lines.append("\n".join(cls_lines))
         return "\n\n".join(lines) if lines else f"No documented public API in '{package_name}'."
+
+    @_mcp.resource("file:///opp_repl/doc/class/{class_name}")
+    def class_doc(class_name: str) -> str:
+        """Documentation for an opp_repl class.
+
+        class_name may be fully qualified (e.g. opp_repl.simulation.workspace.SimulationWorkspace)
+        or a short public name (e.g. SimulationWorkspace).
+        Returns the class docstring and public method signatures (without method
+        docstrings).  For full method documentation, read:
+        - file:///opp_repl/doc/method/{class_name}/{method_name}
+        """
+        cls, qualified = _resolve_opp_repl_name(class_name, kind="class")
+        if cls is None:
+            return f"Class '{class_name}' not found among loaded opp_repl modules."
+        lines = [f"class {qualified}"]
+        try:
+            sig = str(inspect.signature(cls))
+        except (ValueError, TypeError):
+            sig = "(...)"
+        lines[0] += sig
+        doc = inspect.getdoc(cls) or ""
+        if doc:
+            lines.append("")
+            lines.extend("    " + l for l in doc.split("\n"))
+        # Public method signatures only (no docstrings)
+        for mname, mobj in inspect.getmembers(cls, predicate=inspect.isfunction):
+            if mname.startswith("_") and mname != "__init__":
+                continue
+            try:
+                msig = str(inspect.signature(mobj))
+            except (ValueError, TypeError):
+                msig = "(...)"
+            mdoc = inspect.getdoc(mobj) or ""
+            summary = mdoc.split("\n")[0] if mdoc else ""
+            entry = f"    {mname}{msig}"
+            if summary:
+                entry += f"  -- {summary}"
+            lines.append(entry)
+        return "\n".join(lines)
+
+    @_mcp.resource("file:///opp_repl/doc/method/{class_name}/{method_name}")
+    def method_doc(class_name: str, method_name: str) -> str:
+        """Documentation for a specific method of an opp_repl class.
+
+        class_name may be fully qualified or a short public name.
+        method_name is the plain method name (e.g. run).
+        """
+        cls, qualified = _resolve_opp_repl_name(class_name, kind="class")
+        if cls is None:
+            return f"Class '{class_name}' not found among loaded opp_repl modules."
+        mobj = getattr(cls, method_name, None)
+        if mobj is None:
+            return f"Method '{method_name}' not found on class '{qualified}'."
+        try:
+            msig = str(inspect.signature(mobj))
+        except (ValueError, TypeError):
+            msig = "(...)"
+        lines = [f"{qualified}.{method_name}{msig}"]
+        mdoc = inspect.getdoc(mobj) or ""
+        if mdoc:
+            lines.append("")
+            lines.extend("    " + l for l in mdoc.split("\n"))
+        return "\n".join(lines)
+
+    @_mcp.resource("file:///opp_repl/doc/function/{function_name}")
+    def function_doc(function_name: str) -> str:
+        """Documentation for an opp_repl function.
+
+        function_name may be fully qualified (e.g. opp_repl.simulation.task.run_simulations)
+        or a short public name (e.g. run_simulations).
+        """
+        func, qualified = _resolve_opp_repl_name(function_name, kind="function")
+        if func is None:
+            return f"Function '{function_name}' not found among loaded opp_repl modules."
+        try:
+            sig = str(inspect.signature(func))
+        except (ValueError, TypeError):
+            sig = "(...)"
+        lines = [f"{qualified}{sig}"]
+        doc = inspect.getdoc(func) or ""
+        if doc:
+            lines.append("")
+            lines.extend("    " + l for l in doc.split("\n"))
+        return "\n".join(lines)
 
     @_mcp.tool()
     def execute_python(code: str) -> str:
@@ -159,8 +290,10 @@ def _register_mcp_handlers():
         To discover the API:
         - Read file:///opp_repl/readme for the project README with usage examples
         - Read file:///opp_repl/packages for a list of sub-packages
-        - Read file:///opp_repl/api/{package_name} for the API of a specific package
-        - Call help(function_name) to get detailed documentation
+        - Read file:///opp_repl/doc/package/{package_name} for the API of a specific package
+        - Read file:///opp_repl/doc/class/{class_name} for detailed class documentation
+        - Read file:///opp_repl/doc/method/{class_name}/{method_name} for a specific method
+        - Read file:///opp_repl/doc/function/{function_name} for a specific function
 
         Args:
             code: Python code to execute.
