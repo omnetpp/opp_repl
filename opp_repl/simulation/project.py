@@ -211,9 +211,9 @@ class OmnetppProject:
                 opp_env_project = self.opp_env_project or self.name
                 shell_cmd = "cd " + shlex.quote(root) + " && " + shlex.join(args)
                 args = ["opp_env", "-l", "WARN", "run", opp_env_project, "-w", self.opp_env_workspace, "-c", shell_cmd]
-                run_command_with_logging(args, error_message="Cleaning OMNeT++ failed")
+                run_command_with_logging(args)
             else:
-                run_command_with_logging(args, cwd=root, env=env, error_message="Cleaning OMNeT++ failed")
+                run_command_with_logging(args, cwd=root, env=env)
             _logger.info("Cleaning OMNeT++ in %s mode at %s ended", mode, root)
 
 _default_omnetpp_project = None
@@ -771,9 +771,9 @@ from opp_repl.simulation.workspace import *  # noqa: F401,F403 — re-export wor
 
 def _get_git_root(path):
     """Return the absolute path of the git repository root containing *path*."""
-    result = subprocess.run(
+    result = run_command_with_logging(
         ["git", "rev-parse", "--show-toplevel"],
-        cwd=path, capture_output=True, text=True, check=True,
+        cwd=path, error_message="Failed to determine git root",
     )
     return os.path.abspath(result.stdout.strip())
 

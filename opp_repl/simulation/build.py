@@ -334,7 +334,7 @@ def clean_project(simulation_project=None, mode="release", **kwargs):
     if simulation_project.opp_env_workspace:
         shell_cmd = "cd " + shlex.quote(cwd) + " && " + shlex.join(args)
         args = ["opp_env", "-l", "WARN", "run", simulation_project.opp_env_project, "-w", simulation_project.opp_env_workspace, "-c", shell_cmd]
-        run_command_with_logging(args, error_message=f"Cleaning {simulation_project.get_name()} failed")
+        run_command_with_logging(args)
     else:
-        run_command_with_logging(args, cwd=cwd, env=simulation_project.get_env(), error_message=f"Cleaning {simulation_project.get_name()} failed")
+        run_command_with_logging(args, cwd=cwd, env=simulation_project.get_env())
     _logger.info(f"Cleaning {simulation_project.get_name()} ended")
