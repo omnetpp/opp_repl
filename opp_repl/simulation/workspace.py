@@ -79,7 +79,7 @@ class SimulationWorkspace:
 
     # -- omnetpp project registry ----------------------------------------
 
-    def get_omnetpp_project_by_name(self, name):
+    def get_omnetpp_project(self, name):
         return self._omnetpp_projects[name]
 
     def set_omnetpp_project(self, name, project):
@@ -386,8 +386,8 @@ def set_default_simulation_workspace(workspace):
     global _default_simulation_workspace
     _default_simulation_workspace = workspace
 
-def get_omnetpp_project_by_name(name):
-    return get_default_simulation_workspace().get_omnetpp_project_by_name(name)
+def get_omnetpp_project(name):
+    return get_default_simulation_workspace().get_omnetpp_project(name)
 
 def set_omnetpp_project(name, project):
     get_default_simulation_workspace().set_omnetpp_project(name, project)

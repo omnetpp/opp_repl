@@ -503,7 +503,7 @@ class SimulationProject:
     def get_omnetpp_project(self):
         if isinstance(self.omnetpp_project, str):
             ws = getattr(self, '_workspace', None) or get_default_simulation_workspace()
-            self.omnetpp_project = ws.get_omnetpp_project_by_name(self.omnetpp_project)
+            self.omnetpp_project = ws.get_omnetpp_project(self.omnetpp_project)
         result = self.omnetpp_project or get_default_omnetpp_project()
         if result is None:
             ws = getattr(self, '_workspace', None) or get_default_simulation_workspace()
