@@ -35,46 +35,24 @@ Requires Python 3.10+.
 
 ```bash
 pip install -e .
+pip install -e ".[all]"   # optional: install all extras
 ```
 
-Optional extras:
-
-```bash
-pip install -e ".[all]"     # install every optional group
-pip install -e ".[cluster]" # just one group
-```
-
-| Extra | Packages | Purpose |
-|---|---|---|
-| `mcp` | mcp | MCP server for AI assistant integration |
-| `optimize` | scipy, optimparallel | Parameter optimization |
-| `chart` | matplotlib, numpy | Chart tests and image export |
-| `cluster` | dask, distributed | SSH cluster execution via Dask |
-| `github` | requests | GitHub API integration |
-| `ide` | py4j | OMNeT++ IDE integration |
-| `all` | *(all of the above)* | Everything |
+See [Installation](doc/installation.md) for details on optional extras
+and environment setup.
 
 ## Quick Start
 
 ```bash
-# Start the REPL, loading project descriptors
 opp_repl --load ~/workspace/omnetpp/omnetpp.opp \
          --load "~/workspace/omnetpp/samples/*/*.opp"
-
-# Or load opp_env-managed projects
-opp_repl --load "~/opp_env/**/*.opp"
-
-# Multiple --load arguments can be combined
-opp_repl --load ~/workspace/omnetpp/omnetpp.opp \
-         --load "~/workspace/omnetpp/samples/*/*.opp" \
-         --load ~/workspace/inet/inet.opp
 ```
-
-Once inside the REPL:
 
 ```python
 In [1]: run_simulations(simulation_project=fifo_project)
 ```
+
+See [Getting started](doc/getting_started.md) for a full walkthrough.
 
 ## Documentation
 

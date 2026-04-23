@@ -72,29 +72,8 @@ r.get_error_results().rerun()
 
 ### Controlling execution
 
-You can control many aspects of running simulations:
-- `mode` — choose between release, debug, sanitize, coverage, profile
-- `sim_time_limit`, `cpu_time_limit` — control termination
-- `concurrent` — enable/disable parallel execution
-- `scheduler` — choose local or cluster execution
-- `simulation_runner` — choose subprocess, opp_env, inprocess, or ide runner
-- `build` — set to `False` to skip automatic building
-
-### Getting tasks without running
-
-The `get_simulation_tasks()` function returns a list of tasks that can be stored,
-passed around, and run later:
-
-```python
-mt = get_simulation_tasks(simulation_project=p, mode="release",
-                          filter="PureAlohaExperiment")
-mt.run()
-```
-
-### Cancelling simulations
-
-Pressing Control-C cancels execution of remaining simulations. The result object
-still contains all results collected up to the cancellation point.
+See [Simulation tasks](tasks.md) for details on build modes, runners,
+concurrency options, cancellation, and `get_simulation_tasks()`.
 
 ## Command Line
 
@@ -107,12 +86,10 @@ opp_run_simulations
 opp_run_simulations -m debug -t 1s --filter PureAlohaExperiment --hosts node1.local,node2.local
 ```
 
-## Loading Projects at Runtime
+## Loading projects at runtime
 
-```python
-load_opp_file("/path/to/project.opp")
-load_opp_file("/path/to/workspace/*/*.opp")  # glob patterns supported
-```
+See [Simulation workspaces](simulation_workspaces.md) for `load_opp_file()`
+and `load_workspace()`.
 
 ## Cleaning Results
 

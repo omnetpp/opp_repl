@@ -116,5 +116,20 @@ get_simulation_project("inet")          # look up by name
 get_simulation_project("inet", "4.5")   # look up by name and version
 ```
 
-See [simulation_workspaces.md](simulation_workspaces.md) for details on
-how projects are registered and resolved.
+At REPL startup, every loaded project is also injected as a convenience
+variable `{name}_project` (hyphens and dots become underscores), e.g.
+`inet_project`, `simu5g_project`.
+
+See [Simulation workspaces](simulation_workspaces.md) for details on how
+projects are registered, resolved, and defaulted.
+
+## Inspecting a project
+
+```python
+p = get_simulation_project("fifo")
+p.name                # 'fifo'
+p.root_folder         # '/home/user/workspace/omnetpp/samples/fifo'
+p.ini_file_folders    # ['.']
+p.ned_folders         # ['.']
+p.build_types         # ['executable']
+```
