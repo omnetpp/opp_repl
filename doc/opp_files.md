@@ -7,7 +7,7 @@ arguments (strings, numbers, booleans, lists, dicts, `None`).
 
 ## Path Resolution
 
-The parameters `root_folder`, `build_root`, and `opp_env_workspace` are
+The parameters `root_folder`, `overlay_build_root`, and `opp_env_workspace` are
 filesystem paths.  When specified as **relative paths**, they are resolved
 relative to the directory containing the `.opp` file — not relative to the
 current working directory.  Absolute paths are used as-is.
@@ -47,8 +47,8 @@ Describes an OMNeT++ installation.
 | `name` | `str` | Human-readable name for this OMNeT++ installation |
 | `root_folder_environment_variable` | `str` | OS environment variable pointing to the root folder (default: `"__omnetpp_root_dir"`) |
 | `root_folder` | `str` | Explicit root folder path (overrides `root_folder_environment_variable`); relative paths are resolved against the `.opp` file's directory |
-| `overlay_key` | `str` | Enable overlay builds via fuse-overlayfs with this key |
-| `build_root` | `str` | Override the overlay build root directory; relative paths are resolved against the `.opp` file's directory |
+| `overlay_name` | `str` | Enable overlay builds via fuse-overlayfs with this name |
+| `overlay_build_root` | `str` | Override the overlay build root directory; relative paths are resolved against the `.opp` file's directory |
 | `opp_env_workspace` | `str` | Path to opp_env workspace; relative paths are resolved against the `.opp` file's directory |
 | `opp_env_project` | `str` | opp_env project identifier (e.g. `"omnetpp-6.3.0"`) |
 
@@ -79,8 +79,8 @@ Describes a simulation project (INET, Simu5G, OMNeT++ samples, etc.).
 | `statistics_folder` | `str` | `"."` | Directory for statistical test baseline results (relative to root) |
 | `fingerprint_store` | `str` | `"fingerprint.json"` | Path to the JSON fingerprint store (relative to root) |
 | `speed_store` | `str` | `"speed.json"` | Path to the JSON speed measurement store (relative to root) |
-| `overlay_key` | `str` | `None` | Enable overlay builds with this key |
-| `build_root` | `str` | `None` | Override overlay build root; relative paths are resolved against the `.opp` file's directory |
+| `overlay_name` | `str` | `None` | Enable overlay builds with this name |
+| `overlay_build_root` | `str` | `None` | Override overlay build root; relative paths are resolved against the `.opp` file's directory |
 | `opp_env_workspace` | `str` | `None` | Path to opp_env workspace; relative paths are resolved against the `.opp` file's directory |
 | `opp_env_project` | `str` | `None` | opp_env project identifier (e.g. `"inet-4.6.0"`) |
 | `github_owner` | `str` | `None` | GitHub owner/organization for workflow dispatch |
@@ -172,7 +172,7 @@ SimulationProject(
 
 ### Overlay build (INET sources + specific OMNeT++ version)
 
-The `overlay_key` triggers a fuse-overlayfs mount so that builds do not
+The `overlay_name` triggers a fuse-overlayfs mount so that builds do not
 modify the original source tree.  `root_folder="."` tells the overlay
 where to find the source files.
 
@@ -182,7 +182,7 @@ SimulationProject(
     name="inet+omnetpp",
     root_folder=".",
     omnetpp_project="omnetpp",
-    overlay_key="inet+omnetpp",
+    overlay_name="inet+omnetpp",
     library_folder="src",
     bin_folder="bin",
     build_types=["dynamic library"],

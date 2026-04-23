@@ -43,7 +43,7 @@ The mode determines which binary suffix is used:
 
 ## Overlay builds
 
-When `overlay_key` is specified, the project uses an overlay filesystem
+When `overlay_name` is specified, the project uses an overlay filesystem
 (via fuse-overlayfs) so that builds happen in a separate layer on top of
 the original source tree.  This is useful for testing patches without
 modifying the installation.  See [overlay_builds.md](overlay_builds.md).

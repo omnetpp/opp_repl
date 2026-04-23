@@ -82,7 +82,7 @@ built first.
 
 ## Overlay builds
 
-Like `OmnetppProject`, simulation projects support `overlay_key` for
+Like `OmnetppProject`, simulation projects support `overlay_name` for
 out-of-tree builds via fuse-overlayfs.  This is useful for testing patches
 or comparing two versions without modifying the original source tree.
 
