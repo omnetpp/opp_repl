@@ -27,14 +27,14 @@ import time
 import importlib.util
 
 from opp_repl.common import *
-from opp_repl.test.fingerprint import run_fingerprint_tests
+from opp_repl.test.fingerprint import run_fingerprint_tests, update_correct_fingerprints
 from opp_repl.test.sanitizer import run_sanitizer_tests
 from opp_repl.test.smoke import run_smoke_tests
-from opp_repl.test.speed import run_speed_tests
-from opp_repl.test.statistical import run_statistical_tests
+from opp_repl.test.speed import run_speed_tests, update_speed_results
+from opp_repl.test.statistical import run_statistical_tests, update_statistical_results
 
 if importlib.util.find_spec("matplotlib"):
-    from opp_repl.test.chart import run_chart_tests
+    from opp_repl.test.chart import run_chart_tests, update_charts
 
 _logger = logging.getLogger(__name__)
 
@@ -78,7 +78,7 @@ class BisectResult:
                 f" found in {self.num_steps} steps across {self.num_commits} commits"
                 f" ({self.good_hash[:10]}..{self.bad_hash[:10]}){time_str}")
 
-def bisect_simulations_between_commits(simulation_project, good_hash, bad_hash, run_function, good_result="PASS", is_good_result=None, build_log_level="WARN", simulation_log_level="WARN", **kwargs):
+def bisect_simulations_between_commits(simulation_project, good_hash, bad_hash, run_function, good_result="PASS", is_good_result=None, build_log_level="WARN", simulation_log_level="WARN", update_good_results_function=None, **kwargs):
     """Bisect to find the first commit that changes the result of a function.
 
     Uses binary search: given a good commit and a bad commit, finds the first
@@ -141,6 +141,8 @@ def bisect_simulations_between_commits(simulation_project, good_hash, bad_hash, 
 
     # Verify that good_hash is actually good
     good_project = make_worktree_simulation_project(simulation_project, good_hash)
+    if update_good_results_function is not None:
+        run_with_log_levels(lambda: update_good_results_function(simulation_project=good_project, output_stream=io.StringIO(), **kwargs), python_log_level=build_log_level)
     kwargs.setdefault("baseline_simulation_project", good_project)
     good_run_result, good_is_good = run_and_record(good_hash, "Verifying good")
     if not good_is_good:
@@ -200,7 +202,7 @@ def bisect_simulations_between_commits(simulation_project, good_hash, bad_hash, 
         elapsed_wall_time=time.time() - start_time,
     )
 
-def bisect_statistical_tests(simulation_project, good_hash, bad_hash, **kwargs):
+def bisect_statistical_tests(simulation_project, good_hash, bad_hash, update_good_results=True, **kwargs):
     """Bisect to find the first commit that causes statistical tests to fail.
 
     This is a convenience wrapper around :py:func:`bisect_simulations_between_commits` that uses
@@ -223,9 +225,10 @@ def bisect_statistical_tests(simulation_project, good_hash, bad_hash, **kwargs):
     return bisect_simulations_between_commits(simulation_project, good_hash, bad_hash,
                   run_function=run_statistical_tests,
                   is_good_result=lambda r: r.is_all_results_expected(),
+                  update_good_results_function=update_statistical_results if update_good_results else None,
                   **kwargs)
 
-def bisect_fingerprint_tests(simulation_project, good_hash, bad_hash, **kwargs):
+def bisect_fingerprint_tests(simulation_project, good_hash, bad_hash, update_good_results=True, **kwargs):
     """Bisect to find the first commit that causes fingerprint tests to fail.
 
     This is a convenience wrapper around :py:func:`bisect_simulations_between_commits` that uses
@@ -247,9 +250,10 @@ def bisect_fingerprint_tests(simulation_project, good_hash, bad_hash, **kwargs):
     return bisect_simulations_between_commits(simulation_project, good_hash, bad_hash,
                   run_function=run_fingerprint_tests,
                   is_good_result=lambda r: r.is_all_results_expected(),
+                  update_good_results_function=update_correct_fingerprints if update_good_results else None,
                   **kwargs)
 
-def bisect_smoke_tests(simulation_project, good_hash, bad_hash, **kwargs):
+def bisect_smoke_tests(simulation_project, good_hash, bad_hash, update_good_results=True, **kwargs):
     """Bisect to find the first commit that causes smoke tests to fail.
 
     This is a convenience wrapper around :py:func:`bisect_simulations_between_commits` that uses
@@ -273,7 +277,7 @@ def bisect_smoke_tests(simulation_project, good_hash, bad_hash, **kwargs):
                   is_good_result=lambda r: r.is_all_results_expected(),
                   **kwargs)
 
-def bisect_chart_tests(simulation_project, good_hash, bad_hash, **kwargs):
+def bisect_chart_tests(simulation_project, good_hash, bad_hash, update_good_results=True, **kwargs):
     """Bisect to find the first commit that causes chart tests to fail.
 
     This is a convenience wrapper around :py:func:`bisect_simulations_between_commits` that uses
@@ -295,9 +299,10 @@ def bisect_chart_tests(simulation_project, good_hash, bad_hash, **kwargs):
     return bisect_simulations_between_commits(simulation_project, good_hash, bad_hash,
                   run_function=run_chart_tests,
                   is_good_result=lambda r: r.is_all_results_expected(),
+                  update_good_results_function=update_charts if update_good_results else None,
                   **kwargs)
 
-def bisect_sanitizer_tests(simulation_project, good_hash, bad_hash, **kwargs):
+def bisect_sanitizer_tests(simulation_project, good_hash, bad_hash, update_good_results=True, **kwargs):
     """Bisect to find the first commit that causes sanitizer tests to fail.
 
     This is a convenience wrapper around :py:func:`bisect_simulations_between_commits` that uses
@@ -321,7 +326,7 @@ def bisect_sanitizer_tests(simulation_project, good_hash, bad_hash, **kwargs):
                   is_good_result=lambda r: r.is_all_results_expected(),
                   **kwargs)
 
-def bisect_speed_tests(simulation_project, good_hash, bad_hash, **kwargs):
+def bisect_speed_tests(simulation_project, good_hash, bad_hash, update_good_results=True, **kwargs):
     """Bisect to find the first commit that causes speed tests to fail.
 
     This is a convenience wrapper around :py:func:`bisect_simulations_between_commits` that uses
@@ -343,4 +348,5 @@ def bisect_speed_tests(simulation_project, good_hash, bad_hash, **kwargs):
     return bisect_simulations_between_commits(simulation_project, good_hash, bad_hash,
                   run_function=run_speed_tests,
                   is_good_result=lambda r: r.is_all_results_expected(),
+                  update_good_results_function=update_speed_results if update_good_results else None,
                   **kwargs)
