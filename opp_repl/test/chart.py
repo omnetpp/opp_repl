@@ -292,5 +292,5 @@ def update_charts(simulation_project=None, **kwargs):
     """
     if simulation_project is None:
         simulation_project = get_default_simulation_project()
-    multiple_update_chart_tasks = get_update_chart_tasks(**kwargs)
+    multiple_update_chart_tasks = get_update_chart_tasks(simulation_project=simulation_project, **kwargs)
     return multiple_update_chart_tasks.run(**kwargs)
