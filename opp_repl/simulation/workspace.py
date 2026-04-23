@@ -79,17 +79,21 @@ class SimulationWorkspace:
 
     # -- omnetpp project registry ----------------------------------------
 
-    def get_omnetpp_project(self, name):
-        return self._omnetpp_projects[name]
+    def get_omnetpp_project_names(self):
+        """Return a sorted list of registered OMNeT++ project names."""
+        return sorted(set(name for name, version in self._omnetpp_projects.keys()))
 
-    def set_omnetpp_project(self, name, project):
-        self._omnetpp_projects[name] = project
+    def get_omnetpp_project(self, name, version=None):
+        return self._omnetpp_projects[(name, version)]
 
-    def define_omnetpp_project(self, name, **kwargs):
+    def set_omnetpp_project(self, name, version, project):
+        self._omnetpp_projects[(name, version)] = project
+
+    def define_omnetpp_project(self, name, version=None, **kwargs):
         from opp_repl.simulation.project import get_default_omnetpp_project, set_default_omnetpp_project
-        project = OmnetppProject(**kwargs)
+        project = OmnetppProject(version=version, **kwargs)
         project.name = name
-        self.set_omnetpp_project(name, project)
+        self.set_omnetpp_project(name, version, project)
         return project
 
     # -- simulation project registry -------------------------------------
@@ -122,8 +126,8 @@ class SimulationWorkspace:
         from opp_repl.simulation.project import get_default_omnetpp_project, set_default_omnetpp_project
         if get_default_omnetpp_project() is None and project is not None:
             omnetpp_project = project.get_omnetpp_project()
-            if omnetpp_project is None and "omnetpp" in self._omnetpp_projects:
-                omnetpp_project = self._omnetpp_projects["omnetpp"]
+            if omnetpp_project is None and ("omnetpp", None) in self._omnetpp_projects:
+                omnetpp_project = self._omnetpp_projects[("omnetpp", None)]
             if omnetpp_project is not None:
                 set_default_omnetpp_project(omnetpp_project)
 
@@ -386,14 +390,18 @@ def set_default_simulation_workspace(workspace):
     global _default_simulation_workspace
     _default_simulation_workspace = workspace
 
-def get_omnetpp_project(name):
-    return get_default_simulation_workspace().get_omnetpp_project(name)
+def get_omnetpp_project_names():
+    """Return a sorted list of registered OMNeT++ project names."""
+    return get_default_simulation_workspace().get_omnetpp_project_names()
 
-def set_omnetpp_project(name, project):
-    get_default_simulation_workspace().set_omnetpp_project(name, project)
+def get_omnetpp_project(name, version=None):
+    return get_default_simulation_workspace().get_omnetpp_project(name, version)
 
-def define_omnetpp_project(name, **kwargs):
-    return get_default_simulation_workspace().define_omnetpp_project(name, **kwargs)
+def set_omnetpp_project(name, version, project):
+    get_default_simulation_workspace().set_omnetpp_project(name, version, project)
+
+def define_omnetpp_project(name, version=None, **kwargs):
+    return get_default_simulation_workspace().define_omnetpp_project(name, version, **kwargs)
 
 def get_simulation_project_names():
     """Return a sorted list of registered simulation project names."""
@@ -492,9 +500,9 @@ def get_omnetpp_project_variables():
         globals().update(get_omnetpp_project_variables())
     """
     result = {}
-    for name, project in get_default_simulation_workspace().get_omnetpp_projects().items():
+    for name in get_omnetpp_project_names():
         var_name = name.replace('-', '_').replace('.', '_') + '_project'
-        result[var_name] = project
+        result[var_name] = get_omnetpp_project(name)
     return result
 
 def get_simulation_project_variables():

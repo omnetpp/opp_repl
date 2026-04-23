@@ -45,12 +45,15 @@ class OmnetppProject:
     the overlay's merged directory instead of the original source tree.
     """
 
-    def __init__(self, root_folder_environment_variable="__omnetpp_root_dir", root_folder=None,
+    def __init__(self, version=None, root_folder_environment_variable="__omnetpp_root_dir", root_folder=None,
                  overlay_name=None, overlay_build_root=None, opp_env_workspace=None, opp_env_project=None):
         """
         Initializes a new OMNeT++ project.
 
         Parameters:
+            version (string or None):
+                The version string.
+
             root_folder_environment_variable (string):
                 The operating system environment variable specifying the root folder of the OMNeT++ installation.
 
@@ -65,6 +68,7 @@ class OmnetppProject:
             overlay_build_root (str or None):
                 Override for the overlay build root directory.
         """
+        self.version = version
         self.root_folder_environment_variable = root_folder_environment_variable
         self.root_folder = root_folder
         self.opp_env_workspace = opp_env_workspace
@@ -508,8 +512,8 @@ class SimulationProject:
         if result is None:
             ws = getattr(self, '_workspace', None) or get_default_simulation_workspace()
             omnetpp_projects = ws.get_omnetpp_projects()
-            if "omnetpp" in omnetpp_projects:
-                result = omnetpp_projects["omnetpp"]
+            if ("omnetpp", None) in omnetpp_projects:
+                result = omnetpp_projects[("omnetpp", None)]
         return result
 
     def get_executable(self, mode="release"):
