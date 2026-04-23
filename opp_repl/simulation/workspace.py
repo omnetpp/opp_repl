@@ -64,6 +64,7 @@ class SimulationWorkspace:
         self._workspace_path = workspace_path
         self._omnetpp_projects = {}
         self._simulation_projects = {}
+        self._default_omnetpp_project = None
         self._default_project = None
         if workspace_path is not None:
             self.load()
@@ -90,11 +91,16 @@ class SimulationWorkspace:
         self._omnetpp_projects[(name, version)] = project
 
     def define_omnetpp_project(self, name, version=None, **kwargs):
-        from opp_repl.simulation.project import get_default_omnetpp_project, set_default_omnetpp_project
         project = OmnetppProject(version=version, **kwargs)
         project.name = name
         self.set_omnetpp_project(name, version, project)
         return project
+
+    def get_default_omnetpp_project(self):
+        return self._default_omnetpp_project
+
+    def set_default_omnetpp_project(self, project):
+        self._default_omnetpp_project = project
 
     # -- simulation project registry -------------------------------------
 
@@ -123,13 +129,12 @@ class SimulationWorkspace:
 
     def set_default_simulation_project(self, project):
         self._default_project = project
-        from opp_repl.simulation.project import get_default_omnetpp_project, set_default_omnetpp_project
-        if get_default_omnetpp_project() is None and project is not None:
+        if self._default_omnetpp_project is None and project is not None:
             omnetpp_project = project.get_omnetpp_project()
             if omnetpp_project is None and ("omnetpp", None) in self._omnetpp_projects:
                 omnetpp_project = self._omnetpp_projects[("omnetpp", None)]
             if omnetpp_project is not None:
-                set_default_omnetpp_project(omnetpp_project)
+                self._default_omnetpp_project = omnetpp_project
 
     def determine_default_simulation_project(self, name=None, version=None, required=True, **kwargs):
         if name:
@@ -402,6 +407,12 @@ def set_omnetpp_project(name, version, project):
 
 def define_omnetpp_project(name, version=None, **kwargs):
     return get_default_simulation_workspace().define_omnetpp_project(name, version, **kwargs)
+
+def get_default_omnetpp_project():
+    return get_default_simulation_workspace().get_default_omnetpp_project()
+
+def set_default_omnetpp_project(project):
+    get_default_simulation_workspace().set_default_omnetpp_project(project)
 
 def get_simulation_project_names():
     """Return a sorted list of registered simulation project names."""

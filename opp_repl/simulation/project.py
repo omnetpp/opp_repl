@@ -222,15 +222,6 @@ class OmnetppProject:
                 run_command_with_logging(args, cwd=root, env=env)
             _logger.info("Cleaning OMNeT++ in %s mode at %s ended", mode, root)
 
-_default_omnetpp_project = None
-
-def get_default_omnetpp_project():
-    return _default_omnetpp_project
-
-def set_default_omnetpp_project(project):
-    global _default_omnetpp_project
-    _default_omnetpp_project = project
-
 class SimulationProject:
     """
     Represents a simulation project that usually comes with its own modules and their C++ implementation, and also with
