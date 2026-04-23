@@ -57,7 +57,8 @@ SimulationProject(
 )
 ```
 
-Using an absolute path:
+Using an absolute path — useful when the `.opp` file is not stored inside
+the project tree:
 
 ```python
 SimulationProject(
@@ -138,6 +139,9 @@ configs = p.get_simulation_configs(working_directory_filter="examples/ethernet")
 ```
 
 ## Building and cleaning
+
+Building compiles the project and all its dependencies (OMNeT++ and
+`used_projects`).  Cleaning removes all build artifacts.
 
 ```python
 p.build(mode="release")       # build (recursively: omnetpp, deps, then self)
@@ -227,6 +231,9 @@ on the current working directory.  See [Simulation workspaces](simulation_worksp
 for details on how projects are registered, resolved, and defaulted.
 
 ## Inspecting a project
+
+All parameters passed in the `.opp` file are available as attributes on the
+project object:
 
 ```python
 p = get_simulation_project("fifo")

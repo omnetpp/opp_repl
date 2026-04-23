@@ -121,6 +121,9 @@ OmnetppProject(
 
 ### OMNeT++ installation with absolute path
 
+Useful when the `.opp` file is not stored alongside the installation, e.g.
+for a system-wide OMNeT++ in `/opt`.
+
 ```python
 OmnetppProject(
     name="omnetpp",
@@ -166,7 +169,10 @@ SimulationProject(
 
 ### INET Framework (dynamic library)
 
-The `.opp` file lives in the INET root directory.
+A full-featured project descriptor for INET.  Note the separate
+`library_folder` and `bin_folder` (INET builds its shared library under
+`src/` and its binaries under `bin/`), and the test-related stores that
+point to non-default locations.
 
 ```python
 # ~/workspace/inet/inet.opp
@@ -215,6 +221,10 @@ SimulationProject(
 
 ### Simu5G (depends on INET)
 
+Simu5G builds on top of INET.  The `used_projects=["inet"]` parameter
+tells opp_repl to build INET first and to include INET's NED and library
+paths when running simulations.
+
 ```python
 # ~/workspace/simu5g/simu5g.opp
 SimulationProject(
@@ -233,6 +243,10 @@ SimulationProject(
 
 ### opp_env-managed OMNeT++ installation
 
+For OMNeT++ versions installed via the `opp_env` tool, `opp_env_workspace`
+and `opp_env_project` route all build and run commands through
+`opp_env run`.
+
 ```python
 # ~/opp_env/omnetpp-6.3.0/omnetpp.opp
 OmnetppProject(
@@ -244,6 +258,10 @@ OmnetppProject(
 ```
 
 ### opp_env-managed INET
+
+Same pattern for a simulation project managed by opp_env.  The
+`omnetpp_project` must point to an opp_env-managed OMNeT++ project so
+that the environment is set up consistently.
 
 ```python
 # ~/opp_env/inet-4.6.0/inet-4.6.0.opp

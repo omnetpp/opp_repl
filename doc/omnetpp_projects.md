@@ -26,7 +26,8 @@ OmnetppProject(
 )
 ```
 
-Or using an absolute path (takes precedence over the environment variable):
+Or using an absolute path — useful when the `.opp` file is stored
+separately from the installation:
 
 ```python
 OmnetppProject(
@@ -78,6 +79,9 @@ When `overlay_name` is specified, the project uses an overlay filesystem
 the original source tree.  This is useful for testing patches without
 modifying the installation.  See [Overlay builds](overlay_builds.md).
 
+The key addition here is `overlay_name` — all builds will happen in a
+separate overlay layer, leaving the original source tree untouched:
+
 ```python
 OmnetppProject(
     name="omnetpp-patched",
@@ -90,7 +94,9 @@ OmnetppProject(
 
 For OMNeT++ installations managed by the `opp_env` tool, set
 `opp_env_workspace` and `opp_env_project`.  Build and run commands will
-then be routed through `opp_env run` automatically.
+then be routed through `opp_env run` automatically.  The key additions
+are `opp_env_workspace` (path to the opp_env installation) and
+`opp_env_project` (the version identifier known to opp_env):
 
 ```python
 OmnetppProject(
