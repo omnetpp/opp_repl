@@ -205,7 +205,7 @@ class OmnetppProject:
                 _logger.info("Cleaning OMNeT++ in %s mode at %s skipped (no Makefile)", mode, root)
                 return
             env = self.get_env()
-            args = ["make", "MODE=" + mode, "-j", str(multiprocessing.cpu_count()), "clean"]
+            args = ["make", "MODE=" + mode, "clean"]
             _logger.info("Cleaning OMNeT++ in %s mode at %s started", mode, root)
             if self.opp_env_workspace:
                 opp_env_project = self.opp_env_project or self.name
@@ -787,9 +787,13 @@ def _make_git_worktree(git_root, git_hash):
     worktree_path = os.path.join(os.path.dirname(git_root),
                                  os.path.basename(git_root) + "-" + short_hash)
     if not os.path.isdir(worktree_path):
-        subprocess.run(
-            ["git", "worktree", "add", worktree_path, git_hash],
-            cwd=git_root, check=True,
+        run_command_with_logging(
+            ["git", "worktree", "prune"],
+            cwd=git_root,
+        )
+        run_command_with_logging(
+            ["git", "worktree", "add", "-q", worktree_path, git_hash],
+            cwd=git_root, error_message="Failed to create git worktree",
         )
     return worktree_path
 
