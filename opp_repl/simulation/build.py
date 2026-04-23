@@ -326,8 +326,11 @@ def clean_project(simulation_project=None, mode="release", **kwargs):
     if simulation_project is None:
         simulation_project = get_default_simulation_project()
     _logger.info(f"Cleaning {simulation_project.get_name()} started")
-    args = ["make", "MODE=" + mode, "-j", str(multiprocessing.cpu_count()), "clean"]
     cwd = simulation_project.get_full_path(".")
+    if not os.path.isfile(os.path.join(cwd, "Makefile")):
+        _logger.info(f"Cleaning {simulation_project.get_name()} skipped (no Makefile)")
+        return
+    args = ["make", "MODE=" + mode, "-j", str(multiprocessing.cpu_count()), "clean"]
     if simulation_project.opp_env_workspace:
         shell_cmd = "cd " + shlex.quote(cwd) + " && " + shlex.join(args)
         args = ["opp_env", "-l", "WARN", "run", simulation_project.opp_env_project, "-w", simulation_project.opp_env_workspace, "-c", shell_cmd]
