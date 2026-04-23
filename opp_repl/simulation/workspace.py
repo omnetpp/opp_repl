@@ -246,6 +246,7 @@ class SimulationWorkspace:
     def _load_single_opp_file(self, path):
         """Load one ``.opp`` file and register the project."""
         class_name, kwargs = _parse_opp_file(path)
+        _resolve_opp_paths(path, kwargs)
         if class_name == "OmnetppProject":
             name = kwargs.pop("name", os.path.basename(os.path.dirname(os.path.abspath(path))))
             return self.define_omnetpp_project(name, **kwargs)
@@ -263,6 +264,7 @@ class SimulationWorkspace:
         for opp_file in opp_files:
             try:
                 class_name, kwargs = _parse_opp_file(opp_file)
+                _resolve_opp_paths(opp_file, kwargs)
                 parsed.append((opp_file, class_name, kwargs))
             except ValueError as e:
                 _logger.warning("Skipping %s: %s", opp_file, e)
@@ -299,6 +301,7 @@ class SimulationWorkspace:
         for opp_file in sorted(opp_files):
             try:
                 class_name, kwargs = _parse_opp_file(opp_file)
+                _resolve_opp_paths(opp_file, kwargs)
                 parsed.append((opp_file, class_name, kwargs))
             except ValueError as e:
                 _logger.warning("Skipping %s: %s", opp_file, e)
@@ -358,6 +361,16 @@ def _parse_opp_file(path):
         except (ValueError, SyntaxError) as e:
             raise ValueError(f"{path}: parameter '{kw.arg}' must be a literal value: {e}")
     return class_name, kwargs
+
+_OPP_PATH_KEYS = ("root_folder", "build_root", "opp_env_workspace")
+
+def _resolve_opp_paths(opp_file_path, kwargs):
+    """Resolve relative path values in *kwargs* against the ``.opp`` file's directory."""
+    opp_dir = os.path.dirname(os.path.abspath(opp_file_path))
+    for key in _OPP_PATH_KEYS:
+        value = kwargs.get(key)
+        if value is not None and not os.path.isabs(value):
+            kwargs[key] = os.path.normpath(os.path.join(opp_dir, value))
 
 # -- Default workspace and module-level shims ----------------------------
 
