@@ -1,41 +1,17 @@
 # opp_repl
 
-An interactive Python REPL for OMNeT++ — run simulations, analyze results,
-and automate testing from an IPython shell or the command line.
-
-## Features
-
-- **Run simulations** — run all or filtered simulations from a project,
-  sequentially or concurrently, on localhost or an SSH cluster
-- **MCP server** — expose the REPL to AI assistants via the Model Context Protocol
-- **Simulation comparison** — compare stdout trajectories, fingerprint trajectories, and scalar results between two projects or git commits
-- **Parameter optimization** — find simulation parameter values that produce desired results using derivative-free optimization
-- **Smoke tests** — verify that simulations start and terminate without crashing
-- **Fingerprint tests** — detect behavioral regressions by comparing event fingerprints against a stored baseline
-- **Statistical tests** — detect regressions in scalar results by comparing against stored baseline values
-- **Chart tests** — detect visual regressions by comparing rendered analysis charts against baseline images
-- **Speed tests** — detect performance regressions by comparing CPU instruction counts against a baseline
-- **Feature tests** — verify that projects build and simulations set up correctly with different optional feature combinations
-- **Sanitizer tests** — find memory errors and undefined behavior using AddressSanitizer / UBSan instrumentation
-- **Release tests** — run a comprehensive validation suite for release builds
-- **Coverage reports** — generate C++ line-coverage reports using LLVM's coverage tools
-- **Overlay builds** — out-of-tree builds using fuse-overlayfs on top of read-only source trees
-- **SSH cluster execution** — distribute simulation tasks across multiple machines using Dask
-- **GitHub Actions integration** — dispatch CI workflows from the REPL
-- **IDE integration** — connect to the OMNeT++ IDE via Py4J
-- **Build projects** — build simulation binaries from Python
-
-All features are accessible both from the interactive REPL and as
-command-line tools (`opp_run_simulations`, `opp_run_fingerprint_tests`,
-`opp_update_correct_fingerprints`, etc.).
+An interactive Python REPL for OMNeT++ — run simulations, compare results,
+optimize parameters, and run a wide range of regression tests.  Provides
+an MCP server for AI assistants.  All features are accessible from both
+the interactive REPL and command-line tools.  See the
+[Overview](doc/overview.md) for the full feature list.
 
 ## Installation
 
 Requires Python 3.10+.
 
 ```bash
-pip install -e .
-pip install -e ".[all]"   # optional: install all extras
+pip install opp_repl
 ```
 
 See [Installation](doc/installation.md) for details on optional extras
@@ -44,8 +20,7 @@ and environment setup.
 ## Quick Start
 
 ```bash
-opp_repl --load ~/workspace/omnetpp/omnetpp.opp \
-         --load "~/workspace/omnetpp/samples/*/*.opp"
+opp_repl --load "omnetpp/**/*.opp"
 ```
 
 ```python
@@ -86,7 +61,3 @@ Detailed guides are in the [`doc/`](doc/) folder:
 - [**Cluster**](doc/cluster.md) — SSH cluster execution
 - [**GitHub Actions**](doc/github_actions.md) — GitHub Actions integration
 - [**MCP server**](doc/mcp_server.md) — MCP server for AI assistants
-
-## License
-
-See [LICENSE](LICENSE).
