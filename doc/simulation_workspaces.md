@@ -82,7 +82,23 @@ Functions like `run_simulations()`, `run_fingerprint_tests()`, and
 `build_project()` use the default project when no `simulation_project`
 argument is given.
 
-Setting the default project also sets the **default OMNeT++ project**: if
-the simulation project references an `OmnetppProject`, that becomes the
-default; otherwise the project registered under the name `"omnetpp"` is
-used as a fallback.
+## The default OMNeT++ project
+
+The workspace also tracks a default `OmnetppProject`.  It is set
+automatically as a side effect of `set_default_simulation_project()`:
+
+1. If the simulation project references a specific `OmnetppProject` (via
+   `omnetpp_project`), that one becomes the default.
+2. Otherwise, the project registered under the name `"omnetpp"` is used as
+   a fallback.
+3. If neither exists, the default remains `None`.
+
+It can also be set explicitly:
+
+```python
+set_default_omnetpp_project(omnetpp_project)
+get_default_omnetpp_project()  # retrieve the current default
+```
+
+The default OMNeT++ project is used by simulation projects that do not
+specify their own `omnetpp_project` parameter.

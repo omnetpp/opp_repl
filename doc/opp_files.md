@@ -27,11 +27,15 @@ specify the project root directory.  They are tried in the following order:
 1. **`root_folder`** — an explicit path.  When relative, it is resolved
    against the `.opp` file's directory at load time.
 2. **`root_folder_environment_variable`** — the value of the named OS
-   environment variable is used as the root.  For `SimulationProject`,
-   `root_folder_environment_variable_relative_folder` (default `"."`) is
-   appended to the env var value to form the final project root.
+   environment variable is used as the root.
 3. If neither is set, the root path is `None` and operations that need it
    will fail.
+
+`SimulationProject` additionally supports
+`root_folder_environment_variable_relative_folder` (default `"."`), which
+is appended to the environment variable value to form the final project
+root.  This is useful for projects that live as subdirectories under a
+common root (e.g. OMNeT++ samples under `$__omnetpp_root_dir/samples/`).
 
 The recommended approach for `.opp` files that live inside the project
 tree is `root_folder="."`.
@@ -45,6 +49,7 @@ Describes an OMNeT++ installation.
 | Parameter | Type | Description |
 |---|---|---|
 | `name` | `str` | Human-readable name for this OMNeT++ installation |
+| `version` | `str` | Version string (e.g. `"6.1"`) |
 | `root_folder_environment_variable` | `str` | OS environment variable pointing to the root folder (default: `"__omnetpp_root_dir"`) |
 | `root_folder` | `str` | Explicit root folder path (overrides `root_folder_environment_variable`); relative paths are resolved against the `.opp` file's directory |
 | `overlay_name` | `str` | Enable overlay builds via fuse-overlayfs with this name |
@@ -123,7 +128,7 @@ OmnetppProject(
 )
 ```
 
-### Standalone OMNeT++ sample (executable)
+### Standalone OMNeT++ sample (executable, with relative path)
 
 The `.opp` file is inside the sample directory.  `root_folder="."` makes
 the sample its own self-contained project.
@@ -140,18 +145,34 @@ SimulationProject(
 )
 ```
 
-### INET Framework (dynamic library, with environment variable fallback)
+### OMNeT++ sample (executable, with environment variable)
 
-Both `root_folder` and `root_folder_environment_variable` are set.  The explicit
-`root_folder="."` takes precedence; the environment variable serves as a
-fallback for tools that load the project without using the `.opp` file.
+When the `.opp` file does not live inside the project tree,
+`root_folder_environment_variable` with
+`root_folder_environment_variable_relative_folder` locates the sample
+under the OMNeT++ root.
+
+```python
+SimulationProject(
+    name="aloha",
+    root_folder_environment_variable="__omnetpp_root_dir",
+    root_folder_environment_variable_relative_folder="samples/aloha",
+    omnetpp_project="omnetpp",
+    build_types=["executable"],
+    ned_folders=["."],
+    ini_file_folders=["."],
+)
+```
+
+### INET Framework (dynamic library)
+
+The `.opp` file lives in the INET root directory.
 
 ```python
 # ~/workspace/inet/inet.opp
 SimulationProject(
     name="inet",
     root_folder=".",
-    root_folder_environment_variable="INET_ROOT",
     library_folder="src",
     bin_folder="bin",
     dynamic_libraries=["INET"],
