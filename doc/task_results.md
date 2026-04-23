@@ -1,12 +1,77 @@
 # Task Results
 
-Every simulation run produces a result object that captures what happened.
-A single run yields a `SimulationTaskResult`; running many tasks at once
-yields a `MultipleTaskResults` that aggregates them.
+Every task execution produces a **result object** that captures the
+outcome.  The result framework mirrors the task hierarchy: there is a
+base `TaskResult` / `MultipleTaskResults` pair, and each task family has
+its own specialised result classes.
 
-## Result codes
+## Base classes
 
-Each result is classified into one of four categories:
+- **`TaskResult`** — produced by a single `Task`.  Stores the result
+  code, expected result, reason string, error message, wall-clock time,
+  and optional project-state hashes.  Supports `recreate()` (modified
+  copy) and `rerun()` (re-execute the originating task).
+- **`MultipleTaskResults`** — produced by `MultipleTasks`.  Counts results
+  per code (expected vs. unexpected), determines the overall worst-case
+  result, and provides filtering and drill-down methods.
+
+## Result classification
+
+### Simulation results
+
+| Class | Produced by | Result codes |
+|---|---|---|
+| `SimulationTaskResult` | `SimulationTask` | `DONE`, `SKIP`, `CANCEL`, `ERROR` |
+
+Extracts timing, error details, end-of-run position, output file paths,
+and used NED types from the simulation’s stdout/stderr.
+
+### Test results
+
+| Class | Produced by | Extra codes |
+|---|---|---|
+| `TestTaskResult` / `MultipleTestTaskResults` | `TestTask` | `PASS`, `FAIL` |
+| `SimulationTestTaskResult` / `MultipleSimulationTestTaskResults` | `SimulationTestTask` | `PASS`, `FAIL` |
+| `FingerprintTestTaskResult` / `MultipleFingerprintTestTaskResults` | `FingerprintTestTask` | `PASS`, `FAIL` |
+| `SpeedUpdateTaskResult` | `SpeedUpdateTask` | `KEEP`, `INSERT`, `UPDATE` |
+
+Test results carry the underlying `SimulationTaskResult` so you can
+inspect both the test verdict and the raw simulation output.
+
+### Update results
+
+| Class | Produced by | Result codes |
+|---|---|---|
+| `UpdateTaskResult` / `MultipleUpdateTaskResults` | `UpdateTask` | `KEEP`, `INSERT`, `UPDATE`, `SKIP`, `CANCEL`, `ERROR` |
+| `SimulationUpdateTaskResult` | `SimulationUpdateTask` | same |
+| `FingerprintUpdateTaskResult` / `MultipleFingerprintUpdateTaskResults` | `FingerprintUpdateTask` | same |
+| `SpeedUpdateTaskResult` | `SpeedUpdateTask` | same |
+
+`KEEP` means the baseline is unchanged; `INSERT` and `UPDATE` mean a new
+or changed baseline was written.
+
+### Build results
+
+| Class | Produced by | Result codes |
+|---|---|---|
+| `BuildTaskResult` / `MultipleBuildTaskResults` | `BuildTask` and subclasses | `DONE`, `SKIP`, `CANCEL`, `ERROR` |
+
+`SKIP` means the build was up-to-date and no compilation was needed.
+
+### Comparison results
+
+| Class | Produced by | Result codes |
+|---|---|---|
+| `CompareSimulationsTaskResult` | `CompareSimulationsTask` | `IDENTICAL`, `DIVERGENT`, `DIFFERENT`, `SKIP`, `CANCEL`, `ERROR` |
+| `MultipleCompareSimulationsTaskResults` | multiple comparisons | same |
+
+Comparison results include detailed sub-verdicts for stdout trajectories,
+fingerprint trajectories, and scalar statistics, plus methods for
+debugging at the divergence point.
+
+## Standard result codes
+
+The default result codes used by simulation tasks:
 
 | Code | Meaning |
 |---|---|
@@ -20,7 +85,7 @@ When the actual outcome differs from the expectation the result is flagged
 as **unexpected**, which makes it easy to spot regressions in large test
 runs.
 
-## What a single result contains
+## SimulationTaskResult in detail
 
 A `SimulationTaskResult` holds a reference back to the task that created it,
 plus information extracted from the simulation's output:
