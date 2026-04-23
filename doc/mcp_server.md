@@ -25,18 +25,18 @@ expression, its repr is returned.
 
 | URI | Description |
 |---|---|
-| `file:///opp_repl/guides` | List available guide topics with one-line summaries |
-| `file:///opp_repl/guide/{topic}` | Read a specific guide topic (e.g. `fingerprint_tests`, `concepts`) |
+| `opp-repl://guides` | List available guide topics with first-paragraph summaries |
+| `opp-repl://guide/{topic}` | Read a specific guide topic (e.g. `fingerprint_tests`, `concepts`) |
 
 ### API documentation resources
 
 | URI | Description |
 |---|---|
-| `file:///opp_repl/packages` | List all opp_repl sub-packages with their docstrings |
-| `file:///opp_repl/doc/package/{package_name}` | Compact API summary for a package — lists classes (with method names) and functions (with signatures) |
-| `file:///opp_repl/doc/class/{class_name}` | Class docstring and public method signatures (without method docstrings) |
-| `file:///opp_repl/doc/method/{class_name}/{method_name}` | Full documentation for a specific method |
-| `file:///opp_repl/doc/function/{function_name}` | Full documentation for a specific function |
+| `opp-repl://packages` | List all opp_repl sub-packages with first-paragraph summaries |
+| `opp-repl://package/{package_name}` | Full package docstring, first paragraph per class, one-line summary per method, signature + one-line per function |
+| `opp-repl://class/{class_name}` | Full class docstring, method signatures with first-paragraph summaries |
+| `opp-repl://method/{class_name}/{method_name}` | Complete method documentation |
+| `opp-repl://function/{function_name}` | Complete function documentation |
 
 Class and function names can be fully qualified (e.g.
 `opp_repl.simulation.workspace.SimulationWorkspace`) or short public
@@ -44,8 +44,8 @@ names (e.g. `SimulationWorkspace`).
 
 ### Recommended discovery flow
 
-1. Read `file:///opp_repl/guides` to find the relevant guide topic
-2. Read `file:///opp_repl/guide/{topic}` for usage examples
-3. Read `file:///opp_repl/packages` to find the relevant sub-package
-4. Read `file:///opp_repl/doc/package/{package_name}` for a compact API overview
-5. Drill into `file:///opp_repl/doc/class/…`, `file:///opp_repl/doc/method/…`, or `file:///opp_repl/doc/function/…` for full details
+1. Read `opp-repl://guides` to find the relevant guide topic
+2. Read `opp-repl://guide/{topic}` for usage examples
+3. Read `opp-repl://packages` to find the relevant sub-package
+4. Read `opp-repl://package/{package_name}` for a compact API overview
+5. Drill into `opp-repl://class/…`, `opp-repl://method/…`, or `opp-repl://function/…` for full details

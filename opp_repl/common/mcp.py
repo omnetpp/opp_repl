@@ -112,7 +112,7 @@ def _resolve_opp_repl_name(name, kind=None):
     return None, None
 
 def _register_mcp_handlers():
-    @_mcp.resource("file:///opp_repl/packages")
+    @_mcp.resource("opp-repl://packages")
     def package_list() -> str:
         """List all opp_repl sub-packages with their docstrings."""
         import opp_repl
@@ -132,11 +132,11 @@ def _register_mcp_handlers():
 
     _doc_dir = str(Path(__file__).resolve().parents[2] / "doc")
 
-    @_mcp.resource("file:///opp_repl/guides")
+    @_mcp.resource("opp-repl://guides")
     def guide_list() -> str:
         """List available opp_repl guide topics.
 
-        Each topic can be read in full via file:///opp_repl/guide/{topic}.
+        Each topic can be read in full via opp-repl://guide/{topic}.
         """
         lines = []
         for path in sorted(glob.glob(os.path.join(_doc_dir, "*.md"))):
@@ -160,28 +160,28 @@ def _register_mcp_handlers():
             lines.append(f"{topic}\n    {summary}")
         return "\n\n".join(lines)
 
-    @_mcp.resource("file:///opp_repl/guide/{topic}")
+    @_mcp.resource("opp-repl://guide/{topic}")
     def guide(topic: str) -> str:
         """Read a specific opp_repl guide topic.
 
-        Use file:///opp_repl/guides to list available topics.
+        Use opp-repl://guides to list available topics.
         """
         path = os.path.join(_doc_dir, f"{topic}.md")
         if not os.path.isfile(path):
-            return f"Guide '{topic}' not found. Use file:///opp_repl/guides to list available topics."
+            return f"Guide '{topic}' not found. Use opp-repl://guides to list available topics."
         with open(path, "r") as f:
             return f.read()
 
-    @_mcp.resource("file:///opp_repl/doc/package/{package_name}")
+    @_mcp.resource("opp-repl://package/{package_name}")
     def api_reference(package_name: str) -> str:
         """Package documentation with class and function summaries.
 
         Shows the full package docstring, then for each public class its
         first paragraph and method one-line summaries, and for each public
         function its signature and one-line summary.  For full details, read:
-        - file:///opp_repl/doc/class/{class_name}
-        - file:///opp_repl/doc/method/{class_name}/{method_name}
-        - file:///opp_repl/doc/function/{function_name}
+        - opp-repl://class/{class_name}
+        - opp-repl://method/{class_name}/{method_name}
+        - opp-repl://function/{function_name}
         """
         mod = sys.modules.get(package_name)
         if mod is None:
@@ -230,7 +230,7 @@ def _register_mcp_handlers():
                 lines.append("\n".join(cls_lines))
         return "\n\n".join(lines) if lines else f"No documented public API in '{package_name}'."
 
-    @_mcp.resource("file:///opp_repl/doc/class/{class_name}")
+    @_mcp.resource("opp-repl://class/{class_name}")
     def class_doc(class_name: str) -> str:
         """Complete documentation for an opp_repl class.
 
@@ -238,7 +238,7 @@ def _register_mcp_handlers():
         or a short public name (e.g. SimulationWorkspace).
         Returns the full class docstring and public method signatures with
         first-paragraph summaries.  For full method documentation, read:
-        - file:///opp_repl/doc/method/{class_name}/{method_name}
+        - opp-repl://method/{class_name}/{method_name}
         """
         cls, qualified = _resolve_opp_repl_name(class_name, kind="class")
         if cls is None:
@@ -268,7 +268,7 @@ def _register_mcp_handlers():
             lines.append(entry)
         return "\n".join(lines)
 
-    @_mcp.resource("file:///opp_repl/doc/method/{class_name}/{method_name}")
+    @_mcp.resource("opp-repl://method/{class_name}/{method_name}")
     def method_doc(class_name: str, method_name: str) -> str:
         """Documentation for a specific method of an opp_repl class.
 
@@ -292,7 +292,7 @@ def _register_mcp_handlers():
             lines.extend("    " + l for l in mdoc.split("\n"))
         return "\n".join(lines)
 
-    @_mcp.resource("file:///opp_repl/doc/function/{function_name}")
+    @_mcp.resource("opp-repl://function/{function_name}")
     def function_doc(function_name: str) -> str:
         """Documentation for an opp_repl function.
 
@@ -325,13 +325,13 @@ def _register_mcp_handlers():
         Do NOT import packages that are already pre-loaded.
 
         To discover the documentation:
-        - Read file:///opp_repl/guides for a list of guide topics
-        - Read file:///opp_repl/guide/{topic} for a specific guide
-        - Read file:///opp_repl/packages for a list of sub-packages
-        - Read file:///opp_repl/doc/package/{package_name} for package documentation
-        - Read file:///opp_repl/doc/class/{class_name} for class documentation
-        - Read file:///opp_repl/doc/method/{class_name}/{method_name} for method documentation
-        - Read file:///opp_repl/doc/function/{function_name} for function documentation
+        - Read opp-repl://guides for a list of guide topics
+        - Read opp-repl://guide/{topic} for a specific guide
+        - Read opp-repl://packages for a list of sub-packages
+        - Read opp-repl://package/{package_name} for package documentation
+        - Read opp-repl://class/{class_name} for class documentation
+        - Read opp-repl://method/{class_name}/{method_name} for method documentation
+        - Read opp-repl://function/{function_name} for function documentation
 
         Args:
             code: Python code to execute.
