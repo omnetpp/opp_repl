@@ -6,17 +6,47 @@ environment, and how to build OMNeT++ itself.
 
 ## How it is defined
 
-An OMNeT++ project is typically defined in a `.opp` file:
+An OMNeT++ project is typically defined in a `.opp` file.  Using an
+environment variable:
 
 ```python
 OmnetppProject(
     root_folder_environment_variable="__omnetpp_root_dir",
+)
+```
+
+Using a relative path — `root_folder="."` refers to the directory containing
+the `.opp` file:
+
+```python
+# ~/workspace/omnetpp/omnetpp.opp
+OmnetppProject(
+    name="omnetpp",
+    root_folder=".",
+)
+```
+
+Or using an absolute path (takes precedence over the environment variable):
+
+```python
+OmnetppProject(
     root_folder="/home/user/workspace/omnetpp",
 )
 ```
 
-The `root_folder` takes precedence; if omitted, the path is resolved from
-the `root_folder_environment_variable`.
+Projects can also be defined programmatically from the REPL or a Python
+script using `define_omnetpp_project()`.  This is useful when the root
+folder is computed at runtime — for example, when creating a git worktree
+for a specific version:
+
+```python
+import subprocess
+
+worktree = "/tmp/omnetpp-v6.1"
+subprocess.run(["git", "worktree", "add", worktree, "v6.1"],
+               cwd="/home/user/workspace/omnetpp")
+define_omnetpp_project("omnetpp-6.1", root_folder=worktree)
+```
 
 ## What it provides
 
@@ -46,7 +76,15 @@ The mode determines which binary suffix is used:
 When `overlay_name` is specified, the project uses an overlay filesystem
 (via fuse-overlayfs) so that builds happen in a separate layer on top of
 the original source tree.  This is useful for testing patches without
-modifying the installation.  See [overlay_builds.md](overlay_builds.md).
+modifying the installation.  See [Overlay builds](overlay_builds.md).
+
+```python
+OmnetppProject(
+    name="omnetpp-patched",
+    root_folder=".",
+    overlay_name="omnetpp-patched",
+)
+```
 
 ## opp_env integration
 
@@ -54,13 +92,28 @@ For OMNeT++ installations managed by the `opp_env` tool, set
 `opp_env_workspace` and `opp_env_project`.  Build and run commands will
 then be routed through `opp_env run` automatically.
 
-## The default OMNeT++ project
+```python
+OmnetppProject(
+    name="omnetpp-6.3.0",
+    root_folder=".",
+    opp_env_workspace="/home/user/opp_env",
+    opp_env_project="omnetpp-6.3.0",
+)
+```
 
-There is a global default OMNeT++ project, set automatically when the
-default simulation project is determined.  If the simulation project
-references a specific `OmnetppProject`, that one is used; otherwise the
-project registered under the name `"omnetpp"` is the fallback.
+## Looking up projects
+
+At REPL startup, every loaded OMNeT++ project is injected as a convenience
+variable `{name}_project` (hyphens and dots become underscores), e.g.
+`omnetpp_project`.  Projects can also be looked up by name:
 
 ```python
-get_default_omnetpp_project()
+omnetpp_project                # convenience variable
+get_omnetpp_project("omnetpp") # look up by name
+get_default_omnetpp_project()  # the current default
 ```
+
+The default OMNeT++ project is set automatically when the default
+simulation project is determined.  If that simulation project references a
+specific `OmnetppProject`, that one becomes the default; otherwise the
+project registered under the name `"omnetpp"` is used as fallback.
