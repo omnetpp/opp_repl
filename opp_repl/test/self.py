@@ -96,9 +96,9 @@ class FingerprintTestSelfTestTask(TestTask):
         return self.simulation_project.get_name()
 
     def run_protected(self, **kwargs):
-        update_correct_fingerprint_task_results = update_correct_fingerprints(**self.kwargs)
+        update_correct_fingerprint_task_results = update_fingerprint_test_results(**self.kwargs)
         fingerprint_test_task_results = run_fingerprint_tests(**self.kwargs)
-        repeated_update_correct_fingerprint_task_results = update_correct_fingerprints(**self.kwargs)
+        repeated_update_correct_fingerprint_task_results = update_fingerprint_test_results(**self.kwargs)
         repeated_fingerprint_test_task_results = run_fingerprint_tests(**self.kwargs)
         return TestTaskResult(task=self, result=fingerprint_test_task_results.result)
 

@@ -12,7 +12,7 @@ file configured via the `fingerprint_store` project parameter.
 If there are no fingerprints in the store yet, they must be calculated and inserted first:
 
 ```python
-update_correct_fingerprints(simulation_project=inet_project, sim_time_limit="1s")
+update_fingerprint_test_results(simulation_project=inet_project, sim_time_limit="1s")
 ```
 
 Example output:
@@ -58,7 +58,7 @@ run_fingerprint_tests(simulation_project=inet_project,
                       sim_time_limit="10s")
 
 # Update fingerprints for a subset after intentional changes
-update_correct_fingerprints(simulation_project=inet_project,
+update_fingerprint_test_results(simulation_project=inet_project,
                             working_directory_filter="examples/ethernet",
                             sim_time_limit="10s")
 ```
@@ -73,7 +73,7 @@ opp_run_fingerprint_tests --load "/home/user/workspace/omnetpp/**/*.opp" -p fifo
 # Multiple fingerprint test results: SKIP, summary: 7 SKIP (unexpected) in 0:00:00.004558
 
 # 2. Store correct fingerprints first
-opp_update_correct_fingerprints --load "/home/user/workspace/omnetpp/**/*.opp" -p fifo -t 1s
+opp_update_fingerprint_test_results --load "/home/user/workspace/omnetpp/**/*.opp" -p fifo -t 1s
 # [2/7] Updating fingerprint . -c Fifo2 for 1s INSERT 6593-438a/tplx
 # ...
 # Multiple update fingerprint results: INSERT, summary: 7 INSERT (unexpected) in 0:00:00.172821
@@ -85,7 +85,7 @@ opp_run_fingerprint_tests --load "/home/user/workspace/omnetpp/**/*.opp" -p fifo
 # Multiple fingerprint test results: PASS, summary: 7 PASS in 0:00:00.164720
 
 # 4. Updating again when nothing changed — values are kept
-opp_update_correct_fingerprints --load "/home/user/workspace/omnetpp/**/*.opp" -p fifo -t 1s
+opp_update_fingerprint_test_results --load "/home/user/workspace/omnetpp/**/*.opp" -p fifo -t 1s
 # [5/7] Updating fingerprint . -c TandemQueueExperiment -r 2 for 1s KEEP 4cbd-3dae/tplx
 # ...
 # Multiple update fingerprint results: KEEP, summary: 7 KEEP in 0:00:00.218112

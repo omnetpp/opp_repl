@@ -279,7 +279,7 @@ def get_update_chart_tasks(simulation_project=None, run_simulations=True, filter
                 update_tasks.append(ChartUpdateTask(simulation_project=simulation_project, analysis_file_name=analysis_file_name, id=chart.id, chart_name=chart.name, task_result_class=UpdateTaskResult))
     return MultipleChartUpdateTasks(tasks=update_tasks, multiple_simulation_tasks=MultipleSimulationTasks(tasks=simulation_tasks, simulation_project=simulation_project, **kwargs), **dict(kwargs, scheduler="process"))
 
-def update_charts(simulation_project=None, **kwargs):
+def update_chart_test_results(simulation_project=None, **kwargs):
     """
     Updates the stored charts for one or more chart tests that match the provided filter criteria.
 

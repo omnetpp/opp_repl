@@ -2,4 +2,4 @@
 
 from opp_repl.main import *
 
-update_correct_fingerprints_main()
+update_fingerprint_test_results_main()

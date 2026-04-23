@@ -8,7 +8,7 @@ counts and comparing them against stored baseline values.  Uses the
 
 ```python
 # Store baseline measurements (first time, or after intentional changes)
-update_speed_results(simulation_project=inet_project)
+update_speed_test_results(simulation_project=inet_project)
 
 # Run tests — compares current measurements against the baseline
 run_speed_tests(simulation_project=inet_project)
@@ -21,6 +21,6 @@ run_speed_tests(simulation_project=inet_project,
 ## Command Line
 
 ```bash
-opp_update_speed_results --load "/home/user/workspace/inet/inet.opp" -p inet
+opp_update_speed_test_results --load "/home/user/workspace/inet/inet.opp" -p inet
 opp_run_speed_tests --load "/home/user/workspace/inet/inet.opp" -p inet
 ```

@@ -69,9 +69,9 @@ Many REPL functions have corresponding command-line tools:
 - `opp_run_sanitizer_tests` — find memory errors and undefined behavior
 - `opp_run_feature_tests` — verify builds with different optional feature combinations
 - `opp_run_release_tests` — run a comprehensive validation suite
-- `opp_update_correct_fingerprints` — update the fingerprint baseline
-- `opp_update_speed_results` — update the speed test baseline
-- `opp_update_statistical_results` — update the statistical test baseline
-- `opp_update_charts` — update the chart test baseline images
+- `opp_update_fingerprint_test_results` — update the fingerprint baseline
+- `opp_update_speed_test_results` — update the speed test baseline
+- `opp_update_statistical_test_results` — update the statistical test baseline
+- `opp_update_chart_test_results` — update the chart test baseline images
 
 All tools print their options when run with `-h`.

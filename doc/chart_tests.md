@@ -9,7 +9,7 @@ optional dependency group (matplotlib, numpy).
 
 ```python
 # Store baseline charts (first time, or after intentional changes)
-update_charts(simulation_project=inet_project)
+update_chart_test_results(simulation_project=inet_project)
 
 # Run tests — compares current charts against the baseline
 run_chart_tests(simulation_project=inet_project)
@@ -22,6 +22,6 @@ run_chart_tests(simulation_project=inet_project,
 ## Command Line
 
 ```bash
-opp_update_charts --load "/home/user/workspace/inet/inet.opp" -p inet
+opp_update_chart_test_results --load "/home/user/workspace/inet/inet.opp" -p inet
 opp_run_chart_tests --load "/home/user/workspace/inet/inet.opp" -p inet
 ```

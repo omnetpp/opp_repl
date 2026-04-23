@@ -507,7 +507,7 @@ def get_update_correct_fingerprint_tasks(**kwargs):
         fingerprint_update_tasks.append(fingerprint_update_task)
     return MultipleFingerprintUpdateTasks(multiple_simulation_tasks, tasks=fingerprint_update_tasks, **kwargs)
 
-def update_correct_fingerprints(**kwargs):
+def update_fingerprint_test_results(**kwargs):
     """
     Updates the stored correct fingerprints in the database for one or more fingerprint tests that match the provided
     filter criteria.

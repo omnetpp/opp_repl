@@ -135,17 +135,17 @@ def run_all_tests_main():
 def run_release_tests_main():
     run_tasks_main(run_release_tests, "release tests")
 
-def update_correct_fingerprints_main():
-    run_tasks_main(update_correct_fingerprints, "update correct fingerprints")
+def update_fingerprint_test_results_main():
+    run_tasks_main(update_fingerprint_test_results, "update fingerprint test results")
 
-def update_charts_main():
-    run_tasks_main(update_charts, "update charts")
+def update_chart_test_results_main():
+    run_tasks_main(update_chart_test_results, "update chart test results")
 
-def update_statistical_results_main():
-    run_tasks_main(update_statistical_results, "update statistical results")
+def update_statistical_test_results_main():
+    run_tasks_main(update_statistical_test_results, "update statistical test results")
 
-def update_speed_results_main():
-    run_tasks_main(update_speed_results, "update speed results")
+def update_speed_test_results_main():
+    run_tasks_main(update_speed_test_results, "update speed test results")
 
 def parse_build_project_arguments():
     description = "Builds the specified or enclosing simulation project."

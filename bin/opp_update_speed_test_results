@@ -2,4 +2,4 @@
 
 from opp_repl.main import *
 
-update_charts_main()
+update_speed_test_results_main()

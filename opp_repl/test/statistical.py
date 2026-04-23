@@ -269,7 +269,7 @@ def get_update_statistical_result_tasks(run_number=0, **kwargs):
     """
     return get_simulation_tasks(run_number=run_number, multiple_simulation_tasks_class=MultipleSimulationUpdateTasks, simulation_task_class=StatisticalResultsUpdateTask, **kwargs)
 
-def update_statistical_results(sim_time_limit=get_statistical_test_sim_time_limit, append_args=[], **kwargs):
+def update_statistical_test_results(sim_time_limit=get_statistical_test_sim_time_limit, append_args=[], **kwargs):
     """
     Updates the stored statistical results for one or more chart tests that match the provided filter criteria.
 

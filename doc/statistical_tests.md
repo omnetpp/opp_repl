@@ -8,7 +8,7 @@ in the `statistics_folder` of the simulation project.
 
 ```python
 # Store baseline results (first time, or after intentional changes)
-update_statistical_results(simulation_project=inet_project)
+update_statistical_test_results(simulation_project=inet_project)
 
 # Run tests — compares current results against the baseline
 run_statistical_tests(simulation_project=inet_project)
@@ -21,6 +21,6 @@ run_statistical_tests(simulation_project=inet_project,
 ## Command Line
 
 ```bash
-opp_update_statistical_results --load "/home/user/workspace/inet/inet.opp" -p inet
+opp_update_statistical_test_results --load "/home/user/workspace/inet/inet.opp" -p inet
 opp_run_statistical_tests --load "/home/user/workspace/inet/inet.opp" -p inet
 ```

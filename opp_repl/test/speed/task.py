@@ -132,6 +132,6 @@ def get_update_speed_results_tasks(mode="profile", run_number=0, **kwargs):
         update_tasks.append(update_task)
     return MultipleSpeedUpdateTasks(multiple_simulation_tasks, tasks=update_tasks, **kwargs)
 
-def update_speed_results(**kwargs):
+def update_speed_test_results(**kwargs):
     multiple_speed_update_tasks = get_update_speed_results_tasks(**kwargs)
     return multiple_speed_update_tasks.run(**kwargs)

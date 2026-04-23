@@ -2,7 +2,7 @@
 This package supports automated fingerprint testing.  Fingerprint tests
 detect unintended behavioral changes by comparing a hash of selected
 simulation state against stored baseline values.  The main functions are
-run_fingerprint_tests() and update_correct_fingerprints().
+run_fingerprint_tests() and update_fingerprint_test_results().
 """
 
 #from opp_repl.test.fingerprint.old import *

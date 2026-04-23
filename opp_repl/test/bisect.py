@@ -27,14 +27,14 @@ import time
 import importlib.util
 
 from opp_repl.common import *
-from opp_repl.test.fingerprint import run_fingerprint_tests, update_correct_fingerprints
+from opp_repl.test.fingerprint import run_fingerprint_tests, update_fingerprint_test_results
 from opp_repl.test.sanitizer import run_sanitizer_tests
 from opp_repl.test.smoke import run_smoke_tests
-from opp_repl.test.speed import run_speed_tests, update_speed_results
-from opp_repl.test.statistical import run_statistical_tests, update_statistical_results
+from opp_repl.test.speed import run_speed_tests, update_speed_test_results
+from opp_repl.test.statistical import run_statistical_tests, update_statistical_test_results
 
 if importlib.util.find_spec("matplotlib"):
-    from opp_repl.test.chart import run_chart_tests, update_charts
+    from opp_repl.test.chart import run_chart_tests, update_chart_test_results
 
 _logger = logging.getLogger(__name__)
 
@@ -226,7 +226,7 @@ def bisect_statistical_tests(simulation_project, good_hash, bad_hash, update_goo
     return bisect_simulations_between_commits(simulation_project, good_hash, bad_hash,
                   run_function=run_statistical_tests,
                   is_good_result=lambda r: r.is_all_results_expected(),
-                  update_good_results_function=update_statistical_results if update_good_results else None,
+                  update_good_results_function=update_statistical_test_results if update_good_results else None,
                   **kwargs)
 
 def bisect_fingerprint_tests(simulation_project, good_hash, bad_hash, update_good_results=True, **kwargs):
@@ -251,7 +251,7 @@ def bisect_fingerprint_tests(simulation_project, good_hash, bad_hash, update_goo
     return bisect_simulations_between_commits(simulation_project, good_hash, bad_hash,
                   run_function=run_fingerprint_tests,
                   is_good_result=lambda r: r.is_all_results_expected(),
-                  update_good_results_function=update_correct_fingerprints if update_good_results else None,
+                  update_good_results_function=update_fingerprint_test_results if update_good_results else None,
                   **kwargs)
 
 def bisect_smoke_tests(simulation_project, good_hash, bad_hash, update_good_results=True, **kwargs):
@@ -300,7 +300,7 @@ def bisect_chart_tests(simulation_project, good_hash, bad_hash, update_good_resu
     return bisect_simulations_between_commits(simulation_project, good_hash, bad_hash,
                   run_function=run_chart_tests,
                   is_good_result=lambda r: r.is_all_results_expected(),
-                  update_good_results_function=update_charts if update_good_results else None,
+                  update_good_results_function=update_chart_test_results if update_good_results else None,
                   **kwargs)
 
 def bisect_sanitizer_tests(simulation_project, good_hash, bad_hash, update_good_results=True, **kwargs):
@@ -349,5 +349,5 @@ def bisect_speed_tests(simulation_project, good_hash, bad_hash, update_good_resu
     return bisect_simulations_between_commits(simulation_project, good_hash, bad_hash,
                   run_function=run_speed_tests,
                   is_good_result=lambda r: r.is_all_results_expected(),
-                  update_good_results_function=update_speed_results if update_good_results else None,
+                  update_good_results_function=update_speed_test_results if update_good_results else None,
                   **kwargs)
