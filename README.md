@@ -8,7 +8,8 @@ and automate testing from an IPython shell or the command line.
 - **Run simulations** — run all or filtered simulations from a project,
   sequentially or concurrently, on localhost or an SSH cluster
 - **MCP server** — expose the REPL to AI assistants via the Model Context Protocol
-- **Build projects** — build simulation binaries from Python
+- **Simulation comparison** — compare stdout trajectories, fingerprint trajectories, and scalar results between two projects or git commits
+- **Parameter optimization** — find simulation parameter values that produce desired results using derivative-free optimization
 - **Smoke tests** — verify that simulations start and terminate without crashing
 - **Fingerprint tests** — detect behavioral regressions by comparing event fingerprints against a stored baseline
 - **Statistical tests** — detect regressions in scalar results by comparing against stored baseline values
@@ -17,13 +18,12 @@ and automate testing from an IPython shell or the command line.
 - **Feature tests** — verify that projects build and simulations set up correctly with different optional feature combinations
 - **Sanitizer tests** — find memory errors and undefined behavior using AddressSanitizer / UBSan instrumentation
 - **Release tests** — run a comprehensive validation suite for release builds
-- **Parameter optimization** — find simulation parameter values that produce desired results using derivative-free optimization
-- **Simulation comparison** — compare stdout trajectories, fingerprint trajectories, and scalar results between two projects or git commits
 - **Coverage reports** — generate C++ line-coverage reports using LLVM's coverage tools
 - **Overlay builds** — out-of-tree builds using fuse-overlayfs on top of read-only source trees
 - **SSH cluster execution** — distribute simulation tasks across multiple machines using Dask
 - **GitHub Actions integration** — dispatch CI workflows from the REPL
 - **IDE integration** — connect to the OMNeT++ IDE via Py4J
+- **Build projects** — build simulation binaries from Python
 
 All features are accessible both from the interactive REPL and as
 command-line tools (`opp_run_simulations`, `opp_run_fingerprint_tests`,
@@ -46,10 +46,10 @@ pip install -e ".[cluster]" # just one group
 
 | Extra | Packages | Purpose |
 |---|---|---|
-| `cluster` | dask, distributed | SSH cluster execution via Dask |
-| `chart` | matplotlib, numpy | Chart tests and image export |
 | `mcp` | mcp | MCP server for AI assistant integration |
 | `optimize` | scipy, optimparallel | Parameter optimization |
+| `chart` | matplotlib, numpy | Chart tests and image export |
+| `cluster` | dask, distributed | SSH cluster execution via Dask |
 | `github` | requests | GitHub API integration |
 | `ide` | py4j | OMNeT++ IDE integration |
 | `all` | *(all of the above)* | Everything |
@@ -80,25 +80,26 @@ In [1]: run_simulations(simulation_project=fifo_project)
 
 Detailed guides are in the [`doc/`](doc/) folder:
 
-- [**overview**](doc/overview.md) — features, installation, CLI options, REPL features, command-line tools
-- [**concepts**](doc/concepts.md) — core concepts (OmnetppProject, SimulationProject, configs, tasks, filtering, etc.)
-- [**opp_files**](doc/opp_files.md) — `.opp` file format, parameters, and example files
-- [**running_simulations**](doc/running_simulations.md) — running simulations, building projects, loading, cleaning
-- [**smoke_tests**](doc/smoke_tests.md) — smoke tests
-- [**fingerprint_tests**](doc/fingerprint_tests.md) — fingerprint tests
-- [**statistical_tests**](doc/statistical_tests.md) — statistical tests
-- [**chart_tests**](doc/chart_tests.md) — chart tests
-- [**speed_tests**](doc/speed_tests.md) — speed tests
-- [**sanitizer_tests**](doc/sanitizer_tests.md) — sanitizer tests
-- [**feature_tests**](doc/feature_tests.md) — feature tests, release tests, running all tests
-- [**coverage**](doc/coverage.md) — coverage reports
-- [**optimization**](doc/optimization.md) — parameter optimization
-- [**comparing_simulations**](doc/comparing_simulations.md) — simulation comparison
-- [**overlay_builds**](doc/overlay_builds.md) — overlay builds
-- [**cluster**](doc/cluster.md) — SSH cluster execution
-- [**github_actions**](doc/github_actions.md) — GitHub Actions integration
-- [**mcp_server**](doc/mcp_server.md) — MCP server for AI assistants
+- [**Overview**](doc/overview.md) — features, installation, CLI options, REPL features, command-line tools
+- [**Concepts**](doc/concepts.md) — core concepts (OmnetppProject, SimulationProject, configs, tasks, filtering, etc.)
+- [**OPP files**](doc/opp_files.md) — `.opp` file format, parameters, and example files
+- [**Running simulations**](doc/running_simulations.md) — running simulations, building projects, loading, cleaning
+- [**Smoke tests**](doc/smoke_tests.md) — smoke tests
+- [**Fingerprint tests**](doc/fingerprint_tests.md) — fingerprint tests
+- [**Statistical tests**](doc/statistical_tests.md) — statistical tests
+- [**Chart tests**](doc/chart_tests.md) — chart tests
+- [**Speed tests**](doc/speed_tests.md) — speed tests
+- [**Sanitizer tests**](doc/sanitizer_tests.md) — sanitizer tests
+- [**Feature tests**](doc/feature_tests.md) — feature tests, release tests, running all tests
+- [**Code coverage**](doc/coverage.md) — coverage reports
+- [**Profiling**](doc/profiling.md) — performance profiling with perf and Hotspot
+- [**Parameter optimization**](doc/optimization.md) — parameter optimization
+- [**Comparing simulations**](doc/comparing_simulations.md) — simulation comparison
+- [**Overlay builds**](doc/overlay_builds.md) — overlay builds
+- [**Cluster**](doc/cluster.md) — SSH cluster execution
+- [**GitHub Actions**](doc/github_actions.md) — GitHub Actions integration
+- [**MCP server**](doc/mcp_server.md) — MCP server for AI assistants
 
 ## License
 
-See the project repository for license information.
+See [LICENSE](LICENSE).
