@@ -1,5 +1,7 @@
 """
-This package provides generally useful functionality.
+This package provides generally useful functionality including task
+scheduling, compilation helpers, SSH cluster support, IDE integration,
+GitHub Actions dispatch, and the MCP server.
 """
 
 import importlib.util

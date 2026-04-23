@@ -1,8 +1,8 @@
 """
-This package supports automated fingerprint testing.
-
-The main function is :py:func:`run_fingerprint_tests <opp_repl.test.fingerprint.task.run_fingerprint_tests>`. It allows running multiple fingerprint tests matching
-the provided filter criteria.
+This package supports automated fingerprint testing.  Fingerprint tests
+detect unintended behavioral changes by comparing a hash of selected
+simulation state against stored baseline values.  The main functions are
+run_fingerprint_tests() and update_correct_fingerprints().
 """
 
 #from opp_repl.test.fingerprint.old import *

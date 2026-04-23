@@ -1,3 +1,8 @@
+"""
+This package supports generating documentation artifacts such as
+NED documentation and analysis chart images.
+"""
+
 from opp_repl.documentation.chart import *
 from opp_repl.documentation.ned import *
 

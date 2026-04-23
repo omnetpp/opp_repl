@@ -1,8 +1,8 @@
 """
-This package supports automated speed testing.
-
-The main function is :py:func:`run_speed_tests <opp_repl.test.speed.task.run_speed_tests>`. It allows running multiple speed tests matching
-the provided filter criteria.
+This package supports automated speed testing.  Speed tests detect
+performance regressions by measuring CPU instruction counts and comparing
+them against stored baseline values.  The main functions are
+run_speed_tests() and update_speed_results().
 """
 
 from opp_repl.test.speed.store import *
