@@ -20,7 +20,7 @@ and environment setup.
 ## Quick Start
 
 ```bash
-opp_repl --load "omnetpp/**/*.opp"
+opp_repl --load "etc/*.opp"
 ```
 
 ```python
@@ -30,8 +30,6 @@ In [1]: run_simulations(simulation_project=fifo_project)
 See [Getting started](doc/getting_started.md) for a full walkthrough.
 
 ## Documentation
-
-Detailed guides are in the [`doc/`](doc/) folder:
 
 - [**Overview**](doc/overview.md) — features, CLI options, command-line tools
 - [**Installation**](doc/installation.md) — requirements, install, optional extras, environment setup
