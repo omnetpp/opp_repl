@@ -564,11 +564,17 @@ class SimulationProject:
             msg_files = msg_files + list(map(lambda file_path: self.get_relative_path(file_path), file_paths))
         return msg_files
 
-    def build(self, mode="release", **kwargs):
+    def build(self, mode="release", recursive=True, **kwargs):
         self.ensure_mounted()
-        opp = self.get_omnetpp_project()
-        if opp is not None:
-            opp.build(mode=mode)
+        if recursive:
+            opp = self.get_omnetpp_project()
+            if opp is not None:
+                opp.build(mode=mode)
+            ws = getattr(self, '_workspace', None) or get_default_simulation_workspace()
+            for used_project_name in self.used_projects:
+                used_project = ws.get_simulation_project(used_project_name, None)
+                if used_project is not None:
+                    used_project.build(mode=mode, recursive=recursive, **kwargs)
         import opp_repl.simulation.build
         opp_repl.simulation.build.build_project(simulation_project=self, mode=mode, **kwargs)
 
@@ -585,9 +591,21 @@ class SimulationProject:
             return self._overlay.is_mounted()
         return False
 
-    def clean(self):
+    def clean(self, mode="release", recursive=True, **kwargs):
+        if recursive:
+            opp = self.get_omnetpp_project()
+            if opp is not None:
+                opp.clean(mode=mode)
+            ws = getattr(self, '_workspace', None) or get_default_simulation_workspace()
+            for used_project_name in self.used_projects:
+                used_project = ws.get_simulation_project(used_project_name, None)
+                if used_project is not None:
+                    used_project.clean(mode=mode, recursive=recursive, **kwargs)
         if self._overlay is not None:
             self._overlay.clean()
+        else:
+            import opp_repl.simulation.build
+            opp_repl.simulation.build.clean_project(simulation_project=self, mode=mode, **kwargs)
 
     def get_num_runs_in_config(self, ini_path, config):
         num_runs_fast_regex = re.compile(r"(?m).*^\s*(include\s+.*\.ini|repeat\s*=\s*[0-9]+|.*\$\{.*\})")
