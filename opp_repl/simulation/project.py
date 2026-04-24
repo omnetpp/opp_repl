@@ -24,6 +24,7 @@ import shlex
 import shutil
 import socket
 import subprocess
+import textwrap
 
 try:
     from omnetpp.runtime.omnetpp import *
@@ -872,4 +873,92 @@ def make_worktree_simulation_project(simulation_project, git_hash):
                 project.omnetpp_project = omnetpp_project_copy
 
     return project
+
+def create_project(name, path=None, template="executable", namespace=False, omnetpp_project="omnetpp"):
+    """
+    Creates a new simulation project directory with boilerplate files.
+
+    The generated files are sufficient to immediately build and run the project
+    using :py:func:`build_project <opp_repl.simulation.build.build_project>` and
+    :py:func:`run_simulations <opp_repl.simulation.task.run_simulations>` after
+    adding NED network definitions and C++ simple module implementations.
+
+    Parameters:
+        name (string):
+            The project name.  Used for the directory name, the ``.opp`` file,
+            and the executable output name.
+
+        path (string or None):
+            The parent directory where the project folder will be created.
+            If ``None``, defaults to the current working directory.
+
+        template (string):
+            The project template to use.  Currently only ``"executable"`` is
+            supported, which creates a standalone simulation executable.
+
+        namespace (bool):
+            If ``True``, the generated ``package.ned`` will contain an
+            ``@namespace(<name>)`` directive, and C++ code must wrap
+            ``Define_Module()`` calls in a matching ``namespace <name> { ... }``
+            block.  If ``False`` (the default), no namespace is used and
+            both NED types and C++ class registrations live in the global
+            namespace.  Mismatched namespaces cause *"Class not found"*
+            errors at runtime.
+
+        omnetpp_project (string):
+            The name of the OMNeT++ project to reference in the ``.opp`` file.
+
+    Returns (:py:class:`SimulationProject`):
+        The newly created and registered simulation project.
+    """
+    from opp_repl.simulation.workspace import load_opp_file
+    if path is None:
+        path = os.getcwd()
+    project_dir = os.path.join(path, name)
+    if os.path.isdir(project_dir) and os.listdir(project_dir):
+        raise Exception(f"Directory '{project_dir}' already exists and is not empty")
+    os.makedirs(project_dir, exist_ok=True)
+    _logger.info(f"Creating project '{name}' in {project_dir}")
+
+    _write_project_file(project_dir, f"{name}.opp", textwrap.dedent(f"""\
+        SimulationProject(
+            name="{name}",
+            root_folder=".",
+            omnetpp_project="{omnetpp_project}",
+            build_types=["executable"],
+            ned_folders=["."],
+            ini_file_folders=["."],
+        )
+    """))
+
+    _write_project_file(project_dir, ".oppbuildspec", textwrap.dedent("""\
+        <?xml version="1.0" encoding="UTF-8" standalone="no"?>
+        <buildspec version="4.0">
+            <dir makemake-options="--deep --meta:recurse --meta:export-library --meta:use-exported-libs --meta:feature-cflags --meta:feature-ldflags" path="." type="makemake"/>
+        </buildspec>
+    """))
+
+    _write_project_file(project_dir, ".nedfolders", ".\n")
+
+    if namespace:
+        _write_project_file(project_dir, "package.ned", f"@namespace({name});\n")
+    else:
+        _write_project_file(project_dir, "package.ned", "")
+
+    _write_project_file(project_dir, "omnetpp.ini", textwrap.dedent("""\
+        [General]
+    """))
+
+    opp_file = os.path.join(project_dir, f"{name}.opp")
+    _logger.info(f"Creating project '{name}' done")
+    return load_opp_file(os.path.abspath(opp_file))
+
+def _write_project_file(directory, filename, content):
+    filepath = os.path.join(directory, filename)
+    if os.path.exists(filepath):
+        _logger.debug(f"Skipping existing file {filepath}")
+        return
+    with open(filepath, "w") as f:
+        f.write(content)
+    _logger.debug(f"Created {filepath}")
 
