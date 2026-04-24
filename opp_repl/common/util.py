@@ -418,7 +418,7 @@ class DebugLevel(LoggerLevel):
     def __init__(self, logger):
         super().__init__(self, logger, logging.DEBUG)
 
-def run_command_with_logging(args, error_message=None, nice=10, wait=True, **kwargs):
+def run_command_with_logging(args, error_message=None, error_message_lines=20, nice=10, wait=True, **kwargs):
     logger = logging.getLogger(os.path.basename(args[0]))
     if logger.level == logging.NOTSET:
         logger.setLevel(get_external_command_log_level())
@@ -446,7 +446,8 @@ def run_command_with_logging(args, error_message=None, nice=10, wait=True, **kwa
         if process.returncode == -signal.SIGINT:
             raise KeyboardInterrupt()
         if error_message and process.returncode != 0:
-            raise Exception(error_message)
+            stderr_tail = "".join(stderr_lines[-error_message_lines:]).rstrip("\n")
+            raise Exception(error_message + (":\n" + stderr_tail if stderr_tail else ""))
         return subprocess.CompletedProcess(args, process.returncode, "".join(stdout_lines), "".join(stderr_lines))
     else:
         return subprocess.CompletedProcess(args, 0, "", "")
