@@ -333,6 +333,7 @@ def _register_mcp_handlers():
         IMPORTANT: Before writing any code, always read the documentation resources first.
         Do NOT guess function names, parameter names, or signatures. Look them up.
         Do NOT import packages that are already pre-loaded.
+        Do NOT use print() to view results.
 
         To discover the documentation:
         - Read opp-repl://guides for a list of guide topics
@@ -347,8 +348,8 @@ def _register_mcp_handlers():
             code: Python code to execute.
 
         Returns:
-            Captured stdout/stderr output. If the code is a single expression,
-            its repr is returned.
+            The repr of the last expression's value (if any), followed by any
+            captured stdout/stderr. There is no need to call print().
         """
         import IPython
         ip = IPython.get_ipython()
