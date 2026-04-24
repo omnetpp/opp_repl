@@ -13,6 +13,17 @@ fi
 export OPP_REPL_ROOT="$(cd "$(dirname "$_OPP_REPL_SETENV_FILE")" && pwd)"
 unset _OPP_REPL_SETENV_FILE
 
+# If an OMNeT++ environment was already configured, capture its PATH/PYTHONPATH
+# additions now.  Activating opp_repl's venv below will restore a snapshotted
+# PATH from when the venv was created, which typically erases the OMNeT++ bin
+# directory.  We restore it after the venv activation so `opp_makemake`,
+# `opp_run`, `opp_scavetool` and the other OMNeT++ binaries remain reachable
+# regardless of the order in which the two setenv scripts are sourced.
+if [ -n "$__omnetpp_root_dir" ]; then
+    _OPP_REPL_OMNETPP_BIN="$__omnetpp_root_dir/bin"
+    _OPP_REPL_OMNETPP_PYTHON="$__omnetpp_root_dir/python"
+fi
+
 # If the user installed opp_repl into a sibling virtual environment
 # (e.g. `python3 -m venv .venv && .venv/bin/pip install -e .`), activate
 # it automatically so `opp_repl` and its dependencies are available
@@ -20,6 +31,23 @@ unset _OPP_REPL_SETENV_FILE
 if [ -f "$OPP_REPL_ROOT/.venv/bin/activate" ]; then
     . "$OPP_REPL_ROOT/.venv/bin/activate"
 fi
+
+# Restore OMNeT++'s path additions if they were present before we activated
+# our venv.  The venv activation saves a snapshotted PATH and restores it,
+# dropping anything that was prepended between the snapshot moment and now.
+if [ -n "$_OPP_REPL_OMNETPP_BIN" ] && [ -d "$_OPP_REPL_OMNETPP_BIN" ]; then
+    case ":$PATH:" in
+        *":$_OPP_REPL_OMNETPP_BIN:"*) ;;
+        *) export PATH="$_OPP_REPL_OMNETPP_BIN:$PATH" ;;
+    esac
+fi
+if [ -n "$_OPP_REPL_OMNETPP_PYTHON" ] && [ -d "$_OPP_REPL_OMNETPP_PYTHON" ]; then
+    case ":$PYTHONPATH:" in
+        *":$_OPP_REPL_OMNETPP_PYTHON:"*) ;;
+        *) export PYTHONPATH="$_OPP_REPL_OMNETPP_PYTHON:$PYTHONPATH" ;;
+    esac
+fi
+unset _OPP_REPL_OMNETPP_BIN _OPP_REPL_OMNETPP_PYTHON
 
 export PATH="$OPP_REPL_ROOT/bin:$OPP_REPL_ROOT/opp_repl:$PATH"
 export PYTHONPATH="$OPP_REPL_ROOT:$PYTHONPATH"
