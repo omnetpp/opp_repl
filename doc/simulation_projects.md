@@ -89,6 +89,41 @@ define_simulation_project("inet-4.5", root_folder=worktree,
                           ini_file_folders=["examples"])
 ```
 
+## Creating a project from scratch
+
+The `create_project()` function generates a ready-to-use project directory
+with all the required boilerplate files (`.opp`, `.oppbuildspec`,
+`.nedfolders`, `package.ned`, `omnetpp.ini`):
+
+```python
+p = create_project("mm1k", omnetpp_project.get_full_path("samples"))
+```
+
+This creates the directory `samples/mm1k` under the OMNeT++ root with
+skeleton files, loads the `.opp` file, and returns the `SimulationProject`.
+After adding NED network definitions and C++ simple module implementations,
+the project is immediately buildable and runnable:
+
+```python
+p.build()
+r = run_simulations(simulation_project=p, config_filter="General")
+```
+
+By default no C++ namespace or NED package is used — both NED types and
+C++ class registrations live in the global namespace.  Pass `namespace=True`
+to generate a `package.ned` with `@namespace(<name>)`:
+
+```python
+p = create_project("mm1k", path="/tmp", namespace=True)
+```
+
+When `namespace=True`, C++ code **must** wrap `Define_Module()` calls in a
+matching `namespace mm1k { ... }` block.  A mismatch causes "Class not
+found" errors at runtime.
+
+The function raises an exception if the target directory already exists and
+is not empty.
+
 ## Source layout
 
 A project tells opp_repl where everything lives through a set of folder
