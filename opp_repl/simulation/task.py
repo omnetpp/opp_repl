@@ -6,6 +6,7 @@ import copy
 import datetime
 import functools
 import hashlib
+import importlib.util
 import logging
 import os
 import random
@@ -14,6 +15,11 @@ import signal
 import subprocess
 import sys
 import time
+
+if importlib.util.find_spec("omnetpp"):
+    from omnetpp.scave.results import read_result_files, get_scalars as _get_scalars, get_vectors as _get_vectors, get_histograms as _get_histograms
+
+import pandas as pd
 
 from opp_repl.common import *
 from opp_repl.simulation.build import *
@@ -130,6 +136,54 @@ class SimulationTaskResult(TaskResult):
             return self.error_message + " -- in module " + self.error_module
         else:
             return self.error_message or ""
+
+    def _get_full_result_path(self, relative_path):
+        simulation_config = self.task.simulation_config
+        simulation_project = simulation_config.simulation_project
+        return simulation_project.get_full_path(os.path.join(simulation_config.working_directory, relative_path))
+
+    def get_scalars(self, include_fields=True, include_runattrs=False, **kwargs):
+        """
+        Returns scalar results from the simulation's ``.sca`` file as a DataFrame.
+
+        Parameters:
+            include_fields (bool): Include statistic fields (count, mean, etc.) as scalars.
+            include_runattrs (bool): Include run attributes in the returned DataFrame.
+
+        Returns (DataFrame):
+            A pandas DataFrame with the scalar results.
+        """
+        path = self._get_full_result_path(self.scalar_file_path)
+        df = read_result_files(path, include_fields_as_scalars=include_fields, **kwargs)
+        return _get_scalars(df, include_runattrs=include_runattrs)
+
+    def get_vectors(self, include_runattrs=False, **kwargs):
+        """
+        Returns vector results from the simulation's ``.vec`` file as a DataFrame.
+
+        Parameters:
+            include_runattrs (bool): Include run attributes in the returned DataFrame.
+
+        Returns (DataFrame):
+            A pandas DataFrame with the vector results.
+        """
+        path = self._get_full_result_path(self.vector_file_path)
+        df = read_result_files(path, **kwargs)
+        return _get_vectors(df, include_runattrs=include_runattrs)
+
+    def get_histograms(self, include_runattrs=False, **kwargs):
+        """
+        Returns histogram results from the simulation's ``.sca`` file as a DataFrame.
+
+        Parameters:
+            include_runattrs (bool): Include run attributes in the returned DataFrame.
+
+        Returns (DataFrame):
+            A pandas DataFrame with the histogram results.
+        """
+        path = self._get_full_result_path(self.scalar_file_path)
+        df = read_result_files(path, **kwargs)
+        return _get_histograms(df, include_runattrs=include_runattrs)
 
     def get_subprocess_result(self):
         return self.subprocess_result
@@ -467,11 +521,53 @@ class SimulationTask(Task):
     #     file_names = [simulation_project.get_full_path(file_name) for file_name in file_names]
     #     return sorted([file_name for file_name in file_names if os.path.exists(file_name)])
 
+class MultipleSimulationTaskResults(MultipleTaskResults):
+    """
+    Represents multiple simulation task results with convenience methods
+    for reading merged result data across all runs.
+    """
+
+    def get_scalars(self, **kwargs):
+        """
+        Returns scalar results from all simulation runs merged into a single DataFrame.
+
+        Parameters:
+            kwargs: Additional parameters passed to each :py:meth:`SimulationTaskResult.get_scalars`.
+
+        Returns (DataFrame):
+            A pandas DataFrame with the merged scalar results.
+        """
+        return pd.concat([r.get_scalars(**kwargs) for r in self.results if r.result == "DONE"], ignore_index=True)
+
+    def get_vectors(self, **kwargs):
+        """
+        Returns vector results from all simulation runs merged into a single DataFrame.
+
+        Parameters:
+            kwargs: Additional parameters passed to each :py:meth:`SimulationTaskResult.get_vectors`.
+
+        Returns (DataFrame):
+            A pandas DataFrame with the merged vector results.
+        """
+        return pd.concat([r.get_vectors(**kwargs) for r in self.results if r.result == "DONE"], ignore_index=True)
+
+    def get_histograms(self, **kwargs):
+        """
+        Returns histogram results from all simulation runs merged into a single DataFrame.
+
+        Parameters:
+            kwargs: Additional parameters passed to each :py:meth:`SimulationTaskResult.get_histograms`.
+
+        Returns (DataFrame):
+            A pandas DataFrame with the merged histogram results.
+        """
+        return pd.concat([r.get_histograms(**kwargs) for r in self.results if r.result == "DONE"], ignore_index=True)
+
 class MultipleSimulationTasks(MultipleTasks):
     """
     Represents multiple simulation tasks that can be run together.
     """
-    def __init__(self, simulation_project=None, mode="release", build=None, name="simulation", **kwargs):
+    def __init__(self, simulation_project=None, mode="release", build=None, name="simulation", multiple_task_results_class=MultipleSimulationTaskResults, **kwargs):
         """
         Initializes a new multiple simulation tasks object.
 
@@ -485,7 +581,7 @@ class MultipleSimulationTasks(MultipleTasks):
             kwargs (dict):
                 Additional arguments are inherited from :py:class:`MultipleTasks <opp_repl.common.task.MultipleTasks>` constructor.
         """
-        super().__init__(name=name, **kwargs)
+        super().__init__(name=name, multiple_task_results_class=multiple_task_results_class, **kwargs)
         self.locals = locals()
         self.locals.pop("self")
         self.kwargs = kwargs
