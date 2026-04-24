@@ -1,26 +1,7 @@
 # Running Simulations
 
-Build simulation projects, run simulations with various filters and modes,
-handle results, and manage project loading and cleanup.
-
-## Building Projects
-
-Building is implicit: `run_simulations()` automatically builds the project
-before running any simulation, so there is no need to build manually.  Stale
-binaries are not used by default — the build step ensures the binary is
-up-to-date with the current sources.  Pass `build=False` to skip this step
-when you know the binary is already current.
-
-If you need to trigger a build without running simulations, use
-`build_project()` directly:
-
-```python
-p = get_simulation_project("inet")
-build_project(simulation_project=p)
-build_project(simulation_project=p, mode="debug")
-```
-
-The `mode` parameter selects the build mode (see Concepts guide for available modes).
+Run simulations with various filters and modes, handle results, and manage
+project loading and cleanup.
 
 ## Running Simulations
 
@@ -70,7 +51,7 @@ r = run_simulations(config_filter="PureAloha", sim_time_limit="1s")
 r = r.rerun()
 
 # Re-run only failed simulations
-r.get_error_results().rerun()
+r.get_fail_results().rerun()
 ```
 
 ### Controlling execution
@@ -102,15 +83,54 @@ opp_run_simulations -m debug -t 1s --filter PureAlohaExperiment --hosts node1.lo
 > load an `omnetpp.opp` file explicitly when using a non-standard installation.
 > See [OMNeT++ projects — Automatic detection](omnetpp_projects.md#automatic-detection).
 
+## Building Projects
+
+Building is implicit: `run_simulations()` automatically builds the project
+before running any simulation, so there is no need to build manually.  Stale
+binaries are not used by default — the build step ensures the binary is
+up-to-date with the current sources.  Pass `build=False` to skip this step
+when you want to use the current binary regardless of whether it is up-to-date.
+
+If you need to trigger a build without running simulations, use
+`build_project()` directly:
+
+```python
+p = get_simulation_project("inet")
+build_project(simulation_project=p)
+build_project(simulation_project=p, mode="debug")
+```
+
+The `mode` parameter selects the build mode (see Concepts guide for available modes).
+
 ## Loading projects at runtime
 
-See [Simulation workspaces](simulation_workspaces.md) for `load_opp_file()`
-and `load_workspace()`.
+Use `load_opp_file()` to load a single file or glob pattern, or
+`load_workspace()` to scan a directory for `*.opp` files:
+
+```python
+# Load a single .opp file
+load_opp_file("/path/to/aloha.opp")
+
+# Load all .opp files matching a glob pattern
+load_opp_file("/home/user/workspace/omnetpp/samples/*/*.opp")
+
+# Scan a directory for *.opp files (like the automatic startup scan)
+load_workspace("/home/user/other-workspace")
+```
+
+See [Simulation workspaces](simulation_workspaces.md) for more details.
 
 ## Cleaning Results
 
+`clean_simulation_results()` deletes the `results/` folder for each
+matching simulation config.  It accepts the same filter parameters as
+`run_simulations()`:
+
 ```python
+# Clean all result folders in a project
 clean_simulation_results(simulation_project=inet_project)
+
+# Clean results only under a specific directory
 clean_simulation_results(simulation_project=inet_project,
                          working_directory_filter="examples/ethernet")
 ```

@@ -3,7 +3,26 @@
 Find simulation parameter values that produce desired results by iteratively
 running simulations and minimizing the difference from a target.  Uses
 `scipy.optimize` with Nelder-Mead (derivative-free, suitable for stochastic
-simulations).  Requires the `optimize` extra.
+simulations).  Requires the `optimize` extra (`scipy` and optionally
+`optimparallel`).
+
+## How it works
+
+`optimize_simulation_parameters()` wraps `scipy.optimize.minimize` around the
+simulation runner.  On each iteration:
+
+1. The optimizer proposes new values for the optimized parameters.
+2. The values are formatted into command-line overrides
+   (e.g. `--Aloha.host[*].iaTime=exponential(1.5s)`).
+3. The simulation task is run with these overrides; scalar and vector result
+   files are written to a unique file per evaluation.
+4. The target result names are read from the output files and the absolute
+   difference from the expected values is computed as the cost.
+5. The optimizer adjusts the parameters and repeats until convergence.
+
+The default method is **Nelder-Mead**, which is derivative-free and works
+well for stochastic simulations where small parameter perturbations may not
+change the output (same random seed).
 
 ## Example 1 — Aloha channel utilization
 
@@ -68,3 +87,70 @@ optimize_simulation_parameters(
 Best: {'distance': 53.194} -> {'packetErrorRate:vector': 0.300}
 Elapsed time: 6.38
 ```
+
+## Parameter reference
+
+| Parameter | Description |
+|---|---|
+| `simulation_task` | A `SimulationTask` obtained from `get_simulation_task()` |
+| `expected_result_names` | Result scalar/vector names to match (e.g. `["channelUtilization:last"]`) |
+| `expected_result_values` | Target values, one per result name |
+| `parameter_names` | Human-readable names for the optimized parameters |
+| `parameter_assignments` | INI-style parameter paths (e.g. `["Aloha.host[*].iaTime"]`) |
+| `parameter_units` | Unit suffixes or format strings (see below) |
+| `initial_values` | Starting values for the optimizer |
+| `min_values` / `max_values` | Bounds for each parameter |
+| `fixed_parameter_names` | Names of parameters held constant during optimization |
+| `fixed_parameter_values` | Values for the fixed parameters |
+| `fixed_parameter_assignments` | INI-style paths for the fixed parameters |
+| `fixed_parameter_units` | Unit suffixes for the fixed parameters |
+| `tol` | Convergence tolerance (default `1e-3`) |
+| `method` | `scipy.optimize` method (default `"Nelder-Mead"`) |
+| `concurrent` | Use `optimparallel` for parallel evaluations (default `False`) |
+
+## Units and distribution wrappers
+
+The `parameter_units` list controls how numeric values are formatted into
+command-line overrides:
+
+- **Plain units** like `"s"`, `"m"`, `"Mbps"` are appended directly:
+  value `1.5` with unit `"s"` → `1.5s`.
+- **Format strings** containing `{0}` are used as templates:
+  value `1.5` with unit `"exponential({0}s)"` → `exponential(1.5s)`.
+
+The format-string form is needed when a NED parameter is declared as
+`volatile` with a distribution function — the override must preserve
+the distribution wrapper.
+
+## Fixed parameters
+
+Fixed parameters are passed to every simulation run but are not varied by
+the optimizer.  This is useful when exploring a specific scenario (e.g.
+a particular bitrate) while optimizing another parameter (e.g. distance).
+Set all four `fixed_parameter_*` lists to empty lists `[]` when there
+are no fixed parameters.
+
+## Convergence and tolerance
+
+The optimizer stops when further iterations improve the cost by less than
+`tol` (default `1e-3`).  If the simulation fails during an evaluation
+(non-zero exit code), the cost is reported as infinity and the optimizer
+moves on.
+
+Each evaluation prints a progress line showing the current parameter values,
+result values, and per-result absolute differences.  At the end, the best
+result found across all evaluations is printed.
+
+## Parallel optimization
+
+Set `concurrent=True` to use `optimparallel.minimize_parallel`, which
+evaluates multiple parameter combinations simultaneously.  This requires
+the `optimparallel` package and works best when each simulation is
+relatively fast.
+
+## Return value
+
+`optimize_simulation_parameters()` returns the optimized parameter value
+as a `float` (single parameter) or a `list[float]` (multiple parameters).
+The full `scipy.optimize.OptimizeResult` is printed to stdout, including
+convergence status and the number of function evaluations.

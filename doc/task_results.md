@@ -105,6 +105,137 @@ plus information extracted from the simulation's output:
 - **Subprocess result** — the raw `CompletedProcess` object is available
   for low-level inspection of return code, stdout, and stderr.
 
+### Accessing stdout and stderr
+
+The captured process output is available directly on the result:
+
+```python
+r = run_simulations(config_filter="Aloha", sim_time_limit="1s")
+tr = r.results[0]
+
+# Captured output as strings
+tr.stdout                    # simulation's stdout (captured by the subprocess runner)
+tr.stderr                    # simulation's stderr
+
+# The raw subprocess.CompletedProcess object
+tr.subprocess_result.returncode
+tr.subprocess_result.stdout  # same as tr.stdout
+tr.subprocess_result.stderr  # same as tr.stderr
+```
+
+When simulations run with `Cmdenv`, stdout is also written to a file.  The
+relative path is available as `stdout_file_path`:
+
+```python
+tr.stdout_file_path          # e.g. "results/PureAloha-#0.out"
+```
+
+### Accessing output files
+
+Each `SimulationTaskResult` records the relative paths (relative to the
+simulation's working directory) for the output files the run produced:
+
+```python
+tr.stdout_file_path          # e.g. "results/PureAloha-#0.out"
+tr.eventlog_file_path        # e.g. "results/PureAloha-#0.elog"
+tr.scalar_file_path          # e.g. "results/PureAloha-#0.sca"
+tr.vector_file_path          # e.g. "results/PureAloha-#0.vec"
+```
+
+These paths are relative to the simulation config's working directory.  To
+get an absolute path, combine them with the project's `get_full_path()`:
+
+```python
+project = tr.task.simulation_config.simulation_project
+workdir = tr.task.simulation_config.working_directory
+abs_path = project.get_full_path(workdir + "/" + tr.scalar_file_path)
+```
+
+The eventlog file (`.elog`) is only produced when eventlog recording is
+enabled (pass `record_eventlog=True` to `run_simulations()`).
+
+### Error attributes
+
+When a simulation reports an error, `SimulationTaskResult` parses the
+error message and exposes structured fields:
+
+```python
+tr = r.results[0]
+tr.error_message            # e.g. "Cannot route: no interface for next hop"
+tr.error_module             # e.g. "(inet::Ipv4) host.ipv4.ip"
+tr.error_simulation_time    # e.g. "1.234"
+tr.error_event_number       # e.g. 5821
+```
+
+These are `None` when the simulation completed without error or when the
+error output could not be parsed.
+
+### Navigating from a result to its task and config
+
+Every result holds a reference to the task that created it.  From the task
+you can reach the simulation config and project:
+
+```python
+tr = r.results[0]
+
+# The task
+tr.task                                  # SimulationTask
+tr.task.run_number                       # 0
+tr.task.mode                             # "release"
+tr.task.sim_time_limit                   # "1s"
+
+# The config
+cfg = tr.task.simulation_config
+cfg.working_directory                    # "examples/ethernet/lans"
+cfg.ini_file                             # "omnetpp.ini"
+cfg.config                               # "MixedLAN"
+
+# The project
+proj = cfg.simulation_project
+proj.name                                # "inet"
+proj.get_full_path(cfg.working_directory)  # absolute path
+```
+
+For test and update results, the underlying simulation result is available
+as `tr.simulation_task_result`, which provides the same navigation plus
+the simulation-specific attributes (output files, timing, errors).
+
+## Test result details
+
+### FingerprintTestTaskResult
+
+Extends `SimulationTestTaskResult` with fingerprint-specific fields:
+
+```python
+tr.expected_fingerprint      # Fingerprint("a82f-d3c1", "tplx")
+tr.calculated_fingerprint    # Fingerprint("b91e-c2a0", "tplx")
+tr.fingerprint_mismatch      # True if they differ
+tr.simulation_task_result    # the underlying SimulationTaskResult
+```
+
+### SpeedUpdateTaskResult
+
+Carries instruction counts for the speed comparison:
+
+```python
+tr.expected_num_cpu_instructions  # from the speed store baseline
+tr.num_cpu_instructions           # measured during this run
+```
+
+The result is `KEEP` when within tolerance, `INSERT` when no baseline
+existed, and `UPDATE` when the difference exceeds the threshold (default
+10%).
+
+### FingerprintUpdateTaskResult
+
+```python
+tr.correct_fingerprint       # from the store (None if new entry)
+tr.calculated_fingerprint    # computed during this run
+```
+
+Result is `KEEP` when unchanged, `INSERT` when no prior entry existed,
+`UPDATE` when the fingerprint changed.
+
 ## Inspecting results
 
 The result can print a colored one-line summary via `print_result()`, or you

@@ -62,6 +62,7 @@ See [Getting started](doc/getting_started.md) for a full walkthrough.
 - [**Chart tests**](doc/chart_tests.md) — chart tests
 - [**Sanitizer tests**](doc/sanitizer_tests.md) — sanitizer tests
 - [**Feature tests**](doc/feature_tests.md) — feature tests, release tests, running all tests
+- [**Bisecting**](doc/bisecting.md) — bisecting git commits for test failures
 - [**Parameter optimization**](doc/parameter_optimization.md) — parameter optimization
 - [**Code coverage**](doc/coverage.md) — coverage reports
 - [**Profiling**](doc/profiling.md) — performance profiling with perf and Hotspot

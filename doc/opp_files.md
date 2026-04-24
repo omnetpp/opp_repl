@@ -27,15 +27,13 @@ specify the project root directory.  They are tried in the following order:
 1. **`root_folder`** — an explicit path.  When relative, it is resolved
    against the `.opp` file's directory at load time.
 2. **`root_folder_environment_variable`** — the value of the named OS
-   environment variable is used as the root.
-3. If neither is set, the root path is `None` and operations that need it
-   will fail.
-
-`SimulationProject` additionally supports
-`root_folder_environment_variable_relative_folder` (default `"."`), which
-is appended to the environment variable value to form the final project
-root.  This is useful for projects that live as subdirectories under a
-common root (e.g. OMNeT++ samples under `$__omnetpp_root_dir/samples/`).
+   environment variable is used as the root.  `SimulationProject`
+   additionally supports
+   **`root_folder_environment_variable_relative_folder`** (default `"."`),
+   which is appended to the environment variable value to form the final
+   project root.  This is useful for projects that live as subdirectories
+   under a common root (e.g. OMNeT++ samples under
+   `$__omnetpp_root_dir/samples/`).
 
 The recommended approach for `.opp` files that live inside the project
 tree is `root_folder="."`.

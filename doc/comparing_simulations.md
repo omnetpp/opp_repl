@@ -1,10 +1,12 @@
 # Comparing Simulations
 
 Compare simulation results between two projects or two git commits.
-The comparison checks stdout trajectories, fingerprint trajectories,
-and scalar statistical results.
+The comparison checks three aspects of each simulation run: stdout
+trajectories, fingerprint trajectories, and scalar statistical results.
 
 ## Python API
+
+### Running a comparison
 
 ```python
 # Compare two projects
@@ -20,15 +22,142 @@ results = compare_simulations_between_commits(
     inet_project, "HEAD~1", "HEAD",
     config_filter="General",
     run_number=0)
+```
 
-# Inspect the results
+Both functions accept the same filter parameters as `run_simulations()` (e.g.
+`working_directory_filter`, `config_filter`, `run_number`).
+
+Additional keyword arguments can narrow the statistical and stdout comparison:
+
+- **`statistical_result_name_filter`** / **`exclude_statistic_name_filter`** — filter scalar names
+- **`statistical_result_module_filter`** / **`exclude_statistic_module_filter`** — filter module paths
+- **`stdout_filter`** / **`exclude_stdout_filter`** — filter stdout lines before comparing
+
+### Understanding the result
+
+`compare_simulations()` returns a `MultipleCompareSimulationsTaskResults`
+object.  It aggregates individual comparison results — one per matching
+simulation config — in its `results` list.  Printing it shows the overall
+verdict and a summary of any unexpected differences:
+
+```python
+print(results)
+# Multiple simulation comparison results: IDENTICAL, summary: 3 IDENTICAL, ...
+```
+
+Each element in `results.results` is a `CompareSimulationsTaskResult` with:
+
+- **`result`** — overall verdict: `"IDENTICAL"`, `"DIVERGENT"`, or `"DIFFERENT"`
+- **`reason`** — human-readable explanation (e.g. `"different fingerprint trajectories, different statistics"`) or `None` when identical
+- **`expected`** — `True` when the result is `"IDENTICAL"`
+
+The individual result also carries the three per-axis sub-results described
+below.
+
+### Stdout trajectory comparison
+
+The stdout trajectory records every line printed to standard output, tagged
+with the event number that produced it.  The two trajectories are compared
+line-by-line.
+
+```python
 r = results.results[0]
-print(r.stdout_trajectory_comparison_result)       # IDENTICAL / DIVERGENT
-print(r.fingerprint_trajectory_comparison_result)   # IDENTICAL / DIVERGENT
-print(r.statistical_comparison_result)              # IDENTICAL / DIFFERENT
-r.print_different_statistical_results(include_relative_errors=True)
+r.stdout_trajectory_comparison_result   # "IDENTICAL" or "DIVERGENT"
+```
 
-# Interactive debugging at the divergence point
+When divergent, `stdout_trajectory_divergence_position` points to the first
+line that differs.  You can inspect it and drill down:
+
+```python
+r.stdout_trajectory_divergence_position                  # divergence position object (or None)
+r.stdout_trajectory_divergence_position.get_description() # event number, simulation time, module, message
+```
+
+### Fingerprint trajectory comparison
+
+The fingerprint trajectory is a cumulative hash recorded at every simulation
+event.  When two runs first produce a different fingerprint the *preceding*
+event is the one that behaved differently.
+
+```python
+r.fingerprint_trajectory_comparison_result   # "IDENTICAL" or "DIVERGENT"
+```
+
+When divergent:
+
+```python
+r.fingerprint_trajectory_divergence_position                  # divergence position object (or None)
+r.fingerprint_trajectory_divergence_position.get_description() # event details for both sides
+```
+
+You can walk up the causal chain to understand *why* the divergence occurred:
+
+```python
+r.print_divergence_position_cause_chain()             # prints 3 cause events by default
+r.print_divergence_position_cause_chain(num_cause_events=5)  # walk further back
+```
+
+### Statistical (scalar) result comparison
+
+Scalar results (`.sca` files, plus statistics extracted from `.vec` files) are
+loaded into DataFrames and compared by `(experiment, measurement, replication,
+module, name)`.  Values that differ, or that exist on only one side, are
+collected into `different_statistical_results`.
+
+```python
+r.statistical_comparison_result   # "IDENTICAL" or "DIFFERENT"
+```
+
+When different, several attributes and methods help you drill down:
+
+```python
+r.different_statistical_results   # pandas DataFrame sorted by relative_error (descending)
+r.identical_statistical_results   # DataFrame of scalars that match exactly
+r.df_1, r.df_2                    # the raw scalar DataFrames for the two sides
+
+# Print helpers
+r.print_different_statistic_modules()                          # list affected modules
+r.print_different_statistic_names()                            # list affected scalar names
+r.print_different_statistical_results()                        # compact table
+r.print_different_statistical_results(include_relative_errors=True)   # add relative error column
+r.print_different_statistical_results(include_absolute_errors=True)   # add absolute error column
+r.print_different_statistical_results(include_relative_errors=True,
+                                      include_absolute_errors=True)   # both error columns
+```
+
+The `different_statistical_results` DataFrame contains columns `module`,
+`name`, `value_1`, `value_2`, `absolute_error`, and `relative_error`, so you
+can also filter it directly with standard pandas operations:
+
+```python
+df = r.different_statistical_results
+df[df["relative_error"] > 0.01]          # only differences above 1 %
+df[df["module"].str.contains("router")]  # only router modules
+```
+
+### Interactive debugging and visualization
+
+Once you have identified a divergence, you can launch interactive debugging
+sessions or visualize the divergence point:
+
+```python
+# Launch two debugger sessions stopped at the divergence event
 r.debug_at_fingerprint_divergence_position()
+r.debug_at_stdout_divergence_position()
+
+# Open two Qtenv instances fast-forwarded to the divergence event
+r.run_until_fingerprint_divergence_position()
+r.run_until_stdout_divergence_position()
+
+# Open the eventlog files in the sequence chart at the divergence event
 r.show_divergence_position_in_sequence_chart()
+```
+
+The `num_cause_events` parameter lets you step back along the causal chain
+before stopping.  For example, to break at the event that *caused* the
+divergent event:
+
+```python
+r.debug_at_fingerprint_divergence_position(num_cause_events=1)
+r.run_until_fingerprint_divergence_position(num_cause_events=1)
 ```

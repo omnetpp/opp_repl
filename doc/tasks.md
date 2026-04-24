@@ -212,3 +212,106 @@ to detect when a re-run is necessary because something has changed.
   `.log`, `.rt` files from the result folders of all matching configs.
 - Individual tasks also expose `clear_result_folder()` and
   `remove_result_folder()` for finer-grained cleanup.
+
+## Test tasks in detail
+
+A test task wraps a simulation run and adds a verification step.  The
+general pattern is: run the simulation, then call
+`check_simulation_task_result()` to compare the output against a stored
+baseline.  Result codes include `PASS` and `FAIL` in addition to the
+standard `SKIP`, `CANCEL`, `ERROR`.
+
+Each test type has a corresponding `run_*()` entry point and a
+`get_*_tasks()` function that returns tasks without running them:
+
+### Fingerprint tests
+
+Fingerprint tests verify that the simulation's execution trajectory has not
+changed.  The expected fingerprint (a short hash over selected simulation
+state, e.g. `"a82f-d3c1/tplx"`) is looked up from the project's fingerprint
+store (`fingerprint_store` parameter, default `fingerprint.json`).
+
+```python
+run_fingerprint_tests(sim_time_limit="1s")
+run_fingerprint_tests(config_filter="Aloha", ingredients_list=["tplx", "~tNl"])
+```
+
+The `ingredients` string controls what state is included in the fingerprint
+(e.g. `"tplx"` = topology + packets + links + transmission, `"~tNl"` = NED
+types + links using INET's extended calculator).
+
+A `FingerprintTestTask` carries `ingredients`, the expected `fingerprint`
+from the store, and the `sim_time_limit` at which it was recorded.
+
+### Speed tests
+
+Speed tests check that the CPU instruction count stays within a tolerance
+(default 10%) of a stored baseline from the speed store (`speed.json`).
+Simulations are run in `profile` mode.
+
+```python
+run_speed_tests(sim_time_limit="1s")
+```
+
+### Statistical tests
+
+Statistical tests compare scalar results against stored baseline `.sca`
+files (under `statistics_folder`).  Any difference in the scalar output
+triggers a `FAIL`.
+
+```python
+run_statistical_tests(sim_time_limit="1s")
+```
+
+### Smoke tests
+
+Smoke tests simply verify that a simulation starts and finishes without
+error within a short CPU time limit.
+
+```python
+run_smoke_tests(cpu_time_limit="10s")
+```
+
+### Chart tests
+
+Chart tests compare generated chart images pixel-by-pixel against stored
+baseline images (under `media_folder`).
+
+```python
+run_chart_tests()
+```
+
+## Update tasks in detail
+
+Update tasks re-run simulations and refresh the stored baselines.  The
+workflow is:
+
+1. Run the simulation.
+2. Compare the output to the current baseline.
+3. Produce a result code: `KEEP` (unchanged), `INSERT` (new entry),
+   `UPDATE` (changed entry), or `ERROR`/`SKIP`/`CANCEL`.
+4. Write the new baseline to the store.
+
+Each test type has a matching update entry point:
+
+| Entry point | Store file |
+|---|---|
+| `update_fingerprint_test_results()` | `fingerprint.json` |
+| `update_speed_test_results()` | `speed.json` |
+| `update_statistical_test_results()` | `statistics_folder/*.sca` |
+| `update_chart_test_results()` | `media_folder/` images |
+
+```python
+# Update fingerprint baselines for all matching configs
+update_fingerprint_test_results(sim_time_limit="1s")
+
+# Update speed baselines
+update_speed_test_results(sim_time_limit="1s")
+
+# Update stored scalar results
+update_statistical_test_results()
+```
+
+The update result carries the underlying `SimulationTaskResult` so you can
+inspect both the update verdict and the raw simulation output.  After
+running, the store file is written to disk automatically.
