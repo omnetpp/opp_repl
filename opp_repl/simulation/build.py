@@ -11,11 +11,63 @@ import shlex
 import shutil
 import signal
 import subprocess
+import xml.etree.ElementTree as ET
 
 from opp_repl.common.compile import *
 from opp_repl.simulation.project import *
 
 _logger = logging.getLogger(__name__)
+
+def generate_makefile(simulation_project=None, **kwargs):
+    """
+    Generates a Makefile for a simulation project by running :command:`opp_makemake`.
+
+    The makemake options are read from the project's ``.oppbuildspec`` file.
+    If no ``.oppbuildspec`` is found, sensible defaults (``--deep -f``) are used.
+    When the project's :py:attr:`build_types` includes ``"executable"`` and no
+    ``-o`` option is present, ``-o <project_name>`` is added automatically so
+    that the resulting binary name matches what opp_repl expects.
+
+    Parameters:
+        simulation_project (:py:class:`SimulationProject <opp_repl.simulation.project.SimulationProject>`):
+            The simulation project to generate a Makefile for. If unspecified, then the default simulation project is used.
+
+    Returns (None):
+        Nothing.
+    """
+    if simulation_project is None:
+        simulation_project = get_default_simulation_project()
+    cwd = simulation_project.get_full_path(".")
+    oppbuildspec_path = os.path.join(cwd, ".oppbuildspec")
+    if os.path.isfile(oppbuildspec_path):
+        tree = ET.parse(oppbuildspec_path)
+        root = tree.getroot()
+        makemake_options = None
+        for dir_elem in root.iter("dir"):
+            if dir_elem.get("type") == "makemake" and dir_elem.get("path") == ".":
+                makemake_options = dir_elem.get("makemake-options", "")
+                break
+        if makemake_options is None:
+            for dir_elem in root.iter("dir"):
+                if dir_elem.get("type") == "makemake":
+                    makemake_options = dir_elem.get("makemake-options", "")
+                    break
+        options = shlex.split(makemake_options) if makemake_options else ["--deep", "-f"]
+    else:
+        options = ["--deep", "-f"]
+    options = [opt for opt in options if not opt.startswith("--meta:")]
+    if "executable" in simulation_project.build_types and not any(opt == "-o" for opt in options):
+        options.extend(["-o", simulation_project.get_name()])
+    args = ["opp_makemake"] + options
+    name = simulation_project.get_name()
+    _logger.info(f"Generating Makefile for {name}")
+    if simulation_project.opp_env_workspace:
+        shell_cmd = "cd " + shlex.quote(cwd) + " && " + shlex.join(args)
+        args = ["opp_env", "-l", "WARN", "run", simulation_project.opp_env_project, "-w", simulation_project.opp_env_workspace, "-c", shell_cmd]
+        run_command_with_logging(args, error_message=f"Generating Makefile for {name} failed")
+    else:
+        run_command_with_logging(args, cwd=cwd, env=simulation_project.get_env(), error_message=f"Generating Makefile for {name} failed")
+    _logger.info(f"Generating Makefile for {name} done")
 
 def make_makefiles(simulation_project=None, **kwargs):
     if simulation_project is None:
@@ -69,9 +121,12 @@ def build_project_using_makefile(simulation_project=None, mode="release", **kwar
     """
     if simulation_project is None:
         simulation_project = get_default_simulation_project()
+    cwd = simulation_project.get_full_path(".")
+    if not os.path.isfile(os.path.join(cwd, "Makefile")):
+        _logger.info(f"No Makefile found in {cwd}, generating one")
+        generate_makefile(simulation_project=simulation_project)
     _logger.info(f"Building {simulation_project.get_name()} in {mode} mode started")
     args = ["make", "MODE=" + mode, "-j", str(multiprocessing.cpu_count())]
-    cwd = simulation_project.get_full_path(".")
     if simulation_project.opp_env_workspace:
         shell_cmd = "cd " + shlex.quote(cwd) + " && " + shlex.join(args)
         args = ["opp_env", "-l", "WARN", "run", simulation_project.opp_env_project, "-w", simulation_project.opp_env_workspace, "-c", shell_cmd]
