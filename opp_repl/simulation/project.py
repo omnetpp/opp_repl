@@ -102,6 +102,14 @@ class OmnetppProject:
         else:
             return None
 
+    def get_full_path(self, path):
+        root = self.get_root_path()
+        return os.path.abspath(os.path.join(root, path)) if root is not None else None
+
+    def get_relative_path(self, path):
+        root = self.get_root_path()
+        return os.path.relpath(path, root) if root is not None else None
+
     def get_library_suffix(self, mode="release"):
         if mode == "release":
             return "_release"
