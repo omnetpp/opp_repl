@@ -74,6 +74,8 @@ class SimulationTaskResult(TaskResult):
         if subprocess_result:
             stdout = self.subprocess_result.stdout or ""
             stderr = self.subprocess_result.stderr or ""
+            self.stdout = stdout
+            self.stderr = stderr
             match = re.search(r"<!> Simulation time limit reached -- at t=(.*), event #(\d+)", stdout)
             self.last_event_number = int(match.group(2)) if match else None
             self.last_simulation_time = match.group(1) if match else None
@@ -412,7 +414,11 @@ class SimulationTask(Task):
         elif subprocess_result.returncode == 0:
             task_result = self.task_result_class(task=self, subprocess_result=subprocess_result, result="DONE", expected_result=expected_result)
         else:
-            task_result = self.task_result_class(task=self, subprocess_result=subprocess_result, result="ERROR", expected_result=expected_result, reason=f"Non-zero exit code: {subprocess_result.returncode}")
+            if subprocess_result.returncode == 127:
+                reason = "Executable not found (exit code 127). Was the project built? Does the binary name match the project name?"
+            else:
+                reason = f"Non-zero exit code: {subprocess_result.returncode}"
+            task_result = self.task_result_class(task=self, subprocess_result=subprocess_result, result="ERROR", expected_result=expected_result, reason=reason)
         # self.dependency_source_file_paths = self.collect_dependency_source_file_paths(task_result)
         task_result.partial_source_hash = hex_or_none(self.get_hash(complete=False, binary=False))
         return task_result
