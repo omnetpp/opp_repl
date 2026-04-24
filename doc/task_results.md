@@ -22,9 +22,10 @@ its own specialised result classes.
 | Class | Produced by | Result codes |
 |---|---|---|
 | `SimulationTaskResult` | `SimulationTask` | `DONE`, `SKIP`, `CANCEL`, `ERROR` |
+| `MultipleSimulationTaskResults` | `MultipleSimulationTasks` | same |
 
 Extracts timing, error details, end-of-run position, output file paths,
-and used NED types from the simulation’s stdout/stderr.
+and used NED types from the simulation's stdout/stderr.
 
 ### Test results
 
@@ -170,6 +171,43 @@ tr.error_event_number       # e.g. 5821
 These are `None` when the simulation completed without error or when the
 error output could not be parsed.
 
+### Reading simulation results
+
+`SimulationTaskResult` provides convenience methods for reading the
+scalar, vector, and histogram result files produced by the simulation.
+These return pandas DataFrames using `omnetpp.scave.results` internally.
+
+```python
+r = run_simulations(config_filter="Aloha", sim_time_limit="100s")
+tr = r.results[0]
+
+# Scalars (from the .sca file)
+df = tr.get_scalars()                      # all scalars, including statistic fields
+df = tr.get_scalars(include_fields=False)   # only explicitly recorded scalars
+df = tr.get_scalars(include_runattrs=True)  # include run attributes as extra columns
+
+# Vectors (from the .vec file)
+df = tr.get_vectors()
+
+# Histograms (from the .sca file)
+df = tr.get_histograms()
+```
+
+When working with multiple runs, `MultipleSimulationTaskResults` provides
+the same methods, merging all individual `DONE` results into a single
+DataFrame:
+
+```python
+r = run_simulations(config_filter="Aloha", sim_time_limit="100s")
+
+# Merged scalars from all successful runs
+df = r.get_scalars()
+
+# Merged vectors / histograms
+df = r.get_vectors()
+df = r.get_histograms()
+```
+
 ### Navigating from a result to its task and config
 
 Every result holds a reference to the task that created it.  From the task
@@ -256,9 +294,11 @@ available:
 ## Working with multiple results
 
 `run_simulations()` and `MultipleSimulationTasks.run()` return a
-`MultipleTaskResults`.  This object counts how many runs ended up in each
-result category and determines an **overall result** — the worst-case across
-all individual outcomes.
+`MultipleSimulationTaskResults`.  This object counts how many runs ended up
+in each result category and determines an **overall result** — the worst-case
+across all individual outcomes.  It also provides `get_scalars()`,
+`get_vectors()`, and `get_histograms()` for reading merged result data
+(see *Reading simulation results* above).
 
 A typical workflow after a large run:
 
