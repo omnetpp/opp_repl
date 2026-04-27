@@ -26,6 +26,7 @@ def parse_run_repl_arguments():
     parser.add_argument("--load", action="append", default=[], metavar="OPP_FILE", help="load one or more .opp configuration files at startup, can be specified multiple times and supports glob patterns (e.g. --load '*.opp')")
     parser.add_argument("-p", "--simulation-project", default=None, help="name of the default simulation project to use (auto-detected from the working directory if not specified)")
     parser.add_argument("--mcp-port", type=int, default=0, help="TCP port for the Model Context Protocol server that allows AI assistants to interact with the REPL (0 to disable, default: 0)")
+    parser.add_argument("--mcp-token-hash", default=None, help="SHA-256 hex hash of the bearer token required for MCP authentication (required when --mcp-port is set)")
     parser.add_argument("-l", "--log-level", choices=["ERROR", "WARN", "INFO", "DEBUG"], default="INFO", help="controls the verbosity of log messages (default: INFO)")
     parser.add_argument("--external-command-log-level", choices=["ERROR", "WARN", "INFO", "DEBUG"], default="WARN", help="controls the verbosity of log messages from external commands such as simulations and build tools (default: WARN)")
     parser.add_argument("--handle-exception", default=True, action=argparse.BooleanOptionalAction, help="when enabled, errors are displayed as short messages; use --no-handle-exception to show full stack traces for debugging (default: enabled)")
@@ -48,7 +49,7 @@ def run_repl_main():
             if args.mcp_port != 0:
                 try:
                     from opp_repl.common.mcp import start_mcp_server
-                    start_mcp_server(port=args.mcp_port)
+                    start_mcp_server(port=args.mcp_port, token_hash=args.mcp_token_hash)
                 except ImportError:
                     _logger.warning("MCP server not available (install with: pip install opp_repl[mcp])")
             app = IPython.terminal.ipapp.TerminalIPythonApp.instance()

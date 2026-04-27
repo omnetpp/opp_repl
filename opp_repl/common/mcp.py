@@ -9,6 +9,8 @@ compare_simulations, run_fingerprint_tests, etc.) are available directly.
 
 import ctypes
 import glob
+import hashlib
+import hmac
 import inspect
 import io
 import logging
@@ -424,7 +426,24 @@ def _register_mcp_handlers():
 if _mcp_available:
     _register_mcp_handlers()
 
-def start_mcp_server(port=9966):
+class _HashTokenVerifier:
+    """Bearer token verifier that stores only the SHA-256 hash of the expected token.
+
+    On each request the incoming raw token is hashed and compared to the
+    stored hash using a timing-safe comparison.
+    """
+
+    def __init__(self, expected_hash_hex: str):
+        self._expected_hash_hex = expected_hash_hex.lower()
+
+    async def verify_token(self, token: str):
+        from mcp.server.auth.provider import AccessToken
+        incoming_hash = hashlib.sha256(token.encode()).hexdigest()
+        if hmac.compare_digest(incoming_hash, self._expected_hash_hex):
+            return AccessToken(token=token, client_id="opp_repl", scopes=[])
+        return None
+
+def start_mcp_server(port=9966, token_hash=None):
     """Start the MCP server on a background thread using Streamable HTTP transport.
 
     The server uses stateless HTTP mode so each tool call is an independent
@@ -435,9 +454,22 @@ def start_mcp_server(port=9966):
 
     Args:
         port: The port to listen on (default 9966).
+        token_hash: Hex-encoded SHA-256 hash of the bearer token that
+            clients must present.  Required — the server refuses to start
+            without it.
     """
     if not _mcp_available:
         raise ImportError("MCP server requires the 'mcp' package. Install it with: pip install opp_repl[mcp]")
+    if not token_hash:
+        raise ValueError("MCP server requires --mcp-token-hash for authentication. "
+                         "Generate a token and pass its SHA-256 hex hash.")
+
+    _mcp._token_verifier = _HashTokenVerifier(token_hash)
+    from mcp.server.auth.settings import AuthSettings
+    _mcp.settings.auth = AuthSettings(
+        issuer_url="http://127.0.0.1",
+        resource_server_url=f"http://127.0.0.1:{port}",
+    )
 
     global _original_sigint_handler
     _original_sigint_handler = signal.getsignal(signal.SIGINT)

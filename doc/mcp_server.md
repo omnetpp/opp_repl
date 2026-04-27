@@ -6,7 +6,26 @@ Start it with `--mcp-port 9966` (disabled by default).
 
 - **Transport**: Streamable HTTP (stateless)
 - **Endpoint**: `http://127.0.0.1:{port}/mcp`
+- **Authentication**: Bearer token (SHA-256 hash passed via `--mcp-token-hash`)
 - Requires the `mcp` extra: `pip install -e ".[mcp]"`
+
+## Authentication
+
+The MCP server requires bearer token authentication.  The AI client
+generates a random token, computes its SHA-256 hash, and passes the
+**hash** on the command line.  The raw token never appears in process
+arguments or shell history.
+
+```bash
+# Example: AI client generates a token, hashes it, and launches opp_repl
+TOKEN=$(python3 -c "import secrets; print(secrets.token_urlsafe(32))")
+HASH=$(echo -n "$TOKEN" | sha256sum | cut -d' ' -f1)
+opp_repl --mcp-port 9966 --mcp-token-hash "$HASH"
+```
+
+The client then sends `Authorization: Bearer <TOKEN>` with every HTTP
+request.  opp_repl hashes the incoming token and compares it to the
+stored hash (timing-safe).  Requests without a valid token are rejected.
 
 ## Tools
 
