@@ -6,7 +6,6 @@ import copy
 import datetime
 import functools
 import hashlib
-import importlib.util
 import logging
 import os
 import random
@@ -16,8 +15,10 @@ import subprocess
 import sys
 import time
 
-if importlib.util.find_spec("omnetpp"):
+try:
     from omnetpp.scave.results import read_result_files, get_scalars as _get_scalars, get_vectors as _get_vectors, get_histograms as _get_histograms
+except (ImportError, ModuleNotFoundError):
+    pass
 
 import pandas as pd
 

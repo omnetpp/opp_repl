@@ -9,14 +9,15 @@ baseline charts. The baseline charts can be found in the media folder of the sim
 import filecmp
 import io
 import logging
-import importlib.util
 import matplotlib
 import numpy
 
-if importlib.util.find_spec("omnetpp"):
+try:
     import omnetpp
     import omnetpp.scave
     import omnetpp.scave.analysis
+except ImportError:
+    pass
 
 from opp_repl.common import *
 from opp_repl.test.statistical import *

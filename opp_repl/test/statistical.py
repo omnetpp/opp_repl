@@ -12,12 +12,13 @@ import logging
 import math
 import pandas
 import re
-import importlib.util
 import shutil
 import subprocess
 
-if importlib.util.find_spec("omnetpp"):
+try:
     from omnetpp.scave.results import *
+except (ImportError, ModuleNotFoundError):
+    pass
 
 from opp_repl.simulation import *
 from opp_repl.test.fingerprint import *
