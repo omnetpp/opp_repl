@@ -27,6 +27,30 @@ The client then sends `Authorization: Bearer <TOKEN>` with every HTTP
 request.  opp_repl hashes the incoming token and compares it to the
 stored hash (timing-safe).  Requests without a valid token are rejected.
 
+## Running inside opp_sandbox
+
+When opp_repl is launched inside `opp_sandbox` (the bubblewrap-based
+sandbox shipped with OMNeT++), the sandbox already provides
+filesystem-level isolation: the process can only write to the working
+directory and explicitly mounted paths, capabilities are dropped, and
+namespaces are isolated.
+
+In this case `--mcp-token-hash` can be omitted — opp_repl detects
+the sandbox environment and starts the MCP server without
+authentication:
+
+```bash
+opp_sandbox -w ~/workspace -- opp_repl --load "etc/*.opp" --mcp-port 9966
+```
+
+Use `-w` / `--writable` to grant the sandbox write access to
+additional directories (e.g. `~/workspace`).  Use `-m` / `--mount` for
+read-only mounts.
+
+Sandbox detection works by checking for the `/.opp_sandbox` sentinel
+file that `opp_sandbox` bind-mounts (read-only) into the container,
+and verifying that the file is actually read-only.
+
 ## Tools
 
 ### `execute_python(code: str) -> str`

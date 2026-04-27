@@ -457,8 +457,10 @@ def start_mcp_server(port=9966, token_hash=None):
     Args:
         port: The port to listen on (default 9966).
         token_hash: Hex-encoded SHA-256 hash of the bearer token that
-            clients must present.  Required — the server refuses to start
-            without it.
+            clients must present.  Required unless the server is running
+            inside ``opp_sandbox``, where the bubblewrap sandbox already
+            provides filesystem-level isolation and authentication is
+            skipped.
     """
     if not _mcp_available:
         raise ImportError("MCP server requires the 'mcp' package. Install it with: pip install opp_repl[mcp]")
