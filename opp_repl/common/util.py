@@ -523,5 +523,18 @@ def format_timedelta(td, *, precision = 3):
 
     return sign + base + frac
 
+def is_running_in_sandbox():
+    sentinel = "/.opp_sandbox"
+    if not os.path.exists(sentinel):
+        return False
+    # Verify that the sentinel file is actually read-only (ro-bind in the sandbox).
+    try:
+        fd = os.open(sentinel, os.O_WRONLY)
+        os.close(fd)
+        return False
+    except OSError:
+        pass
+    return True
+
 def _is_anf_v2(filename):
     return 'version="2"' in open(filename, "rt").read()

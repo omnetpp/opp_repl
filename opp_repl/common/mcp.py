@@ -23,6 +23,8 @@ import sys
 import threading
 import traceback
 
+from opp_repl.common.util import is_running_in_sandbox
+
 try:
     from mcp.server.fastmcp import FastMCP
     _mcp_available = True
@@ -460,16 +462,17 @@ def start_mcp_server(port=9966, token_hash=None):
     """
     if not _mcp_available:
         raise ImportError("MCP server requires the 'mcp' package. Install it with: pip install opp_repl[mcp]")
-    if not token_hash:
+    if not token_hash and not is_running_in_sandbox():
         raise ValueError("MCP server requires --mcp-token-hash for authentication. "
                          "Generate a token and pass its SHA-256 hex hash.")
 
-    _mcp._token_verifier = _HashTokenVerifier(token_hash)
-    from mcp.server.auth.settings import AuthSettings
-    _mcp.settings.auth = AuthSettings(
-        issuer_url="http://127.0.0.1",
-        resource_server_url=f"http://127.0.0.1:{port}",
-    )
+    if token_hash:
+        _mcp._token_verifier = _HashTokenVerifier(token_hash)
+        from mcp.server.auth.settings import AuthSettings
+        _mcp.settings.auth = AuthSettings(
+            issuer_url="http://127.0.0.1",
+            resource_server_url=f"http://127.0.0.1:{port}",
+        )
 
     global _original_sigint_handler
     _original_sigint_handler = signal.getsignal(signal.SIGINT)
