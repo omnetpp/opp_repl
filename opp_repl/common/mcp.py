@@ -55,6 +55,9 @@ def _strip_ansi(text):
 if _mcp_available:
     _mcp = FastMCP("opp_repl", host="127.0.0.1", port=9966, stateless_http=True,
                     instructions="""\
+opp_repl is a Python toolkit for working with OMNeT++ discrete event simulations:
+building, running, analyzing, testing, and more.
+
 Recommended discovery flow:
 1. Read opp-repl://guides to find the relevant guide topic
 2. Read opp-repl://guide/{topic} for usage examples
