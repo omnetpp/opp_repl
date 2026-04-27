@@ -176,8 +176,8 @@ def _register_mcp_handlers():
 
         Use opp-repl://guides to list available topics.
         """
-        path = os.path.join(_doc_dir, f"{topic}.md")
-        if not os.path.isfile(path):
+        path = os.path.realpath(os.path.join(_doc_dir, f"{topic}.md"))
+        if not path.startswith(os.path.realpath(_doc_dir) + os.sep) or not os.path.isfile(path):
             return f"Guide '{topic}' not found. Use opp-repl://guides to list available topics."
         with open(path, "r") as f:
             return f.read()
