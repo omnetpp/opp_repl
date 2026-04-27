@@ -4,12 +4,12 @@ import logging
 import importlib.util
 import sys
 
-if importlib.util.find_spec("omnetpp"):
+try:
     import omnetpp
-
-    if importlib.util.find_spec("matplotlib"):
-        from omnetpp.scave.analysis import *
-        from omnetpp.scave.results import *
+    from omnetpp.scave.analysis import *
+    from omnetpp.scave.results import *
+except ImportError:
+    pass
 
 from opp_repl.common import *
 from opp_repl.simulation import *
