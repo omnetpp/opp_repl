@@ -339,6 +339,24 @@ class CompareSimulationsTaskResult(TaskResult):
         return self._read_scalar_result_file(scalar_file_path)
 
 class CompareSimulationsTask(Task):
+    """Task that runs two simulations and compares the results.
+
+    By default all three comparison axes are enabled.  Pass
+    ``compare_stdout=False``, ``compare_fingerprint=False``, or
+    ``compare_statistics=False`` to skip individual axes.  The flags
+    are stored on the task so they are honoured when the task is re-run.
+
+    Parameters:
+        multiple_simulation_tasks:
+            A :py:class:`MultipleSimulationTasks` containing exactly two tasks.
+        compare_stdout (bool):
+            Compare stdout trajectories (default ``True``).
+        compare_fingerprint (bool):
+            Compare fingerprint trajectories (default ``True``).
+        compare_statistics (bool):
+            Compare scalar statistical results (default ``True``).
+    """
+
     def __init__(self, multiple_simulation_tasks=None, task_result_class=CompareSimulationsTaskResult, compare_stdout=True, compare_fingerprint=True, compare_statistics=True, **kwargs):
         super().__init__(task_result_class=task_result_class, **kwargs)
         self.compare_stdout = compare_stdout
@@ -397,14 +415,8 @@ def compare_simulations(**kwargs):
 
     Use suffixed keyword arguments (``_1`` / ``_2``) for project-specific
     parameters; unsuffixed arguments apply to both sides.  Any keyword
-    arguments accepted by :py:func:`get_simulation_tasks` can be used
-    (e.g. ``working_directory_filter``, ``config_filter``, ``run_number``).
-
-    Additional filtering keyword arguments:
-
-    - ``statistical_result_name_filter`` / ``exclude_statistic_name_filter``
-    - ``statistical_result_module_filter`` / ``exclude_statistic_module_filter``
-    - ``stdout_filter`` / ``exclude_stdout_filter``
+    arguments accepted by :py:func:`get_simulation_tasks` or
+    :py:class:`CompareSimulationsTask` can be used.
 
     Example::
 
@@ -438,8 +450,7 @@ def compare_simulations_between_commits(simulation_project, git_hash_1, git_hash
         git_hash_2 (str):
             Second git commit-ish.
         kwargs:
-            Forwarded to :py:func:`compare_simulations` (e.g.
-            ``working_directory_filter``, ``config_filter``, ``run_number``).
+            Forwarded to :py:func:`compare_simulations`.
 
     Returns:
         The result of :py:func:`compare_simulations_using_multiple_tasks`.

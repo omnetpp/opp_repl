@@ -27,6 +27,37 @@ results = compare_simulations_between_commits(
 Both functions accept the same filter parameters as `run_simulations()` (e.g.
 `working_directory_filter`, `config_filter`, `run_number`).
 
+### Disabling individual comparison axes
+
+By default the comparison checks stdout trajectories, fingerprint trajectories,
+and scalar statistics.  Each axis can be disabled independently:
+
+- **`compare_stdout`** (bool) — compare stdout trajectories (default `True`)
+- **`compare_fingerprint`** (bool) — compare fingerprint trajectories (default `True`)
+- **`compare_statistics`** (bool) — compare scalar statistical results (default `True`)
+
+```python
+# Only compare statistics, skip stdout and fingerprint trajectories
+results = compare_simulations(
+    simulation_project_1=inet_project,
+    simulation_project_2=inet_baseline_project,
+    compare_stdout=False,
+    compare_fingerprint=False,
+    working_directory_filter="examples/ethernet",
+    config_filter="General",
+    run_number=0)
+
+# Same flags work with git-based comparison
+results = compare_simulations_between_commits(
+    inet_project, "HEAD~1", "HEAD",
+    compare_statistics=False,
+    config_filter="General",
+    run_number=0)
+```
+
+The flags are stored on the `CompareSimulationsTask`, so they are honoured when
+the task is re-run.
+
 Additional keyword arguments can narrow the statistical and stdout comparison:
 
 - **`statistical_result_name_filter`** / **`exclude_statistic_name_filter`** — filter scalar names
