@@ -55,7 +55,7 @@ def debug_program(name, program, args, working_directory, remove_launch=True, de
     launch_configuration = org.omnetpp.dsp.DSPUtils.createDebugConfiguration(name, program, args, working_directory, debugger_init_commands)
     return org.omnetpp.dsp.DSPUtils.debugConfiguration(launch_configuration, remove_launch)
 
-def create_eventlog(file_path):
+def create_java_eventlog(file_path):
     try:
         org = get_org_package()
         file_reader = org.omnetpp.eventlog.engine.FileReader(file_path)
