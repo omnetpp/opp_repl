@@ -1,0 +1,5 @@
+#!/usr/bin/env python3
+
+from opp_repl.simulation.overlay import mount_overlays_main
+
+mount_overlays_main()

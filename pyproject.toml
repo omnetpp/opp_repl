@@ -76,6 +76,8 @@ all = [
 
 [project.scripts]
 opp_repl = "opp_repl.repl:run_repl_main"
+opp_mount = "opp_repl.simulation.overlay:mount_overlays_main"
+opp_unmount = "opp_repl.simulation.overlay:unmount_overlays_main"
 opp_build_project = "opp_repl.main:build_project_main"
 opp_run_simulations = "opp_repl.main:run_simulations_main"
 opp_run_all_tests = "opp_repl.main:run_all_tests_main"

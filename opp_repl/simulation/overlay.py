@@ -192,3 +192,78 @@ def make_overlay_omnetpp_project(project, overlay_name=None, overlay_build_root=
 # Keep old names as aliases for backward compatibility
 OverlaySimulationProject = make_overlay_simulation_project
 OverlayOmnetppProject = make_overlay_omnetpp_project
+
+
+# -- CLI entry points for pre-sandbox overlay mounting --------------------
+
+def _collect_overlays_from_opp_files(opp_patterns):
+    """Parse .opp files and return :py:class:`OverlayMount` instances for overlay projects."""
+    import glob as globmod
+    from opp_repl.simulation.workspace import _parse_opp_file, _resolve_opp_paths
+    overlays = []
+    for pattern in opp_patterns:
+        for opp_file in sorted(globmod.glob(pattern, recursive=True)):
+            try:
+                class_name, kwargs = _parse_opp_file(opp_file)
+                _resolve_opp_paths(opp_file, kwargs)
+            except ValueError as e:
+                _logger.warning("Skipping %s: %s", opp_file, e)
+                continue
+            overlay_name = kwargs.get("overlay_name")
+            if overlay_name is None:
+                continue
+            root_folder = kwargs.get("root_folder")
+            if root_folder is None:
+                _logger.warning("Skipping %s: overlay project has no root_folder", opp_file)
+                continue
+            overlay = OverlayMount(root_folder, overlay_name, kwargs.get("overlay_build_root"))
+            overlays.append(overlay)
+    return overlays
+
+def mount_overlays_main():
+    """CLI entry point: mount overlays defined in .opp files."""
+    import argparse
+    import sys
+    parser = argparse.ArgumentParser(description="Mount fuse-overlayfs overlays defined in .opp files.")
+    parser.add_argument("opp_files", nargs="+", metavar="OPP_FILE",
+                        help="one or more .opp file paths or glob patterns")
+    parser.add_argument("-l", "--log-level", choices=["ERROR", "WARN", "INFO", "DEBUG"],
+                        default="INFO")
+    args = parser.parse_args()
+    logging.basicConfig(level=getattr(logging, args.log_level), format="%(levelname)-5s %(name)s %(message)s")
+    overlays = _collect_overlays_from_opp_files(args.opp_files)
+    if not overlays:
+        _logger.info("No overlay projects found in the specified .opp files")
+        return
+    failed = False
+    for overlay in overlays:
+        try:
+            overlay.mount()
+        except RuntimeError as e:
+            _logger.error("%s", e)
+            failed = True
+    sys.exit(1 if failed else 0)
+
+def unmount_overlays_main():
+    """CLI entry point: unmount overlays defined in .opp files (or all)."""
+    import argparse
+    import sys
+    parser = argparse.ArgumentParser(description="Unmount fuse-overlayfs overlays.")
+    parser.add_argument("opp_files", nargs="*", metavar="OPP_FILE",
+                        help="one or more .opp file paths or glob patterns (if omitted, unmount all)")
+    parser.add_argument("-l", "--log-level", choices=["ERROR", "WARN", "INFO", "DEBUG"],
+                        default="INFO")
+    args = parser.parse_args()
+    logging.basicConfig(level=getattr(logging, args.log_level), format="%(levelname)-5s %(name)s %(message)s")
+    if args.opp_files:
+        overlays = _collect_overlays_from_opp_files(args.opp_files)
+    else:
+        overlays = [OverlayMount("unused", name) for name in list_overlays()]
+    failed = False
+    for overlay in overlays:
+        try:
+            overlay.unmount()
+        except RuntimeError as e:
+            _logger.error("%s", e)
+            failed = True
+    sys.exit(1 if failed else 0)
