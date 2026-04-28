@@ -144,6 +144,52 @@ clear_build_root()       # unmount and remove the entire build root
 - `clear_build_root()` unmounts everything and deletes the build root
   directory entirely, freeing all disk space used by overlay builds.
 
+## Pre-mounting for sandboxed execution
+
+When running inside `opp_sandbox`, the sandbox restricts the
+permissions needed by `fuse-overlayfs` to mount overlays.  The solution
+is to mount overlays **before** entering the sandbox using the
+`opp_mount` command, and unmount them afterwards with `opp_unmount`.
+
+### `opp_mount`
+
+```bash
+opp_mount "/home/user/workspace/opp/*.opp"
+```
+
+Parses the given `.opp` files (glob patterns are supported), finds
+projects that have `overlay_name` set, and mounts each overlay.
+Already-mounted overlays are skipped.
+
+### `opp_unmount`
+
+```bash
+opp_unmount "/home/user/workspace/opp/*.opp"   # unmount specific overlays
+opp_unmount                                     # unmount all overlays
+```
+
+Unmounts overlays.  When called with `.opp` file arguments, only the
+matching overlays are unmounted.  When called without arguments, all
+active overlays under the build root are unmounted.
+
+### Sandboxed workflow
+
+```bash
+# 1. Mount overlays outside the sandbox
+opp_mount "/home/user/workspace/opp/*.opp"
+
+# 2. Run the sandbox — overlays are already mounted and visible
+#    via ~/.omnetpp/build which is writable inside the sandbox
+opp_sandbox -w ~/workspace -- opp_repl --load "/home/user/workspace/opp/*.opp"
+
+# 3. Clean up after the sandbox exits
+opp_unmount
+```
+
+Inside the sandbox, `opp_repl` detects the pre-existing mounts (via
+`/proc/mounts`) and skips the `fuse-overlayfs` call entirely, so no
+extra capabilities are needed.
+
 ## Prerequisites
 
 Overlay builds require `fuse-overlayfs` and `fusermount` to be installed
