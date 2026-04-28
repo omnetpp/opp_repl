@@ -1,0 +1,171 @@
+#!/usr/bin/env bash
+#
+# Runs a command inside a sandboxed environment using bubblewrap (bwrap).
+#
+
+usage() {
+    cat <<'EOF'
+Usage: opp_sandbox [options] [--] <command> [args...]
+
+Run a command inside a sandboxed environment using bubblewrap (bwrap).
+The sandbox restricts filesystem access, drops capabilities, and isolates
+namespaces while still allowing GUI applications (Qtenv) to work.
+Allows write access only to the current working directory and to the
+Qtenv config files.
+
+Options:
+  -m, --mount DIR [DIR ...]   Mount additional directories read-only inside
+                               the sandbox. Multiple directories may follow
+                               until the next option or '--'.
+  -w, --writable DIR [DIR ...]
+                              Mount additional directories read-write inside
+                               the sandbox. Multiple directories may follow
+                               until the next option or '--'.
+  -h, --help                  Print this help message and exit.
+  --                          End of options; everything after is the command.
+
+Examples:
+  opp_sandbox ./aloha -u Qtenv
+  opp_sandbox -m ~/project/dependency -- ./my_simulation
+  opp_sandbox -w /tmp/results -- ./my_simulation
+  opp_sandbox --help
+EOF
+}
+
+if [[ "$(uname)" != "Linux" ]]; then
+    echo "opp_sandbox: error: this tool is only supported on Linux" >&2
+    exit 1
+fi
+
+if ! command -v bwrap &>/dev/null; then
+    echo "opp_sandbox: error: 'bwrap' not found. Please install the 'bubblewrap' package using your package manager." >&2
+    exit 1
+fi
+
+OMNETPP_ROOT="$(cd "$(dirname "$(readlink -f "$0")")" && cd .. && pwd)"
+WORKDIR="$(pwd)"
+CONFIGDIR=${XDG_CONFIG_HOME:-$HOME/.config}/omnetpp
+mkdir -p "$CONFIGDIR"
+
+EXTRA_ARGS=()
+
+# Parse command-line options
+while [[ $# -gt 0 ]]; do
+    case "$1" in
+        -h|--help)
+            usage
+            exit 0
+            ;;
+        -m|--mount)
+            shift
+            while [[ $# -gt 0 && "$1" != --* && "$1" != -* ]]; do
+                EXTRA_ARGS+=(--ro-bind "$1" "$1")
+                shift
+            done
+            ;;
+        -w|--writable)
+            shift
+            while [[ $# -gt 0 && "$1" != --* && "$1" != -* ]]; do
+                EXTRA_ARGS+=(--bind "$1" "$1")
+                shift
+            done
+            ;;
+        --)
+            shift
+            break
+            ;;
+        -*)
+            echo "opp_sandbox: unknown option: $1" >&2
+            usage >&2
+            exit 1
+            ;;
+        *)
+            break
+            ;;
+    esac
+done
+
+if [[ $# -eq 0 ]]; then
+    echo "opp_sandbox: no command specified" >&2
+    usage >&2
+    exit 1
+fi
+
+# Pass through only the required environment variables.
+# Each entry is conditionally added only if the variable is set.
+ENV_PASSTHROUGH=(
+    # Core
+    PATH HOME USER TERM SHELL PYTHONPATH HOSTNAME HOST PS1 PS2
+    # Locale
+    LANG LC_ALL 
+    # Display / GUI
+    DISPLAY WAYLAND_DISPLAY XDG_RUNTIME_DIR XDG_SESSION_TYPE XDG_CONFIG_HOME
+    XDG_CURRENT_DESKTOP XDG_SESSION_DESKTOP XDG_DATA_DIRS DESKTOP_SESSION
+    DBUS_SESSION_BUS_ADDRESS    # D-Bus portal (dark-mode preference)
+    # Qt / GTK theming
+    QT_QPA_PLATFORMTHEME QT_STYLE_OVERRIDE QT_QPA_PLATFORM QT_SELECT QT_LOGGING_RULES
+    QT_PLUGIN_PATH QT_QPA_PLATFORM_PLUGIN_PATH 
+    GTK_THEME XCURSOR_SIZE XCURSOR_THEME XAUTHORITY
+    FONTCONFIG_FILE FONTCONFIG_PATH
+    # NixOS / Nix
+    NIX_PROFILES NIX_PATH NIX_LD_LIBRARY_PATH
+    # Linker
+    LD_LIBRARY_PATH
+    # OMNETPP
+    OMNETPP_RELEASE OMNETPP_IMAGE_PATH OMNETPP_DEBUGGER_COMMAND __omnetpp_root_dir
+    # AI Chat LLM configuration
+    LLM_PROVIDER ANTHROPIC_API_KEY OPENAI_API_KEY OPENROUTER_API_KEY OLLAMA_BASE_URL
+)
+for var in "${ENV_PASSTHROUGH[@]}"; do
+    [[ -n "${!var+x}" ]] && EXTRA_ARGS+=(--setenv "$var" "${!var}")
+done
+
+# Expose XDG_RUNTIME_DIR for D-Bus portal and Wayland socket access
+if [ -n "$XDG_RUNTIME_DIR" ]; then
+    EXTRA_ARGS+=(--ro-bind-try "$XDG_RUNTIME_DIR" "$XDG_RUNTIME_DIR")
+fi
+
+exec bwrap \
+    --clearenv \
+    --unshare-all \
+    --share-net \
+    --ro-bind "$OMNETPP_ROOT/bin/opp_sandbox" "/.opp_sandbox" \
+    --ro-bind-try /bin /bin \
+    --ro-bind-try /etc /etc \
+    --ro-bind-try /lib /lib \
+    --ro-bind-try /lib64 /lib64 \
+    --ro-bind-try /usr/bin /usr/bin \
+    --ro-bind-try /usr/lib /usr/lib \
+    --ro-bind-try /usr/lib64 /usr/lib64 \
+    --ro-bind-try /usr/include /usr/include \
+    --ro-bind-try /usr/share /usr/share \
+    --ro-bind-try /nix/store /nix/store \
+    --ro-bind-try /run/current-system /run/current-system \
+    --ro-bind-try /run/systemd/resolve /run/systemd/resolve \
+    --ro-bind-try /run/opengl-driver /run/opengl-driver \
+    --ro-bind-try /run/opengl-driver-32 /run/opengl-driver-32 \
+    --ro-bind-try /run/dbus /run/dbus \
+    --dev /dev \
+    --dev-bind-try /dev/dri /dev/dri \
+    --dev-bind-try /dev/fuse /dev/fuse \
+    --ro-bind-try /sys /sys \
+    --proc /proc \
+    --tmpfs /tmp \
+    --ro-bind-try /tmp/.X11-unix /tmp/.X11-unix \
+    --tmpfs /home \
+    --ro-bind-try "$HOME/.config/gtk-3.0" "$HOME/.config/gtk-3.0" \
+    --ro-bind-try "$HOME/.config/gtk-4.0" "$HOME/.config/gtk-4.0" \
+    --ro-bind-try "$HOME/.config/kdeglobals" "$HOME/.config/kdeglobals" \
+    --ro-bind-try "$HOME/.config/qt6ct" "$HOME/.config/qt6ct" \
+    --bind "$CONFIGDIR" "$CONFIGDIR" \
+    --bind-try "$HOME/.omnetpp/build" "$HOME/.omnetpp/build" \
+    --bind-try "$HOME/.ipython" "$HOME/.ipython" \
+    --ro-bind-try "$HOME/.qtenvrc" "$HOME/.qtenvrc" \
+    --ro-bind "$OMNETPP_ROOT" "$OMNETPP_ROOT" \
+    --bind "$WORKDIR" "$WORKDIR" \
+    --chdir "$WORKDIR" \
+    "${EXTRA_ARGS[@]}" \
+    --cap-drop ALL \
+    --as-pid-1 \
+    --die-with-parent \
+    "$@"

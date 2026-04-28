@@ -94,6 +94,9 @@ opp_update_fingerprint_test_results = "opp_repl.main:update_fingerprint_test_res
 opp_update_speed_test_results = "opp_repl.main:update_speed_test_results_main"
 opp_update_statistical_test_results = "opp_repl.main:update_statistical_test_results_main"
 
+[tool.setuptools]
+script-files = ["bin/opp_sandbox"]
+
 [tool.setuptools.packages.find]
 include = ["opp_repl*"]
 
