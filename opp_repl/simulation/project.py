@@ -443,7 +443,7 @@ class SimulationProject:
         return repr(self, ["name", "version", "git_hash", "git_diff_hash"])
 
     def get_name(self):
-        return os.path.basename(self.get_full_path("."))
+        return self.name
 
     def get_hash(self, binary=True, **kwargs):
         hasher = hashlib.sha256()
