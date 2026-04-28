@@ -93,29 +93,44 @@ class CompareSimulationsTaskResult(TaskResult):
         if multiple_task_results and multiple_task_results.result == "DONE":
             self.multiple_tasks = multiple_task_results.multiple_tasks
 
-            self.stdout_trajectory_divergence_position = self._find_stdout_trajectory_divergence_position(**self.multiple_tasks.kwargs)
-            if self.stdout_trajectory_divergence_position:
-                self.stdout_trajectory_comparison_result = "DIVERGENT"
-                self.stdout_trajectory_comparison_color = COLOR_YELLOW
+            if self.task.compare_stdout:
+                self.stdout_trajectory_divergence_position = self._find_stdout_trajectory_divergence_position(**self.multiple_tasks.kwargs)
+                if self.stdout_trajectory_divergence_position:
+                    self.stdout_trajectory_comparison_result = "DIVERGENT"
+                    self.stdout_trajectory_comparison_color = COLOR_YELLOW
+                else:
+                    self.stdout_trajectory_comparison_result = "IDENTICAL"
+                    self.stdout_trajectory_comparison_color = COLOR_GREEN
             else:
-                self.stdout_trajectory_comparison_result = "IDENTICAL"
-                self.stdout_trajectory_comparison_color = COLOR_GREEN
+                self.stdout_trajectory_divergence_position = None
+                self.stdout_trajectory_comparison_result = None
+                self.stdout_trajectory_comparison_color = None
 
-            self.fingerprint_trajectory_divergence_position = self._find_fingerprint_trajectory_divergence_position(**self.multiple_tasks.kwargs)
-            if self.fingerprint_trajectory_divergence_position:
-                self.fingerprint_trajectory_comparison_result = "DIVERGENT"
-                self.fingerprint_trajectory_comparison_color = COLOR_YELLOW
+            if self.task.compare_fingerprint:
+                self.fingerprint_trajectory_divergence_position = self._find_fingerprint_trajectory_divergence_position(**self.multiple_tasks.kwargs)
+                if self.fingerprint_trajectory_divergence_position:
+                    self.fingerprint_trajectory_comparison_result = "DIVERGENT"
+                    self.fingerprint_trajectory_comparison_color = COLOR_YELLOW
+                else:
+                    self.fingerprint_trajectory_comparison_result = "IDENTICAL"
+                    self.fingerprint_trajectory_comparison_color = COLOR_GREEN
             else:
-                self.fingerprint_trajectory_comparison_result = "IDENTICAL"
-                self.fingerprint_trajectory_comparison_color = COLOR_GREEN
+                self.fingerprint_trajectory_divergence_position = None
+                self.fingerprint_trajectory_comparison_result = None
+                self.fingerprint_trajectory_comparison_color = None
 
-            self._compare_statistical_results(**self.multiple_tasks.kwargs)
-            if not self.different_statistical_results.empty:
-                self.statistical_comparison_result = "DIFFERENT"
-                self.statistical_comparison_color = COLOR_YELLOW
+            if self.task.compare_statistics:
+                self._compare_statistical_results(**self.multiple_tasks.kwargs)
+                if not self.different_statistical_results.empty:
+                    self.statistical_comparison_result = "DIFFERENT"
+                    self.statistical_comparison_color = COLOR_YELLOW
+                else:
+                    self.statistical_comparison_result = "IDENTICAL"
+                    self.statistical_comparison_color = COLOR_GREEN
             else:
-                self.statistical_comparison_result = "IDENTICAL"
-                self.statistical_comparison_color = COLOR_GREEN
+                self.different_statistical_results = pd.DataFrame()
+                self.statistical_comparison_result = None
+                self.statistical_comparison_color = None
 
             self.reason = ""
             self.result = "IDENTICAL"
@@ -324,8 +339,11 @@ class CompareSimulationsTaskResult(TaskResult):
         return self._read_scalar_result_file(scalar_file_path)
 
 class CompareSimulationsTask(Task):
-    def __init__(self, multiple_simulation_tasks=None, task_result_class=CompareSimulationsTaskResult, **kwargs):
+    def __init__(self, multiple_simulation_tasks=None, task_result_class=CompareSimulationsTaskResult, compare_stdout=True, compare_fingerprint=True, compare_statistics=True, **kwargs):
         super().__init__(task_result_class=task_result_class, **kwargs)
+        self.compare_stdout = compare_stdout
+        self.compare_fingerprint = compare_fingerprint
+        self.compare_statistics = compare_statistics
         self.multiple_simulation_tasks = multiple_simulation_tasks
         num_tasks = len(multiple_simulation_tasks.tasks)
         if num_tasks != 2:
