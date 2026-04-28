@@ -46,6 +46,7 @@ import ast
 import glob
 import logging
 import os
+import re
 
 from opp_repl.simulation.project import OmnetppProject, SimulationProject
 
@@ -501,6 +502,10 @@ def load_opp_file(path):
     """
     return get_default_simulation_workspace().load_opp_file(path)
 
+def _sanitize_name(name):
+    """Replace characters that are not valid in Python identifiers with underscores."""
+    return re.sub(r'[^A-Za-z0-9_]', '_', name)
+
 def get_omnetpp_project_variables():
     """Return a dict mapping ``{name}_project`` to each loaded OMNeT++ project.
 
@@ -512,7 +517,7 @@ def get_omnetpp_project_variables():
     """
     result = {}
     for name in get_omnetpp_project_names():
-        var_name = name.replace('-', '_').replace('.', '_') + '_project'
+        var_name = _sanitize_name(name) + '_project'
         result[var_name] = get_omnetpp_project(name)
     return result
 
@@ -527,7 +532,7 @@ def get_simulation_project_variables():
     """
     result = {}
     for name in get_simulation_project_names():
-        var_name = name.replace('-', '_').replace('.', '_') + '_project'
+        var_name = _sanitize_name(name) + '_project'
         result[var_name] = get_simulation_project(name)
     return result
 
@@ -537,7 +542,7 @@ def get_simulation_project_variable_names():
     Each name has the form ``{project_name}_project`` with hyphens and dots
     replaced by underscores.
     """
-    return sorted(name.replace('-', '_').replace('.', '_') + '_project' for name in get_simulation_project_names())
+    return sorted(_sanitize_name(name) + '_project' for name in get_simulation_project_names())
 
 def load_workspace(workspace_path):
     """Scan *workspace_path* for ``*.opp`` files and register all projects in the default workspace."""
