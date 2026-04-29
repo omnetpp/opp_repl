@@ -243,7 +243,7 @@ class SimulationProject:
                  bin_folder=".", library_folder=".", executables=None, dynamic_libraries=None, static_libraries=None, build_types=["dynamic library"],
                  ned_folders=["."], ned_exclusions=[], ini_file_folders=["."], python_folders=["python"], image_folders=["."],
                  include_folders=["."], cpp_folders=["."], cpp_defines=[], msg_folders=["."],
-                 media_folder=".", statistics_folder=".", fingerprint_store="fingerprint.json", speed_store="speed.json",
+                 media_folder=".", statistics_folder=".", fingerprint_store="fingerprint.json", speed_store="speed.json", dependency_store="dependency.json",
                  used_projects=[], external_bin_folders=[], external_library_folders=[], external_libraries=[], external_include_folders=[],
                  simulation_configs=None, overlay_name=None, overlay_build_root=None, opp_env_workspace=None, opp_env_project=None,
                  github_owner=None, github_repository=None, github_workflows=None, **kwargs):
@@ -334,6 +334,9 @@ class SimulationProject:
             speed_store (String):
                 The relative path of the JSON measurement store for speed tests.
 
+            dependency_store (String):
+                The relative path of the JSON dependency store for simulation task dependencies.
+
             used_projects (List of strings):
                 The list of used simulation project names.
 
@@ -417,6 +420,7 @@ class SimulationProject:
         self.statistics_folder = statistics_folder
         self.fingerprint_store = fingerprint_store
         self.speed_store = speed_store
+        self.dependency_store = dependency_store
         self.used_projects = used_projects
         self.external_bin_folders = external_bin_folders
         self.external_library_folders = external_library_folders

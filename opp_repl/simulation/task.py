@@ -615,7 +615,7 @@ class MultipleSimulationTasks(MultipleTasks):
     def get_parameters_string(self, **kwargs):
         return ""
 
-def get_simulation_tasks(simulation_project=None, simulation_configs=None, mode=None, debug=None, break_at_event_number=None, break_at_matching_event=None, run_number=None, run_number_filter=None, exclude_run_number_filter=None, sim_time_limit=None, cpu_time_limit=None, concurrent=True, expected_num_tasks=None, simulation_task_class=SimulationTask, multiple_simulation_tasks_class=MultipleSimulationTasks, **kwargs):
+def get_simulation_tasks(simulation_project=None, simulation_configs=None, mode=None, debug=None, break_at_event_number=None, break_at_matching_event=None, run_number=None, run_number_filter=None, exclude_run_number_filter=None, sim_time_limit=None, cpu_time_limit=None, concurrent=True, expected_num_tasks=None, simulation_task_class=SimulationTask, multiple_simulation_tasks_class=MultipleSimulationTasks, affected_by_modification_filter=None, **kwargs):
     """
     Returns multiple simulation tasks matching the filter criteria. The returned tasks can be run by calling the
     :py:meth:`run <opp_repl.common.task.MultipleTasks.run>` method.
@@ -674,6 +674,14 @@ def get_simulation_tasks(simulation_project=None, simulation_configs=None, mode=
         multiple_simulation_tasks_class (type):
             Determines the Python class of the returned multiple simulation tasks object.
 
+        affected_by_modification_filter (list of strings, string, or None):
+            Filters simulation configs to only those affected by the given modifications.
+            Uses the project's SimulationTaskDependencyStore (must be built first via
+            update_simulation_task_dependencies()). Type-based dispatch:
+            - list of strings: file paths relative to project root
+            - string containing '..': git commit range (e.g. 'master..HEAD')
+            - string without '..': single git commit hash
+
         kwargs (dict):
             Additional parameters are inherited from the :py:meth:`matches_filter <opp_repl.simulation.config.SimulationConfig.matches_filter>`
             method  and also from the :py:class:`SimulationTask` and :py:class:`MultipleSimulationTasks` constructors.
@@ -690,6 +698,21 @@ def get_simulation_tasks(simulation_project=None, simulation_configs=None, mode=
         simulation_project = get_default_simulation_project()
     if simulation_configs is None:
         simulation_configs = simulation_project.get_simulation_configs(concurrent=concurrent, **kwargs)
+    if affected_by_modification_filter is not None:
+        from opp_repl.simulation.dependency import get_simulation_task_dependency_store
+        store = get_simulation_task_dependency_store(simulation_project)
+        if isinstance(affected_by_modification_filter, list):
+            modified_files = affected_by_modification_filter
+        elif isinstance(affected_by_modification_filter, str) and ".." in affected_by_modification_filter:
+            from_commit, to_commit = affected_by_modification_filter.split("..", 1)
+            modified_files = store.get_modified_files_for_git_range(from_commit, to_commit)
+        elif isinstance(affected_by_modification_filter, str):
+            modified_files = store.get_modified_files_for_git_commit(affected_by_modification_filter)
+        else:
+            raise ValueError(f"Invalid affected_by_modification_filter type: {type(affected_by_modification_filter)}")
+        affected_keys = store.get_affected_simulation_config_keys(modified_files)
+        if affected_keys is not None:
+            simulation_configs = [c for c in simulation_configs if (c.working_directory, c.ini_file, c.config) in affected_keys]
     simulation_tasks = _collect_simulation_tasks_for_project(simulation_configs, run_number=run_number, run_number_filter=run_number_filter, exclude_run_number_filter=exclude_run_number_filter, sim_time_limit=sim_time_limit, cpu_time_limit=cpu_time_limit, mode=mode, debug=debug, break_at_event_number=break_at_event_number, break_at_matching_event=break_at_matching_event, simulation_task_class=simulation_task_class, **kwargs)
     if expected_num_tasks is not None and len(simulation_tasks) != expected_num_tasks:
         raise Exception("Number of found and expected simulation tasks mismatch")
