@@ -535,6 +535,3 @@ def is_running_in_sandbox():
     except OSError:
         pass
     return True
-
-def _is_anf_v2(filename):
-    return 'version="2"' in open(filename, "rt").read()

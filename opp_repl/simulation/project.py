@@ -785,6 +785,8 @@ class SimulationProject:
         return self.binary_simulation_distribution_file_paths
 
     def get_analysis_files(self, filter=".*", exclude_filter=None, full_match=False, **kwargs):
+        def _is_anf_v2(filename):
+            return 'version="2"' in open(filename, "rt").read()
         simulation_project_path = self.get_full_path(".")
         analysis_file_names = map(lambda path: os.path.relpath(path, simulation_project_path), glob.glob(simulation_project_path + "/**/*.anf", recursive = True))
         return builtins.filter(lambda analysis_file_name: _is_anf_v2(simulation_project_path + "/" + analysis_file_name) and matches_filter(analysis_file_name, filter, exclude_filter, full_match), analysis_file_names)
