@@ -23,7 +23,7 @@ _logger = logging.getLogger(__name__)
 def parse_run_repl_arguments():
     description = "Starts the OMNeT++ Python read-eval-print-loop."
     parser = argparse.ArgumentParser(description=description)
-    parser.add_argument("--load", action="append", default=[], metavar="OPP_FILE", help="load one or more .opp configuration files at startup, can be specified multiple times and supports glob patterns (e.g. --load '*.opp')")
+    parser.add_argument("--load", action="append", default=[], metavar="OPP_FILE", help="load one or more .opp configuration files or directories at startup, can be specified multiple times and supports glob patterns (e.g. --load '*.opp'); when a directory is given, all *.opp files in it are loaded")
     parser.add_argument("-p", "--simulation-project", default=None, help="name of the default simulation project to use (auto-detected from the working directory if not specified)")
     parser.add_argument("--mcp-port", type=int, default=0, help="TCP port for the Model Context Protocol server that allows AI assistants to interact with the REPL (0 to disable, default: 0)")
     parser.add_argument("--mcp-token-hash", default=None, help="SHA-256 hex hash of the bearer token required for MCP authentication (required when --mcp-port is set, unless running inside opp_sandbox)")
