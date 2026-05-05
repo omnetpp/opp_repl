@@ -675,7 +675,10 @@ class SimulationProject:
                 if executable is None or not os.path.exists(executable):
                     _logger.warn("Cannot determine number of runs: opp_run not found in " + working_directory)
                     return None
-                args = [executable, "-s", "-f", ini_file, "-c", config, "-q", "numruns"]
+                if self.get_dynamic_libraries_for_running():
+                    self.build(mode="release")
+                default_args = self.get_default_args()
+                args = [executable, *default_args, "-s", "-f", ini_file, "-c", config, "-q", "numruns"]
             result = run_command_with_logging(args, cwd=working_directory)
             if result.returncode == 0:
                 # KLUDGE: this was added to test source dependency based task result caching
