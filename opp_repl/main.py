@@ -20,7 +20,7 @@ _logger = logging.getLogger(__name__)
 def parse_run_tasks_arguments(task_name):
     description = "Runs all " + task_name + " concurrently in the enclosing project, recursively from the current working directory, as separate processes on localhost."
     parser = argparse.ArgumentParser(description=description)
-    parser.add_argument("--load", action="append", default=[], metavar="OPP_FILE", help="load one or more .opp configuration files or directories at startup, can be specified multiple times and supports glob patterns (e.g. --load '*.opp'); when a directory is given, all *.opp files in it are loaded; if not specified, all *.opp files in the current working directory are loaded automatically")
+    parser.add_argument("--load", action="append", default=[], metavar="OPP_FILE", help="load one or more .opp configuration files or directories at startup, can be specified multiple times and supports glob patterns (e.g. --load '*.opp'); when a directory is given, all *.opp files in it are loaded; use --load @etc to load the bundled .opp files shipped with opp_repl; if not specified, all *.opp files in the current working directory are loaded automatically")
     parser.add_argument("-p", "--simulation-project", default=None, help="name of the simulation project to use (auto-detected from the working directory if not specified)")
     parser.add_argument("-m", "--mode", choices=["debug", "release"], help="build mode of the simulation binaries (debug or release)")
     parser.add_argument("--build", action="store_true", help="build the simulation executable before running (default: enabled)")
@@ -159,7 +159,7 @@ def parse_build_project_arguments():
     parser.add_argument("--log-file", default="build.log", help="write all log messages to this file (default: build.log)")
     parser.add_argument("-b", "--build-mode", choices=["makefile", "task"], default="makefile", help="build method: makefile uses opp_makemake-generated Makefiles, task uses the built-in task system (default: makefile)")
     parser.add_argument("--handle-exception", default=True, action=argparse.BooleanOptionalAction, help="when enabled, errors are displayed as short messages; use --no-handle-exception to show full stack traces for debugging (default: enabled)")
-    parser.add_argument("--load", action="append", default=[], metavar="OPP_FILE", help="load one or more .opp configuration files or directories at startup, can be specified multiple times and supports glob patterns (e.g. --load '*.opp'); when a directory is given, all *.opp files in it are loaded; if not specified, all *.opp files in the current working directory are loaded automatically")
+    parser.add_argument("--load", action="append", default=[], metavar="OPP_FILE", help="load one or more .opp configuration files or directories at startup, can be specified multiple times and supports glob patterns (e.g. --load '*.opp'); when a directory is given, all *.opp files in it are loaded; use --load @etc to load the bundled .opp files shipped with opp_repl; if not specified, all *.opp files in the current working directory are loaded automatically")
     return parser.parse_args(sys.argv[1:])
 
 def process_build_project_arguments(args):

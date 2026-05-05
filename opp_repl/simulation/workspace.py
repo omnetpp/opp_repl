@@ -239,11 +239,12 @@ class SimulationWorkspace:
         """Load ``.opp`` file(s) and register the project(s).
 
         *path* may be a single file path, a directory (in which case all
-        ``*.opp`` files in that directory are loaded), **or** a glob pattern
-        (any string containing ``*``, ``?``, or ``[``).  When a glob pattern
-        or directory is given, all matching files are loaded in two passes
-        (OmnetppProject first, then SimulationProject) just like
-        :py:meth:`load`.
+        ``*.opp`` files in that directory are loaded), a glob pattern (any
+        string containing ``*``, ``?``, or ``[``), or the special token
+        ``@etc`` which resolves to the bundled ``opp_repl/etc`` directory.
+        When a glob pattern or directory is given, all matching files are
+        loaded in two passes (OmnetppProject first, then SimulationProject)
+        just like :py:meth:`load`.
 
         Returns:
             A single :py:class:`OmnetppProject` or
@@ -251,6 +252,8 @@ class SimulationWorkspace:
             file, or a ``dict`` mapping project names to project objects when
             a glob pattern or directory is used.
         """
+        if path == "@etc":
+            path = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "etc")
         if os.path.isdir(path):
             return self._load_opp_glob(os.path.join(path, "*.opp"))
         if glob.has_magic(path):
@@ -502,8 +505,9 @@ def load_opp_file(path):
     """Load ``.opp`` file(s) and register the project(s) in the default workspace.
 
     *path* can be a single file, a directory (all ``*.opp`` files inside it
-    are loaded), or a glob pattern (e.g.
-    ``"/home/user/workspace/omnetpp/samples/*/*.opp"``).
+    are loaded), a glob pattern (e.g.
+    ``"/home/user/workspace/omnetpp/samples/*/*.opp"``), or the special
+    token ``@etc`` to load the bundled ``.opp`` files shipped with opp_repl.
     """
     return get_default_simulation_workspace().load_opp_file(path)
 
