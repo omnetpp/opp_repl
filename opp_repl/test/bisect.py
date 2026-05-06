@@ -228,6 +228,7 @@ def bisect_statistical_tests(simulation_project, good_hash, bad_hash, update_goo
                   is_good_result=lambda r: r.is_all_results_expected(),
                   update_good_results_function=update_statistical_test_results if update_good_results else None,
                   **kwargs)
+bisect_statistical_tests.__signature__ = combine_signatures(bisect_statistical_tests, bisect_simulations_between_commits, run_statistical_tests)
 
 def bisect_fingerprint_tests(simulation_project, good_hash, bad_hash, update_good_results=True, **kwargs):
     """Bisect to find the first commit that causes fingerprint tests to fail.
@@ -253,6 +254,7 @@ def bisect_fingerprint_tests(simulation_project, good_hash, bad_hash, update_goo
                   is_good_result=lambda r: r.is_all_results_expected(),
                   update_good_results_function=update_fingerprint_test_results if update_good_results else None,
                   **kwargs)
+bisect_fingerprint_tests.__signature__ = combine_signatures(bisect_fingerprint_tests, bisect_simulations_between_commits, run_fingerprint_tests)
 
 def bisect_smoke_tests(simulation_project, good_hash, bad_hash, update_good_results=True, **kwargs):
     """Bisect to find the first commit that causes smoke tests to fail.
@@ -277,6 +279,7 @@ def bisect_smoke_tests(simulation_project, good_hash, bad_hash, update_good_resu
                   run_function=run_smoke_tests,
                   is_good_result=lambda r: r.is_all_results_expected(),
                   **kwargs)
+bisect_smoke_tests.__signature__ = combine_signatures(bisect_smoke_tests, bisect_simulations_between_commits, run_smoke_tests)
 
 def bisect_chart_tests(simulation_project, good_hash, bad_hash, update_good_results=True, **kwargs):
     """Bisect to find the first commit that causes chart tests to fail.
@@ -302,6 +305,7 @@ def bisect_chart_tests(simulation_project, good_hash, bad_hash, update_good_resu
                   is_good_result=lambda r: r.is_all_results_expected(),
                   update_good_results_function=update_chart_test_results if update_good_results else None,
                   **kwargs)
+bisect_chart_tests.__signature__ = combine_signatures(bisect_chart_tests, bisect_simulations_between_commits, run_chart_tests)
 
 def bisect_sanitizer_tests(simulation_project, good_hash, bad_hash, update_good_results=True, **kwargs):
     """Bisect to find the first commit that causes sanitizer tests to fail.
@@ -326,6 +330,7 @@ def bisect_sanitizer_tests(simulation_project, good_hash, bad_hash, update_good_
                   run_function=run_sanitizer_tests,
                   is_good_result=lambda r: r.is_all_results_expected(),
                   **kwargs)
+bisect_sanitizer_tests.__signature__ = combine_signatures(bisect_sanitizer_tests, bisect_simulations_between_commits, run_sanitizer_tests)
 
 def bisect_speed_tests(simulation_project, good_hash, bad_hash, update_good_results=True, **kwargs):
     """Bisect to find the first commit that causes speed tests to fail.
@@ -351,3 +356,4 @@ def bisect_speed_tests(simulation_project, good_hash, bad_hash, update_good_resu
                   is_good_result=lambda r: r.is_all_results_expected(),
                   update_good_results_function=update_speed_test_results if update_good_results else None,
                   **kwargs)
+bisect_speed_tests.__signature__ = combine_signatures(bisect_speed_tests, bisect_simulations_between_commits, run_speed_tests)

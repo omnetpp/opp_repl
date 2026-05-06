@@ -123,6 +123,7 @@ def get_simulation_test_tasks(simulation_test_task_class=SimulationTestTask, mul
     multiple_simulation_tasks = get_simulation_tasks(**kwargs)
     test_tasks = list(map(lambda simulation_task: simulation_test_task_class(simulation_task=simulation_task, **kwargs), multiple_simulation_tasks.tasks))
     return multiple_simulation_test_tasks_class(tasks=test_tasks, **dict(kwargs, simulation_project=multiple_simulation_tasks.simulation_project))
+get_simulation_test_tasks.__signature__ = combine_signatures(get_simulation_test_tasks, get_simulation_tasks)
 
 def run_simulation_tests(**kwargs):
     multiple_test_tasks = get_test_tasks(**kwargs)

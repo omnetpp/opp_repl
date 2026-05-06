@@ -3,6 +3,7 @@ import datetime
 import glob
 import hashlib
 import importlib
+import inspect
 import io
 import IPython
 import logging
@@ -522,6 +523,54 @@ def format_timedelta(td, *, precision = 3):
             frac = "." + frac_digits
 
     return sign + base + frac
+
+def combine_signatures(*funcs):
+    """Build a combined :class:`inspect.Signature` from multiple callables.
+
+    This is useful for top-level convenience functions that accept ``**kwargs``
+    and forward them through a chain of inner functions.  Setting
+    ``func.__signature__`` to the combined signature enables IDE and IPython
+    tab-completion for every accepted keyword argument.
+
+    Semantics:
+
+    * Explicit parameters are collected from each callable in order
+      (excluding ``self``, ``*args``, and ``**kwargs``).
+    * If the same parameter name appears in more than one callable, the
+      **first** occurrence wins (i.e. the outermost / closest-to-user
+      function determines the default and annotation).
+    * Every parameter in the combined signature is made **keyword-only**.
+
+    Example::
+
+        def inner(*, a=1, b=2, **kwargs): ...
+        def outer(**kwargs):
+            return inner(**kwargs)
+        outer.__signature__ = combine_signatures(outer, inner)
+
+    Parameters:
+        funcs: One or more callables whose signatures should be merged.
+
+    Returns:
+        inspect.Signature: A new signature containing the ordered union of
+        all keyword-only parameters.
+    """
+    seen = set()
+    params = []
+    for func in funcs:
+        try:
+            sig = inspect.signature(func, follow_wrapped=False)
+        except (ValueError, TypeError):
+            continue
+        for name, param in sig.parameters.items():
+            if name == "self":
+                continue
+            if param.kind in (inspect.Parameter.VAR_POSITIONAL, inspect.Parameter.VAR_KEYWORD):
+                continue
+            if name not in seen:
+                seen.add(name)
+                params.append(param.replace(kind=inspect.Parameter.KEYWORD_ONLY))
+    return inspect.Signature(params)
 
 def is_running_in_sandbox():
     sentinel = "/.opp_sandbox"

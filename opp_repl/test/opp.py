@@ -130,6 +130,7 @@ def get_opp_test_tasks(test_folder, simulation_project=None, filter=".*", full_m
                                            glob.glob(os.path.join(simulation_project.get_full_path(test_folder), "*.test"))))
     test_tasks = list(map(create_test_task, test_file_names))
     return MultipleOppTestTasks(tasks=test_tasks, simulation_project=simulation_project, test_folder=test_folder, multiple_task_results_class=MultipleTestTaskResults, **kwargs)
+get_opp_test_tasks.__signature__ = combine_signatures(get_opp_test_tasks, OppTestTask.__init__)
 
 class MultipleOppTestTasks(MultipleSimulationTestTasks):
     def __init__(self, test_folder=None, **kwargs):
@@ -161,3 +162,4 @@ def run_opp_tests(test_folder, **kwargs):
     """
     multiple_test_tasks = get_opp_test_tasks(test_folder, **kwargs)
     return multiple_test_tasks.run(**kwargs)
+run_opp_tests.__signature__ = combine_signatures(run_opp_tests, get_opp_test_tasks)

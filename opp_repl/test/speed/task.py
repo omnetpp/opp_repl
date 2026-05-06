@@ -43,10 +43,12 @@ def get_speed_test_tasks(mode="profile", run_number=0, baseline_simulation_proje
         expected_num_cpu_instructions = speed_measurement_store.get_num_cpu_instructions(working_directory=simulation_config.working_directory, ini_file=simulation_config.ini_file, config=simulation_config.config, run_number=simulation_task.run_number)
         tasks.append(SpeedTestTask(simulation_task=simulation_task, expected_num_cpu_instructions=expected_num_cpu_instructions, **dict(kwargs, simulation_project=simulation_project, mode=mode)))
     return MultipleSimulationTestTasks(tasks=tasks, **dict(kwargs, simulation_project=simulation_project, mode=mode))
+get_speed_test_tasks.__signature__ = combine_signatures(get_speed_test_tasks, get_simulation_tasks)
 
 def run_speed_tests(**kwargs):
     multiple_test_tasks = get_speed_test_tasks(**kwargs)
     return multiple_test_tasks.run(**kwargs)
+run_speed_tests.__signature__ = combine_signatures(run_speed_tests, get_speed_test_tasks)
 
 class SpeedUpdateTask(SimulationUpdateTask):
     def __init__(self, action="Updating speed", **kwargs):
@@ -131,7 +133,9 @@ def get_update_speed_results_tasks(mode="profile", run_number=0, **kwargs):
         update_task = SpeedUpdateTask(simulation_task=simulation_task, **kwargs)
         update_tasks.append(update_task)
     return MultipleSpeedUpdateTasks(multiple_simulation_tasks, tasks=update_tasks, **kwargs)
+get_update_speed_results_tasks.__signature__ = combine_signatures(get_update_speed_results_tasks, get_simulation_tasks)
 
 def update_speed_test_results(**kwargs):
     multiple_speed_update_tasks = get_update_speed_results_tasks(**kwargs)
     return multiple_speed_update_tasks.run(**kwargs)
+update_speed_test_results.__signature__ = combine_signatures(update_speed_test_results, get_update_speed_results_tasks)

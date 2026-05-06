@@ -181,6 +181,7 @@ def get_statistical_test_tasks(sim_time_limit=get_statistical_test_sim_time_limi
         The result can be run (and re-run) without providing additional parameters.
     """
     return get_simulation_tasks(name="statistical test", run_number=run_number, sim_time_limit=sim_time_limit, simulation_task_class=StatisticalTestTask, multiple_simulation_tasks_class=MultipleSimulationTestTasks, **kwargs)
+get_statistical_test_tasks.__signature__ = combine_signatures(get_statistical_test_tasks, get_simulation_tasks)
 
 def run_statistical_tests(append_args=[], **kwargs):
     """
@@ -195,6 +196,7 @@ def run_statistical_tests(append_args=[], **kwargs):
     """
     multiple_statistical_test_tasks = get_statistical_test_tasks(**kwargs)
     return multiple_statistical_test_tasks.run(append_args=append_args + _append_args, **kwargs)
+run_statistical_tests.__signature__ = combine_signatures(run_statistical_tests, get_statistical_test_tasks)
 
 class StatisticalResultsUpdateTask(SimulationUpdateTask):
     def __init__(self, simulation_config=None, run_number=0, name="statistical results update", **kwargs):
@@ -269,6 +271,7 @@ def get_update_statistical_result_tasks(run_number=0, **kwargs):
         The result can be run (and re-run) without providing additional parameters.
     """
     return get_simulation_tasks(run_number=run_number, multiple_simulation_tasks_class=MultipleSimulationUpdateTasks, simulation_task_class=StatisticalResultsUpdateTask, **kwargs)
+get_update_statistical_result_tasks.__signature__ = combine_signatures(get_update_statistical_result_tasks, get_simulation_tasks)
 
 def update_statistical_test_results(sim_time_limit=get_statistical_test_sim_time_limit, append_args=[], **kwargs):
     """
@@ -283,3 +286,4 @@ def update_statistical_test_results(sim_time_limit=get_statistical_test_sim_time
     """
     multiple_update_statistical_result_tasks = get_update_statistical_result_tasks(sim_time_limit=sim_time_limit, **kwargs)
     return multiple_update_statistical_result_tasks.run(sim_time_limit=sim_time_limit, append_args=append_args + _append_args, **kwargs)
+update_statistical_test_results.__signature__ = combine_signatures(update_statistical_test_results, get_update_statistical_result_tasks)

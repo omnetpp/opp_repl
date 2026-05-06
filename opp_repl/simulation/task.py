@@ -717,6 +717,7 @@ def get_simulation_tasks(simulation_project=None, simulation_configs=None, mode=
     if expected_num_tasks is not None and len(simulation_tasks) != expected_num_tasks:
         raise Exception("Number of found and expected simulation tasks mismatch")
     return multiple_simulation_tasks_class(tasks=simulation_tasks, simulation_project=simulation_project, mode=mode, concurrent=concurrent, **kwargs)
+get_simulation_tasks.__signature__ = combine_signatures(get_simulation_tasks, SimulationConfig.matches_filter, SimulationTask.__init__, MultipleSimulationTasks.__init__)
 
 def _collect_simulation_tasks_for_project(simulation_configs, run_number=None, run_number_filter=None, exclude_run_number_filter=None, sim_time_limit=None, cpu_time_limit=None, mode="release", debug=False, break_at_event_number=None, break_at_matching_event=None, simulation_task_class=SimulationTask, **kwargs):
     simulation_tasks = []
@@ -739,6 +740,7 @@ def get_simulation_task(**kwargs):
     if num_tasks != 1:
         raise Exception(f"Found {num_tasks} simulation tasks instead of one")
     return multiple_simulation_tasks.tasks[0]
+get_simulation_task.__signature__ = combine_signatures(get_simulation_task, get_simulation_tasks)
 
 def run_simulations(**kwargs):
     """
@@ -757,6 +759,7 @@ def run_simulations(**kwargs):
     """
     multiple_simulation_tasks = get_simulation_tasks(**kwargs)
     return multiple_simulation_tasks.run(**kwargs)
+run_simulations.__signature__ = combine_signatures(run_simulations, get_simulation_tasks, MultipleSimulationTasks.run)
 
 def clean_simulation_results(simulation_project=None, simulation_configs=None, **kwargs):
     """
@@ -783,3 +786,4 @@ def clean_simulation_results(simulation_project=None, simulation_configs=None, *
         simulation_configs = simulation_project.get_simulation_configs(**kwargs)
     for simulation_config in simulation_configs:
         simulation_config.clean_simulation_results()
+clean_simulation_results.__signature__ = combine_signatures(clean_simulation_results, SimulationConfig.matches_filter)

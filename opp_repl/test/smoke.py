@@ -33,6 +33,7 @@ def get_smoke_test_tasks(cpu_time_limit="1s", run_number=0, **kwargs):
         The result can be run (and re-run) without providing additional parameters.
     """
     return get_simulation_test_tasks(cpu_time_limit=cpu_time_limit, run_number=run_number, name="smoke test", simulation_test_task_class=SmokeTestTask, **kwargs)
+get_smoke_test_tasks.__signature__ = combine_signatures(get_smoke_test_tasks, get_simulation_test_tasks, get_simulation_tasks)
 
 def run_smoke_tests(**kwargs):
     """
@@ -46,3 +47,4 @@ def run_smoke_tests(**kwargs):
     """
     multiple_test_tasks = get_smoke_test_tasks(**kwargs)
     return multiple_test_tasks.run(**kwargs)
+run_smoke_tests.__signature__ = combine_signatures(run_smoke_tests, get_smoke_test_tasks)

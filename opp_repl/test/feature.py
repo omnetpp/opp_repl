@@ -112,10 +112,12 @@ def get_feature_test_tasks(simulation_project=None, filter=".*", full_match=Fals
                                    FeatureTestTask(simulation_project, None, [], type="enable all", task_result_class=TestTaskResult, **kwargs),
                                    FeatureTestTask(simulation_project, None, [], type="disable all", task_result_class=TestTaskResult, **kwargs)]
     return MultipleFeatureTestTasks(tasks=test_tasks, multiple_task_results_class=MultipleTestTaskResults, **dict(kwargs, concurrent=False))
+get_feature_test_tasks.__signature__ = combine_signatures(get_feature_test_tasks, get_simulation_tasks)
 
 def run_feature_tests(**kwargs):
     multiple_test_tasks = get_feature_test_tasks(**kwargs)
     return multiple_test_tasks.run(**kwargs)
+run_feature_tests.__signature__ = combine_signatures(run_feature_tests, get_feature_test_tasks)
 
 def read_xml_file(filename, repair_hint=None):
     try:
@@ -355,3 +357,4 @@ def update_oppfeatures(simulation_project=None, simulation_results=None, feature
         simulation_results = run_simulations(simulation_project=simulation_project, mode=mode, run_number=0, append_args=["--print-instantiated-ned-types=true"], **kwargs)
     feature_to_required_features = get_feature_to_required_features_for_simulation_project(simulation_project, simulation_results)
     update_oppfeatures_file(simulation_project, feature_to_required_features, feature_id_filter=feature_id_filter)
+update_oppfeatures.__signature__ = combine_signatures(update_oppfeatures, run_simulations)

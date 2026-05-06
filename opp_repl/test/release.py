@@ -24,3 +24,4 @@ def run_release_tests(simulation_project, clean=True, build=True, **kwargs):
         build_project(simulation_project=simulation_project, mode="debug")
         build_project(simulation_project=simulation_project, mode="sanitize")
     return run_all_tests(**kwargs)
+run_release_tests.__signature__ = combine_signatures(run_release_tests, run_all_tests)

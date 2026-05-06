@@ -282,6 +282,7 @@ def get_fingerprint_test_tasks(**kwargs):
             fingerprint_test_groups += collect_fingerprint_test_groups(simulation_task, **dict(kwargs, pass_keyboard_interrupt=True))
         return MultipleFingerprintTestTasks(multiple_simulation_tasks=multiple_simulation_tasks, tasks=fingerprint_test_groups, **dict(kwargs, simulation_project=multiple_simulation_tasks.simulation_project))
     return get_tasks(**kwargs)
+get_fingerprint_test_tasks.__signature__ = combine_signatures(get_fingerprint_test_tasks, get_simulation_tasks)
 
 def run_fingerprint_tests(**kwargs):
     """
@@ -296,11 +297,13 @@ def run_fingerprint_tests(**kwargs):
     """
     multiple_fingerprint_test_tasks = get_fingerprint_test_tasks(**kwargs)
     return multiple_fingerprint_test_tasks.run(**kwargs)
+run_fingerprint_tests.__signature__ = combine_signatures(run_fingerprint_tests, get_fingerprint_test_tasks)
 
 def print_correct_fingerprints(**kwargs):
     multiple_test_tasks = get_fingerprint_test_tasks(**kwargs)
     for test_task in multiple_test_tasks.tasks:
         print(test_task.simulation_task.get_parameters_string(**kwargs) + " " + COLOR_GREEN + str(test_task.fingerprint) + COLOR_RESET)
+print_correct_fingerprints.__signature__ = combine_signatures(print_correct_fingerprints, get_fingerprint_test_tasks)
 
 def print_missing_correct_fingerprints(simulation_project=None, ingredients="tplx", num_runs=1):
     if simulation_project is None:
@@ -506,6 +509,7 @@ def get_update_correct_fingerprint_tasks(**kwargs):
         fingerprint_update_task = FingerprintUpdateTask(simulation_task=simulation_task, **kwargs)
         fingerprint_update_tasks.append(fingerprint_update_task)
     return MultipleFingerprintUpdateTasks(multiple_simulation_tasks, tasks=fingerprint_update_tasks, **kwargs)
+get_update_correct_fingerprint_tasks.__signature__ = combine_signatures(get_update_correct_fingerprint_tasks, get_simulation_tasks)
 
 def update_fingerprint_test_results(**kwargs):
     """
@@ -521,6 +525,7 @@ def update_fingerprint_test_results(**kwargs):
     """
     multiple_fingerprint_update_tasks = get_update_correct_fingerprint_tasks(**kwargs)
     return multiple_fingerprint_update_tasks.run(**kwargs)
+update_fingerprint_test_results.__signature__ = combine_signatures(update_fingerprint_test_results, get_update_correct_fingerprint_tasks)
 
 def remove_correct_fingerprint(simulation_task, ingredients=None, **kwargs):
     simulation_config = simulation_task.simulation_config
@@ -533,6 +538,7 @@ def remove_correct_fingerprints(**kwargs):
     multiple_simulation_tasks = get_simulation_tasks(**kwargs)
     for simulation_task in multiple_simulation_tasks.tasks:
         remove_correct_fingerprint(simulation_task)
+remove_correct_fingerprints.__signature__ = combine_signatures(remove_correct_fingerprints, get_simulation_tasks)
 
 def remove_extra_correct_fingerprints(simulation_project=None, **kwargs):
     if simulation_project is None:

@@ -194,3 +194,4 @@ def update_simulation_task_dependencies(simulation_project=None, simulation_resu
     store.build_entries(simulation_results)
     store.write()
     return store
+update_simulation_task_dependencies.__signature__ = combine_signatures(update_simulation_task_dependencies, run_simulations)

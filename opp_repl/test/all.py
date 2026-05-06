@@ -33,6 +33,8 @@ def get_all_test_tasks(**kwargs):
         if multiple_test_tasks.tasks:
             test_tasks.append(multiple_test_tasks)
     return MultipleTestTasks(tasks=test_tasks, **dict(kwargs, name="test group", start=None, end=None, concurrent=False))
+get_all_test_tasks.__signature__ = combine_signatures(get_all_test_tasks, get_simulation_tasks)
 
 def run_all_tests(**kwargs):
     return get_all_test_tasks(**kwargs).run(**kwargs)
+run_all_tests.__signature__ = combine_signatures(run_all_tests, get_all_test_tasks)

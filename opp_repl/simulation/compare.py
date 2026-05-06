@@ -405,6 +405,7 @@ def get_compare_simulations_tasks(multiple_tasks_1, multiple_tasks_2, build=True
         if multiple_tasks_2.simulation_project is not multiple_tasks_1.simulation_project:
             multiple_tasks_2.build_before_run(**kwargs)
     return MultipleSimulationTasks(tasks=simulation_comparison_tasks, build=False, name="simulation comparison", multiple_task_results_class=MultipleCompareSimulationsTaskResults, **kwargs)
+get_compare_simulations_tasks.__signature__ = combine_signatures(get_compare_simulations_tasks, CompareSimulationsTask.__init__, get_simulation_tasks)
 
 def compare_simulations_using_multiple_tasks(multiple_tasks_1, multiple_tasks_2, **kwargs):
     multiple_compare_simulations_tasks = get_compare_simulations_tasks(multiple_tasks_1, multiple_tasks_2, **kwargs)
@@ -435,6 +436,7 @@ def compare_simulations(**kwargs):
     multiple_simulation_tasks_1 = get_simulation_tasks(**kwargs_1, **kwargs)
     multiple_simulation_tasks_2 = get_simulation_tasks(**kwargs_2, **kwargs)
     return compare_simulations_using_multiple_tasks(multiple_simulation_tasks_1, multiple_simulation_tasks_2, **kwargs)
+compare_simulations.__signature__ = combine_signatures(compare_simulations, get_simulation_tasks)
 
 def compare_simulations_between_commits(simulation_project, git_hash_1, git_hash_2, **kwargs):
     """Compare simulation results between two git versions of the same project.
@@ -459,3 +461,4 @@ def compare_simulations_between_commits(simulation_project, git_hash_1, git_hash
     project_1 = make_worktree_simulation_project(simulation_project, git_hash_1)
     project_2 = make_worktree_simulation_project(simulation_project, git_hash_2)
     return compare_simulations(simulation_project_1=project_1, simulation_project_2=project_2, **kwargs)
+compare_simulations_between_commits.__signature__ = combine_signatures(compare_simulations_between_commits, compare_simulations)

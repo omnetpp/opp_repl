@@ -162,6 +162,7 @@ def get_chart_test_tasks(simulation_project=None, baseline_simulation_project=No
                 if multiple_simulation_tasks.tasks:
                     test_tasks.append(ChartTestTask(simulation_project=simulation_project, baseline_simulation_project=baseline_simulation_project, analysis_file_name=analysis_file_name, id=chart.id, chart_name=chart.name, task_result_class=TestTaskResult))
     return MultipleChartTestTasks(tasks=test_tasks, multiple_simulation_tasks=MultipleSimulationTasks(tasks=simulation_tasks, simulation_project=simulation_project, **kwargs), **dict(kwargs, scheduler="process"))
+get_chart_test_tasks.__signature__ = combine_signatures(get_chart_test_tasks, get_simulation_tasks)
 
 def run_chart_tests(**kwargs):
     """
@@ -176,6 +177,7 @@ def run_chart_tests(**kwargs):
     """
     multiple_chart_test_tasks = get_chart_test_tasks(**kwargs)
     return multiple_chart_test_tasks.run(**kwargs)
+run_chart_tests.__signature__ = combine_signatures(run_chart_tests, get_chart_test_tasks)
 
 class ChartUpdateTask(UpdateTask):
     def __init__(self, simulation_project, analysis_file_name, id, chart_name, **kwargs):
@@ -279,6 +281,7 @@ def get_update_chart_tasks(simulation_project=None, run_simulations=True, filter
                             simulation_tasks.append(simulation_task)
                 update_tasks.append(ChartUpdateTask(simulation_project=simulation_project, analysis_file_name=analysis_file_name, id=chart.id, chart_name=chart.name, task_result_class=UpdateTaskResult))
     return MultipleChartUpdateTasks(tasks=update_tasks, multiple_simulation_tasks=MultipleSimulationTasks(tasks=simulation_tasks, simulation_project=simulation_project, **kwargs), **dict(kwargs, scheduler="process"))
+get_update_chart_tasks.__signature__ = combine_signatures(get_update_chart_tasks, get_simulation_tasks)
 
 def update_chart_test_results(simulation_project=None, **kwargs):
     """
@@ -295,3 +298,4 @@ def update_chart_test_results(simulation_project=None, **kwargs):
         simulation_project = get_default_simulation_project()
     multiple_update_chart_tasks = get_update_chart_tasks(simulation_project=simulation_project, **kwargs)
     return multiple_update_chart_tasks.run(**kwargs)
+update_chart_test_results.__signature__ = combine_signatures(update_chart_test_results, get_update_chart_tasks)
