@@ -432,6 +432,7 @@ class SimulationProject:
         self.github_owner = github_owner
         self.github_repository = github_repository
         self.github_workflows = github_workflows
+        self._simulation_configs_freshness_key = None
         self.binary_simulation_distribution_file_paths = None
         self._overlay = None
         if overlay_name is not None:
@@ -774,10 +775,18 @@ class SimulationProject:
         ini_path_globs = list(map(lambda ini_file_folder: self.get_full_path(os.path.join(ini_file_folder, "**/*.ini")), self.ini_file_folders))
         return self.collect_all_simulation_configs(ini_path_globs, **kwargs)
 
+    def _compute_simulation_configs_freshness_key(self):
+        ini_path_globs = [self.get_full_path(os.path.join(f, "**/*.ini")) for f in self.ini_file_folders]
+        ini_paths = sorted(p for g in ini_path_globs for p in glob.glob(g, recursive=True) if os.path.isfile(p))
+        mtimes = tuple(os.path.getmtime(p) for p in ini_paths)
+        return (tuple(ini_paths), mtimes)
+
     def get_simulation_configs(self, **kwargs):
-        if self.simulation_configs is None:
+        freshness_key = self._compute_simulation_configs_freshness_key()
+        if self.simulation_configs is None or freshness_key != self._simulation_configs_freshness_key:
             self.ensure_mounted()
             self.simulation_configs = self.get_all_simulation_configs()
+            self._simulation_configs_freshness_key = freshness_key
         return list(builtins.filter(lambda simulation_config: simulation_config.matches_filter(**kwargs), self.simulation_configs))
 
     def get_binary_simulation_distribution_file_paths(self):
