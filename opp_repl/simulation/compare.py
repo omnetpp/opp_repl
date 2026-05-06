@@ -375,8 +375,8 @@ class CompareSimulationsTask(Task):
             task.scalar_file_path = f"results/{task.simulation_config.config}-#{str(task.run_number)}-{index}.sca"
             task.vector_file_path = f"results/{task.simulation_config.config}-#{str(task.run_number)}-{index}.vec"
     
-    def count_tasks(self):
-        return 1 + self.multiple_simulation_tasks.count_tasks()
+    def count_progress_steps(self):
+        return 1 + self.multiple_simulation_tasks.count_progress_steps()
 
     def get_parameters_string(self, **kwargs):
         task_parameters_string_1 = self.multiple_simulation_tasks.tasks[0].get_parameters_string(**kwargs)

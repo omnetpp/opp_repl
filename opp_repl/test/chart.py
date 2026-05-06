@@ -123,8 +123,8 @@ class MultipleChartTestTasks(MultipleTestTasks):
         self.kwargs = kwargs
         self.multiple_simulation_tasks = multiple_simulation_tasks
 
-    def count_tasks(self):
-        return super().count_tasks() + self.multiple_simulation_tasks.count_tasks()
+    def count_progress_steps(self):
+        return super().count_progress_steps() + self.multiple_simulation_tasks.count_progress_steps()
 
     def run_protected(self, **kwargs):
         multiple_simulation_task_results = self.multiple_simulation_tasks.run(**kwargs)
@@ -243,8 +243,8 @@ class MultipleChartUpdateTasks(MultipleUpdateTasks):
         self.kwargs = kwargs
         self.multiple_simulation_tasks = multiple_simulation_tasks
 
-    def count_tasks(self):
-        return super().count_tasks() + self.multiple_simulation_tasks.count_tasks()
+    def count_progress_steps(self):
+        return super().count_progress_steps() + self.multiple_simulation_tasks.count_progress_steps()
 
     def run_protected(self, **kwargs):
         multiple_simulation_task_results = self.multiple_simulation_tasks.run(**kwargs)

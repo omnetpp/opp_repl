@@ -81,15 +81,15 @@ class TaskTestTask(TestTask):
         assert(tested_task is not None)
         self.tested_task = tested_task
 
-    def count_tasks(self):
-        return self.tested_task.count_tasks() + 1
+    def count_progress_steps(self):
+        return self.tested_task.count_progress_steps() + 1
 
     def get_description(self):
         return self.name
 
     def run(self, context=None, progress=None, index=0, count=1, output_stream=sys.stdout, **kwargs):
         context = extend_task_context(context, self.name, index, count)
-        progress = progress or TaskProgress(self.count_tasks())
+        progress = progress or TaskProgress(self.count_progress_steps())
         elements = [e for e in [progress.get_string(**kwargs), context.get_string(**kwargs), "▶", self.get_description()] if e != ""]
         print(" ".join(elements), file=output_stream)
         if self.cancel:

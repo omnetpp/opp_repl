@@ -48,12 +48,12 @@ class TaskProgress:
       - "process": multiprocessing.Manager() proxies (pickleable, safe to pass to workers)
     """
 
-    def __init__(self, num_tasks, num_finished=0, scheduler="thread", *, manager=None, _shared_value=None, _shared_lock=None):
+    def __init__(self, num_progress_steps, num_finished=0, scheduler="thread", *, manager=None, _shared_value=None, _shared_lock=None):
         if scheduler not in ("thread", "process"):
             raise ValueError('scheduler must be "thread" or "process"')
         self.scheduler = scheduler
-        self.num_tasks = num_tasks
-        self._width = len(str(self.num_tasks))
+        self.num_progress_steps = num_progress_steps
+        self._width = len(str(self.num_progress_steps))
         if scheduler == "thread":
             self._lock = threading.Lock()
             self._finished = num_finished
@@ -105,7 +105,7 @@ class TaskProgress:
             raise Exception("Unknown scheduler")
 
     def get_progress(self):
-        return f"[{self.num_finished:0{self._width}d}/{self.num_tasks}]"
+        return f"[{self.num_finished:0{self._width}d}/{self.num_progress_steps}]"
 
     def get_string(self, include_progress=True, **kwargs):
         return (COLOR_LIGHT_GRAY + self.get_progress() + COLOR_RESET) if include_progress else ""
@@ -114,11 +114,11 @@ class TaskProgress:
         if self.scheduler == "thread":
             with self._lock:
                 self._finished += 1
-                return TaskProgress(self.num_tasks, self._finished, scheduler="thread")
+                return TaskProgress(self.num_progress_steps, self._finished, scheduler="thread")
         elif self.scheduler == "process":
             with self._shared_lock:
                 self._shared_value.value += 1
-            return TaskProgress(self.num_tasks, scheduler="process", _shared_value=self._shared_value, _shared_lock=self._shared_lock)
+            return TaskProgress(self.num_progress_steps, scheduler="process", _shared_value=self._shared_value, _shared_lock=self._shared_lock)
         else:
             raise Exception("Unknown scheduler")
 
@@ -470,7 +470,7 @@ class Task:
     def __repr__(self):
         return repr(self)
 
-    def count_tasks(self):
+    def count_progress_steps(self):
         return 1
 
     def get_hash(self, **kwargs):
@@ -520,7 +520,7 @@ class Task:
         else:
             try:
                 if not progress:
-                    progress = TaskProgress(self.count_tasks())
+                    progress = TaskProgress(self.count_progress_steps())
                 context = extend_task_context(context, self.name, index, count)
                 if print_run_start_separately:
                     self.print_run_start(context=context, progress=progress, **kwargs)
@@ -641,8 +641,8 @@ class MultipleTasks:
     def __repr__(self):
         return repr(self)
 
-    def count_tasks(self):
-        return sum(task.count_tasks() for task in self.tasks) + 1
+    def count_progress_steps(self):
+        return sum(task.count_progress_steps() for task in self.tasks) + 1
 
     def set_cancel(self, cancel):
         self.cancel = cancel
@@ -683,7 +683,7 @@ class MultipleTasks:
             elements = [e for e in [progress.get_string(**kwargs), context.get_string(**kwargs), "◉", str(len(self.tasks)), self.get_description(), multiple_task_results.get_description()] if e != ""]
             print(" ".join(elements), file=output_stream)
             return multiple_task_results
-        return run_with_log_levels(run_internal, **dict(kwargs, context=extend_task_context(context, "multiple " + self.name + "s", index, count), progress=progress or TaskProgress(self.count_tasks(), scheduler=self.scheduler)))
+        return run_with_log_levels(run_internal, **dict(kwargs, context=extend_task_context(context, "multiple " + self.name + "s", index, count), progress=progress or TaskProgress(self.count_progress_steps(), scheduler=self.scheduler)))
 
     def run_protected(self, output_stream=None, **kwargs):
         if self.scheduler == "cluster":
