@@ -529,7 +529,7 @@ class Task:
                         task_result = self.task_result_class(task=self, result="DONE", reason="Dry run")
                     else:
                         start_time = time.time()
-                        task_result = self.run_protected(progress=progress, **kwargs)
+                        task_result = self.run_protected(context=context, progress=progress, **kwargs)
                         end_time = time.time()
                         task_result.elapsed_wall_time = end_time - start_time
             except KeyboardInterrupt:

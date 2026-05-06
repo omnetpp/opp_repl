@@ -375,6 +375,9 @@ class CompareSimulationsTask(Task):
             task.scalar_file_path = f"results/{task.simulation_config.config}-#{str(task.run_number)}-{index}.sca"
             task.vector_file_path = f"results/{task.simulation_config.config}-#{str(task.run_number)}-{index}.vec"
     
+    def count_tasks(self):
+        return 1 + self.multiple_simulation_tasks.count_tasks()
+
     def get_parameters_string(self, **kwargs):
         task_parameters_string_1 = self.multiple_simulation_tasks.tasks[0].get_parameters_string(**kwargs)
         task_parameters_string_2 = self.multiple_simulation_tasks.tasks[1].get_parameters_string(**kwargs)
@@ -383,9 +386,9 @@ class CompareSimulationsTask(Task):
         else:
             return "comparing " + task_parameters_string_1
 
-    def run_protected(self, ingredients="tplx", index=None, append_args=[], **kwargs):
+    def run_protected(self, context=None, ingredients="tplx", index=None, append_args=[], **kwargs):
         append_args = append_args + ["--cmdenv-express-mode=false", "--cmdenv-log-prefix=%l %C%<: ", "--cmdenv-redirect-output=true", "--eventlog-snapshot-frequency=100MiB", "--eventlog-index-frequency=10MiB", "--eventlog-options=module", "--fingerprint=0000-0000/" + ingredients] + get_ingredients_append_args(ingredients)
-        multiple_task_results = self.multiple_simulation_tasks.run_protected(append_args=append_args, **kwargs)
+        multiple_task_results = self.multiple_simulation_tasks.run(context=context, append_args=append_args, **kwargs)
         return self.task_result_class(multiple_task_results=multiple_task_results, task=self, result=multiple_task_results.result, color=multiple_task_results.color)
 
 class MultipleCompareSimulationsTaskResults(MultipleTaskResults):
