@@ -683,7 +683,7 @@ class MultipleTasks:
             elements = [e for e in [progress.get_string(**kwargs), context.get_string(**kwargs), "◉", str(len(self.tasks)), self.get_description(), multiple_task_results.get_description()] if e != ""]
             print(" ".join(elements), file=output_stream)
             return multiple_task_results
-        return run_with_log_levels(run_internal, **dict(kwargs, context=extend_task_context(context, self.name, index, count), progress=progress or TaskProgress(self.count_tasks(), scheduler=self.scheduler)))
+        return run_with_log_levels(run_internal, **dict(kwargs, context=extend_task_context(context, "multiple " + self.name + "s", index, count), progress=progress or TaskProgress(self.count_tasks(), scheduler=self.scheduler)))
 
     def run_protected(self, output_stream=None, **kwargs):
         if self.scheduler == "cluster":
