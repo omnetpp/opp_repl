@@ -71,8 +71,79 @@ def _remove_attr_lines(file_path):
     with open(file_path, 'w') as file:
         file.writelines(new_lines)
 
+class StatisticalTestTaskResult(SimulationTestTaskResult):
+    """Result of a statistical test task.
+
+    Stores the raw DataFrames so that the comparison can be re-run
+    with different filter parameters without re-running the simulation.
+
+    Attributes:
+        stored_df (pd.DataFrame or None): The stored/baseline scalar DataFrame.
+        current_df (pd.DataFrame or None): The current scalar DataFrame.
+        comparison (ScalarComparisonResult or None): The comparison result.
+    """
+
+    def _compute_verdict(self, comparison):
+        """Compute result and reason from a ScalarComparisonResult."""
+        if comparison.different.empty:
+            self.result = "PASS"
+            self.reason = "All differences filtered out"
+        else:
+            df = comparison.different
+            id = df["unbounded_relative_error"].idxmax()
+            if math.isnan(id):
+                id = next(iter(df.index), None)
+            reason = df.loc[id].to_string()
+            reason = re.sub(r" +", " = ", reason)
+            reason = re.sub(r"\n", ", ", reason)
+            self.result = "FAIL"
+            self.reason = reason
+        self.expected = self.expected_result == self.result
+        self.color = self.possible_result_colors[self.possible_results.index(self.result)]
+
+    def recheck(self, **kwargs):
+        """Re-run the statistical comparison with new filter parameters.
+
+        Accepts the same filter keyword arguments as
+        :py:func:`~opp_repl.common.util.compare_scalar_dataframes`:
+        ``name_filter``, ``exclude_name_filter``, ``module_filter``,
+        ``exclude_module_filter``, ``full_match``,
+        ``unbounded_relative_error_threshold``.
+
+        Returns:
+            StatisticalTestTaskResult: A new result with the updated verdict.
+            Returns a copy of self unchanged if re-filtering is not possible.
+        """
+        import copy
+        new_result = copy.copy(self)
+        if self.stored_df is None or self.current_df is None:
+            return new_result
+        if self.stored_df.empty:
+            return new_result
+        if self.current_df.empty:
+            return new_result
+        comparison = compare_scalar_dataframes(self.stored_df, self.current_df, suffixes=('_stored', '_current'), **kwargs)
+        new_result.comparison = comparison
+        new_result._compute_verdict(comparison)
+        return new_result
+
+class MultipleStatisticalTestTaskResults(MultipleSimulationTestTaskResults):
+    """Multiple statistical test task results with bulk re-filtering support."""
+
+    def recheck(self, **kwargs):
+        """Re-run the statistical comparison on all results with new filter parameters.
+
+        Accepts the same filter keyword arguments as
+        :py:func:`StatisticalTestTaskResult.recheck`.
+
+        Returns:
+            MultipleStatisticalTestTaskResults: A new results object with updated verdicts.
+        """
+        new_results = [result.recheck(**kwargs) if hasattr(result, 'recheck') else result for result in self.results]
+        return MultipleStatisticalTestTaskResults(multiple_tasks=self.multiple_tasks, results=new_results)
+
 class StatisticalTestTask(SimulationTestTask):
-    def __init__(self, simulation_config=None, run_number=0, name="statistical test", task_result_class=SimulationTestTaskResult, **kwargs):
+    def __init__(self, simulation_config=None, run_number=0, name="statistical test", task_result_class=StatisticalTestTaskResult, **kwargs):
         super().__init__(simulation_task=SimulationTask(simulation_config=simulation_config, run_number=run_number, name=name, **kwargs), task_result_class=task_result_class, **kwargs)
         self.locals = locals()
         self.locals.pop("self")
@@ -101,6 +172,8 @@ class StatisticalTestTask(SimulationTestTask):
         stored_scalar_result_file_name = baseline_project.get_full_path(os.path.join(baseline_project.statistics_folder, working_directory, self.get_result_file_name("sca")))
         _logger.debug(f"Reading result file {current_scalar_result_file_name}")
         current_df = _read_scalar_result_file(current_scalar_result_file_name)
+        stored_df = None
+        comparison = None
         scalar_result_diff_file_name = re.sub(r".sca$", ".diff", stored_scalar_result_file_name)
         if os.path.exists(scalar_result_diff_file_name):
             os.remove(scalar_result_diff_file_name)
@@ -119,31 +192,27 @@ class StatisticalTestTask(SimulationTestTask):
                                                           name_filter=result_name_filter, exclude_name_filter=exclude_result_name_filter,
                                                           module_filter=result_module_filter, exclude_module_filter=exclude_result_module_filter,
                                                           full_match=full_match, unbounded_relative_error_threshold=unbounded_relative_error_threshold)
-                    df = comparison.different
-                    if df.empty:
-                        if unbounded_relative_error_threshold is not None:
-                            comparison_before_threshold = compare_scalar_dataframes(stored_df, current_df, suffixes=('_stored', '_current'),
-                                                                                   name_filter=result_name_filter, exclude_name_filter=exclude_result_name_filter,
-                                                                                   module_filter=result_module_filter, exclude_module_filter=exclude_result_module_filter,
-                                                                                   full_match=full_match)
-                            if not comparison_before_threshold.different.empty:
-                                max_error = comparison_before_threshold.different["unbounded_relative_error"].abs().max()
-                                return self.task_result_class(task=self, simulation_task_result=simulation_task_result, result="PASS", reason=f"All differences below relative error threshold {unbounded_relative_error_threshold} (max relative error {max_error:.6g})")
-                        return self.task_result_class(task=self, simulation_task_result=simulation_task_result, result="PASS", reason="All differences filtered out")
-                    scalar_result_csv_file_name = re.sub(r".sca$", ".csv", stored_scalar_result_file_name)
-                    _logger.debug(f"Writing CSV file {scalar_result_csv_file_name}")
-                    df.to_csv(scalar_result_csv_file_name, float_format="%.17g")
-                    id = df["unbounded_relative_error"].idxmax()
-                    if math.isnan(id):
-                        id = next(iter(df.index), None)
-                    reason = df.loc[id].to_string()
-                    reason = re.sub(r" +", " = ", reason)
-                    reason = re.sub(r"\n", ", ", reason)
-                    task_result = self.task_result_class(task=self, simulation_task_result=simulation_task_result, result="FAIL", reason=reason)
+                    task_result = self.task_result_class(task=self, simulation_task_result=simulation_task_result)
+                    task_result._compute_verdict(comparison)
+                    if not comparison.different.empty:
+                        scalar_result_csv_file_name = re.sub(r".sca$", ".csv", stored_scalar_result_file_name)
+                        _logger.debug(f"Writing CSV file {scalar_result_csv_file_name}")
+                        comparison.different.to_csv(scalar_result_csv_file_name, float_format="%.17g")
+                    elif unbounded_relative_error_threshold is not None:
+                        comparison_before_threshold = compare_scalar_dataframes(stored_df, current_df, suffixes=('_stored', '_current'),
+                                                                               name_filter=result_name_filter, exclude_name_filter=exclude_result_name_filter,
+                                                                               module_filter=result_module_filter, exclude_module_filter=exclude_result_module_filter,
+                                                                               full_match=full_match)
+                        if not comparison_before_threshold.different.empty:
+                            max_error = comparison_before_threshold.different["unbounded_relative_error"].abs().max()
+                            task_result.reason = f"All differences below relative error threshold {unbounded_relative_error_threshold} (max relative error {max_error:.6g})"
             else:
                 task_result = self.task_result_class(task=self, simulation_task_result=simulation_task_result, result="PASS")
         else:
             task_result = self.task_result_class(task=self, simulation_task_result=simulation_task_result, result="ERROR", reason="Stored statistical results are not found")
+        task_result.stored_df = stored_df
+        task_result.current_df = current_df
+        task_result.comparison = comparison
         if os.path.exists(current_scalar_result_file_name):
             os.remove(current_scalar_result_file_name)
         return task_result
@@ -164,7 +233,7 @@ def get_statistical_test_tasks(sim_time_limit=get_statistical_test_sim_time_limi
         an object that contains a list of :py:class:`StatisticalTestTask` objects matching the provided filter criteria.
         The result can be run (and re-run) without providing additional parameters.
     """
-    return get_simulation_tasks(name="statistical test", run_number=run_number, sim_time_limit=sim_time_limit, simulation_task_class=StatisticalTestTask, multiple_simulation_tasks_class=MultipleSimulationTestTasks, **kwargs)
+    return get_simulation_tasks(name="statistical test", run_number=run_number, sim_time_limit=sim_time_limit, simulation_task_class=StatisticalTestTask, multiple_simulation_tasks_class=MultipleSimulationTestTasks, multiple_task_results_class=MultipleStatisticalTestTaskResults, **kwargs)
 get_statistical_test_tasks.__signature__ = combine_signatures(get_statistical_test_tasks, get_simulation_tasks)
 
 def run_statistical_tests(append_args=[], **kwargs):
