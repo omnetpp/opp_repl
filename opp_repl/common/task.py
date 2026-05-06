@@ -255,6 +255,19 @@ class TaskResult:
     def print_result(self, complete_error_message=False, output_stream=sys.stdout, **kwargs):
         print(self.get_description(complete_error_message=complete_error_message), file=output_stream)
 
+    def to_dict(self):
+        d = {
+            "result": self.result,
+            "expected_result": self.expected_result,
+            "expected": self.expected,
+            "reason": self.reason,
+            "error_message": self.error_message,
+            "elapsed_wall_time": self.elapsed_wall_time,
+        }
+        if self.task:
+            d["parameters"] = self.task.get_parameters_string()
+        return d
+
     def recreate(self, **kwargs):
         return self.__class__(**dict(dict(self.locals, **self.kwargs), **kwargs))
 
@@ -427,6 +440,17 @@ class MultipleTaskResults:
         filtered_tasks = list(map(lambda result: result.task, filtered_results))
         multiple_tasks = self.multiple_tasks.recreate(tasks=filtered_tasks, concurrent=self.multiple_tasks.concurrent)
         return self.recreate(multiple_tasks=multiple_tasks, results=filtered_results)
+
+    def to_dict(self):
+        return {
+            "result": self.result,
+            "expected_result": self.expected_result,
+            "expected": self.expected,
+            "elapsed_wall_time": self.elapsed_wall_time,
+            "num_expected": self.num_expected,
+            "num_unexpected": self.num_unexpected,
+            "results": [r.to_dict() for r in self.results],
+        }
 
     def recreate(self, **kwargs):
         return self.__class__(**dict(dict(self.locals, **self.kwargs), **kwargs))
