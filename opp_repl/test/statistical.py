@@ -45,20 +45,6 @@ def _write_diff_file(a_file_name, b_file_name, diff_file_name):
     with open(diff_file_name, "w") as file:
         subprocess.call(diff_command, stdout=file)
 
-def _symmetric_relative_error(old, new):
-    denom = abs(old) + abs(new)
-    if denom == 0:
-        return 0.0
-    return 2 * (new - old) / denom
-
-def _unbounded_relative_error(old, new):
-    e = _symmetric_relative_error(old, new)
-    if e >= 2:
-        return float("inf")
-    if e <= -2:
-        return float("-inf")
-    return 2.0 * math.atanh(e / 2.0)
-
 def _remove_attr_lines(file_path):
     with open(file_path, 'r') as file:
         lines = file.readlines()
@@ -96,7 +82,7 @@ class StatisticalTestTask(SimulationTestTask):
         simulation_config = self.simulation_task.simulation_config
         return f"{simulation_config.ini_file}-{simulation_config.config}-#{self.simulation_task.run_number}.{extension}"
 
-    def check_simulation_task_result(self, simulation_task_result, baseline_simulation_project=None, result_name_filter=None, exclude_result_name_filter=None, result_module_filter=None, exclude_result_module_filter=None, full_match=False, relative_error_threshold=None, **kwargs):
+    def check_simulation_task_result(self, simulation_task_result, baseline_simulation_project=None, result_name_filter=None, exclude_result_name_filter=None, result_module_filter=None, exclude_result_module_filter=None, full_match=False, unbounded_relative_error_threshold=None, **kwargs):
         simulation_config = self.simulation_task.simulation_config
         simulation_project = simulation_config.simulation_project
         baseline_project = baseline_simulation_project or simulation_project
@@ -129,27 +115,25 @@ class StatisticalTestTask(SimulationTestTask):
                 elif stored_df.empty:
                     task_result = self.task_result_class(task=self, simulation_task_result=simulation_task_result, result="FAIL", reason="Stored statistical results are empty")
                 else:
-                    merged = stored_df.merge(current_df, on=['experiment', 'measurement', 'replication', 'module', 'name'], how='outer', suffixes=('_stored', '_current'))
-                    df = merged[
-                        (merged['value_stored'].isna() & merged['value_current'].notna()) |
-                        (merged['value_stored'].notna() & merged['value_current'].isna()) |
-                        (merged['value_stored'] != merged['value_current'])].dropna(subset=['value_stored', 'value_current'], how='all').copy()
-                    df["relative_error"] = df.apply(lambda row: _unbounded_relative_error(row["value_stored"], row["value_current"]), axis=1)
-                    df = df[df.apply(lambda row: matches_filter(row["name"], result_name_filter, exclude_result_name_filter, full_match) and \
-                                                 matches_filter(row["module"], result_module_filter, exclude_result_module_filter, full_match), axis=1)]
-                    if relative_error_threshold is not None:
-                        df_before_threshold = df
-                        df = df[df["relative_error"].abs() >= relative_error_threshold]
+                    comparison = compare_scalar_dataframes(stored_df, current_df, suffixes=('_stored', '_current'),
+                                                          name_filter=result_name_filter, exclude_name_filter=exclude_result_name_filter,
+                                                          module_filter=result_module_filter, exclude_module_filter=exclude_result_module_filter,
+                                                          full_match=full_match, unbounded_relative_error_threshold=unbounded_relative_error_threshold)
+                    df = comparison.different
                     if df.empty:
-                        if relative_error_threshold is not None and not df_before_threshold.empty:
-                            max_error = df_before_threshold["relative_error"].abs().max()
-                            return self.task_result_class(task=self, simulation_task_result=simulation_task_result, result="PASS", reason=f"All differences below relative error threshold {relative_error_threshold} (max relative error {max_error:.6g})")
+                        if unbounded_relative_error_threshold is not None:
+                            comparison_before_threshold = compare_scalar_dataframes(stored_df, current_df, suffixes=('_stored', '_current'),
+                                                                                   name_filter=result_name_filter, exclude_name_filter=exclude_result_name_filter,
+                                                                                   module_filter=result_module_filter, exclude_module_filter=exclude_result_module_filter,
+                                                                                   full_match=full_match)
+                            if not comparison_before_threshold.different.empty:
+                                max_error = comparison_before_threshold.different["unbounded_relative_error"].abs().max()
+                                return self.task_result_class(task=self, simulation_task_result=simulation_task_result, result="PASS", reason=f"All differences below relative error threshold {unbounded_relative_error_threshold} (max relative error {max_error:.6g})")
                         return self.task_result_class(task=self, simulation_task_result=simulation_task_result, result="PASS", reason="All differences filtered out")
-                    sorted_df = df.loc[df["relative_error"].abs().sort_values(ascending=False).index]
                     scalar_result_csv_file_name = re.sub(r".sca$", ".csv", stored_scalar_result_file_name)
                     _logger.debug(f"Writing CSV file {scalar_result_csv_file_name}")
-                    sorted_df.to_csv(scalar_result_csv_file_name, float_format="%.17g")
-                    id = df["relative_error"].idxmax()
+                    df.to_csv(scalar_result_csv_file_name, float_format="%.17g")
+                    id = df["unbounded_relative_error"].idxmax()
                     if math.isnan(id):
                         id = next(iter(df.index), None)
                     reason = df.loc[id].to_string()

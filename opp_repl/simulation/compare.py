@@ -266,14 +266,16 @@ class CompareSimulationsTaskResult(TaskResult):
     def print_different_statistic_names(self):
         print("\n".join(self.different_statistical_results["name"].unique()))
 
-    def print_different_statistical_results(self, drop_columns_with_equals_values=True, include_absolute_errors=False, include_relative_errors=False, **kwargs):
+    def print_different_statistical_results(self, drop_columns_with_equals_values=True, include_absolute_errors=False, include_relative_errors=False, include_unbounded_relative_errors=False, **kwargs):
         df = self.different_statistical_results
         if drop_columns_with_equals_values:
             df = df.loc[:, df.nunique() > 1]
-        if not include_absolute_errors:
+        if not include_absolute_errors and "absolute_error" in df.columns:
             df = df.drop("absolute_error", axis=1)
-        if not include_relative_errors:
+        if not include_relative_errors and "relative_error" in df.columns:
             df = df.drop("relative_error", axis=1)
+        if not include_unbounded_relative_errors and "unbounded_relative_error" in df.columns:
+            df = df.drop("unbounded_relative_error", axis=1)
         print(df.to_string(index=False, **kwargs))
 
     def _get_cause_event_number(self, simulation_event, num_cause_events):
@@ -298,21 +300,12 @@ class CompareSimulationsTaskResult(TaskResult):
     def _compare_statistical_results(self, statistical_result_name_filter=None, exclude_statistic_name_filter=None, statistical_result_module_filter=None, exclude_statistic_module_filter=None, full_match=False, **kwargs):
         self.df_1 = self._get_result_data_frame(self.multiple_task_results.results[0])
         self.df_2 = self._get_result_data_frame(self.multiple_task_results.results[1])
-        if not self.df_1.equals(self.df_2):
-            merged = self.df_1.merge(self.df_2, on=['experiment', 'measurement', 'replication', 'module', 'name'], how='outer', suffixes=('_1', '_2'))
-            df = merged[
-                (merged['value_1'].isna() & merged['value_2'].notna()) |
-                (merged['value_1'].notna() & merged['value_2'].isna()) |
-                (merged['value_1'] != merged['value_2'])].dropna(subset=['value_1', 'value_2'], how='all').copy()
-            df["absolute_error"] = df.apply(lambda row: abs(row["value_2"] - row["value_1"]), axis=1)
-            df["relative_error"] = df.apply(lambda row: row["absolute_error"] / abs(row["value_1"]) if row["value_1"] != 0 else (float("inf") if row["value_2"] != 0 else 0), axis=1)
-            df = df[df.apply(lambda row: matches_filter(row["name"], statistical_result_name_filter, exclude_statistic_name_filter, full_match) and \
-                                         matches_filter(row["module"], statistical_result_module_filter, exclude_statistic_module_filter, full_match), axis=1)]
-            sorted_df = df.sort_values(by="relative_error", ascending=False)
-            self.different_statistical_results = sorted_df
-            self.identical_statistical_results = pd.merge(self.df_1, self.df_2, how="inner")
-        else:
-            self.different_statistical_results = pd.DataFrame()
+        comparison = compare_scalar_dataframes(self.df_1, self.df_2,
+                                               name_filter=statistical_result_name_filter, exclude_name_filter=exclude_statistic_name_filter,
+                                               module_filter=statistical_result_module_filter, exclude_module_filter=exclude_statistic_module_filter,
+                                               full_match=full_match)
+        self.different_statistical_results = comparison.different
+        self.identical_statistical_results = comparison.identical
 
     def _get_result_file_name(self, simulation_task, extension):
         simulation_config = simulation_task.simulation_config

@@ -7,6 +7,7 @@ import inspect
 import io
 import IPython
 import logging
+import math
 import os
 import pandas
 import platform
@@ -275,6 +276,26 @@ def read_dependency_file(file_path):
     file.close()
     dependency_files[file_path] = (modification_time, result)
     return result
+
+def relative_error(old, new):
+    if old != 0:
+        return abs(new - old) / abs(old)
+    else:
+        return float("inf") if new != 0 else 0.0
+
+def symmetric_relative_error(old, new):
+    denom = abs(old) + abs(new)
+    if denom == 0:
+        return 0.0
+    return 2 * (new - old) / denom
+
+def unbounded_relative_error(old, new):
+    e = symmetric_relative_error(old, new)
+    if e >= 2:
+        return float("inf")
+    if e <= -2:
+        return float("-inf")
+    return 2.0 * math.atanh(e / 2.0)
 
 def matches_filter(value, positive_filter, negative_filter, full_match):
     return ((re.fullmatch(positive_filter, value) if full_match else re.search(positive_filter, value)) is not None if positive_filter is not None else True) and \
@@ -584,3 +605,120 @@ def is_running_in_sandbox():
     except OSError:
         pass
     return True
+
+_KEY_COLUMNS = ['experiment', 'measurement', 'replication', 'module', 'name']
+
+class ScalarComparisonResult:
+    """Result of comparing two scalar DataFrames.
+
+    Attributes:
+        df_1 (pd.DataFrame): The first input DataFrame.
+        df_2 (pd.DataFrame): The second input DataFrame.
+        is_equal (bool): ``True`` when the two DataFrames are equal.
+        identical (pd.DataFrame): Rows present and equal in both DataFrames.
+        different (pd.DataFrame): Rows that differ, sorted by descending
+            ``|relative_error|``.  Contains the key columns plus
+            ``value_1``, ``value_2``, and the requested error columns.
+    """
+
+    def __init__(self, df_1, df_2, is_equal, identical, different):
+        self.df_1 = df_1
+        self.df_2 = df_2
+        self.is_equal = is_equal
+        self.identical = identical
+        self.different = different
+
+    def __repr__(self):
+        n1, n2 = len(self.df_1), len(self.df_2)
+        ni, nd = len(self.identical), len(self.different)
+        return f"ScalarComparisonResult({n1} and {n2} TOTAL, {ni} IDENTICAL, {nd} DIFFERENT)"
+
+def compare_scalar_dataframes(
+    df_1,
+    df_2,
+    suffixes=('_1', '_2'),
+    name_filter=None,
+    exclude_name_filter=None,
+    module_filter=None,
+    exclude_module_filter=None,
+    full_match=False,
+    unbounded_relative_error_threshold=None,
+):
+    """Compare two scalar result DataFrames and return the differences.
+
+    Both DataFrames must contain at least the columns ``experiment``,
+    ``measurement``, ``replication``, ``module``, ``name``, and ``value``.
+
+    The *different* DataFrame always includes a ``relative_error`` column
+    (simple ``|v2-v1|/|v1|``) and an ``unbounded_relative_error`` column
+    (symmetric atanh-based metric).  Rows are sorted by descending
+    ``|unbounded_relative_error|``.
+
+    Parameters:
+        df_1 (pd.DataFrame): First (or *stored*/*baseline*) DataFrame.
+        df_2 (pd.DataFrame): Second (or *current*) DataFrame.
+        suffixes (tuple): Column suffixes used when merging the ``value``
+            column (default ``('_1', '_2')``).
+        name_filter (str or None): Regex to include only matching ``name`` rows.
+        exclude_name_filter (str or None): Regex to exclude matching ``name`` rows.
+        module_filter (str or None): Regex to include only matching ``module`` rows.
+        exclude_module_filter (str or None): Regex to exclude matching ``module`` rows.
+        full_match (bool): If ``True`` filters use ``re.fullmatch``; otherwise ``re.search``.
+        unbounded_relative_error_threshold (float or None): If set, rows whose
+            ``|unbounded_relative_error|`` is below this threshold are
+            dropped from the *different* result.
+
+    Returns:
+        ScalarComparisonResult: Container with ``df_1``, ``df_2``,
+        ``is_equal``, ``identical``, and ``different`` attributes.
+    """
+    value_col_1 = 'value' + suffixes[0]
+    value_col_2 = 'value' + suffixes[1]
+
+    if df_1.equals(df_2):
+        return ScalarComparisonResult(
+            df_1=df_1,
+            df_2=df_2,
+            is_equal=True,
+            identical=pandas.merge(df_1, df_2, how="inner"),
+            different=pandas.DataFrame(),
+        )
+
+    merged = df_1.merge(df_2, on=_KEY_COLUMNS, how='outer', suffixes=suffixes)
+
+    df = merged[
+        (merged[value_col_1].isna() & merged[value_col_2].notna()) |
+        (merged[value_col_1].notna() & merged[value_col_2].isna()) |
+        (merged[value_col_1] != merged[value_col_2])
+    ].dropna(subset=[value_col_1, value_col_2], how='all').copy()
+
+    # --- error columns (always computed) ----------------------------------
+    df["absolute_error"] = df.apply(
+        lambda row: abs(row[value_col_2] - row[value_col_1]), axis=1)
+    df["relative_error"] = df.apply(
+        lambda row: relative_error(row[value_col_1], row[value_col_2]), axis=1)
+    df["unbounded_relative_error"] = df.apply(
+        lambda row: unbounded_relative_error(row[value_col_1], row[value_col_2]), axis=1)
+
+    # --- filtering --------------------------------------------------------
+    if name_filter is not None or exclude_name_filter is not None or \
+       module_filter is not None or exclude_module_filter is not None:
+        df = df[df.apply(
+            lambda row: matches_filter(row["name"], name_filter, exclude_name_filter, full_match) and
+                        matches_filter(row["module"], module_filter, exclude_module_filter, full_match),
+            axis=1)]
+
+    # --- threshold --------------------------------------------------------
+    if unbounded_relative_error_threshold is not None and not df.empty:
+        df = df[df["unbounded_relative_error"].abs() >= unbounded_relative_error_threshold]
+
+    # --- sort by error magnitude ------------------------------------------
+    df = df.loc[df["unbounded_relative_error"].abs().sort_values(ascending=False).index]
+
+    return ScalarComparisonResult(
+        df_1=df_1,
+        df_2=df_2,
+        is_equal=False,
+        identical=pandas.merge(df_1, df_2, how="inner"),
+        different=df,
+    )
