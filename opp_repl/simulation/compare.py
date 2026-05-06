@@ -357,8 +357,8 @@ class CompareSimulationsTask(Task):
             Compare scalar statistical results (default ``True``).
     """
 
-    def __init__(self, multiple_simulation_tasks=None, task_result_class=CompareSimulationsTaskResult, compare_stdout=True, compare_fingerprint=True, compare_statistics=True, **kwargs):
-        super().__init__(task_result_class=task_result_class, **kwargs)
+    def __init__(self, multiple_simulation_tasks=None, task_result_class=CompareSimulationsTaskResult, compare_stdout=True, compare_fingerprint=True, compare_statistics=True, name="simulation comparison", **kwargs):
+        super().__init__(name=name, task_result_class=task_result_class, **kwargs)
         self.compare_stdout = compare_stdout
         self.compare_fingerprint = compare_fingerprint
         self.compare_statistics = compare_statistics
