@@ -661,10 +661,7 @@ class SimulationProject:
                 if self.opp_env_workspace:
                     _logger.warn("Cannot determine number of runs for opp_env project with configuration-class in " + working_directory)
                     return None
-                self.build(mode="release")
                 executable = self.get_executable(mode="release")
-                if not os.path.exists(executable):
-                    executable = self.get_executable(mode="release")
                 default_args = self.get_default_args()
                 args = [executable, *default_args, "-s", "-f", ini_file, "-c", config, "-q", "numruns"]
             else:
@@ -675,8 +672,6 @@ class SimulationProject:
                 if executable is None or not os.path.exists(executable):
                     _logger.warn("Cannot determine number of runs: opp_run not found in " + working_directory)
                     return None
-                if self.get_dynamic_libraries_for_running():
-                    self.build(mode="release")
                 default_args = self.get_default_args()
                 args = [executable, *default_args, "-s", "-f", ini_file, "-c", config, "-q", "numruns"]
             result = run_command_with_logging(args, cwd=working_directory)
@@ -763,6 +758,7 @@ class SimulationProject:
             return self.collect_ini_file_simulation_configs(ini_path, **kwargs)
         _logger.info(f"Collecting {self.name} simulation configs started")
         ini_paths = [f for f in itertools.chain.from_iterable(map(lambda g: glob.glob(g, recursive=True), ini_path_globs)) if os.path.isfile(f)]
+        self.build(mode="release")
         if concurrent:
             pool = multiprocessing.pool.ThreadPool(multiprocessing.cpu_count())
             result = list(itertools.chain.from_iterable(pool.map(local_collect_ini_file_simulation_configs, ini_paths)))
