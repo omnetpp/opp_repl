@@ -27,6 +27,17 @@ results = compare_simulations_between_commits(
 Both functions accept the same filter parameters as `run_simulations()` (e.g.
 `working_directory_filter`, `config_filter`, `run_number`).
 
+The `simulation_project` parameter is optional in all `*_between_commits()`
+functions — when omitted, the default simulation project is used:
+
+```python
+# Uses the default simulation project
+results = compare_simulations_between_commits(
+    git_hash_1="HEAD~1", git_hash_2="HEAD",
+    config_filter="General",
+    run_number=0)
+```
+
 ### Shorthand functions
 
 Dedicated shorthand functions are available for comparing a single axis.
