@@ -178,23 +178,39 @@ class OmnetppProject:
             env.setdefault("CCACHE_NOHASHDIR", "true")
         return env
 
+    def is_build_up_to_date(self, mode="release"):
+        root = self.get_root_path()
+        if root is None or not os.path.isfile(os.path.join(root, "Makefile")):
+            return False
+        env = self.get_env()
+        args = ["make", "-q", "MODE=" + mode]
+        if self.opp_env_workspace:
+            opp_env_project = self.opp_env_project or self.name
+            shell_cmd = "cd " + shlex.quote(root) + " && " + shlex.join(args)
+            args = ["opp_env", "-l", "WARN", "run", opp_env_project, "-w", self.opp_env_workspace, "-c", shell_cmd]
+            result = subprocess.run(args, capture_output=True)
+        else:
+            result = subprocess.run(args, cwd=root, env=env, capture_output=True)
+        return result.returncode == 0
+
     def build(self, mode="release"):
         self.ensure_mounted()
         self.ensure_configured()
         root = self.get_root_path()
         if root is None:
             raise RuntimeError("Cannot build OMNeT++: root path is not set")
-        env = self.get_env()
-        args = ["make", "MODE=" + mode, "-j", str(multiprocessing.cpu_count())]
-        _logger.info("Building OMNeT++ in %s mode at %s started", mode, root)
-        if self.opp_env_workspace:
-            opp_env_project = self.opp_env_project or self.name
-            shell_cmd = "cd " + shlex.quote(root) + " && " + shlex.join(args)
-            args = ["opp_env", "-l", "WARN", "run", opp_env_project, "-w", self.opp_env_workspace, "-c", shell_cmd]
-            run_command_with_logging(args, error_message="Building OMNeT++ failed")
-        else:
-            run_command_with_logging(args, cwd=root, env=env, error_message="Building OMNeT++ failed")
-        _logger.info("Building OMNeT++ in %s mode at %s ended", mode, root)
+        if not self.is_build_up_to_date(mode=mode):
+            env = self.get_env()
+            args = ["make", "MODE=" + mode, "-j", str(multiprocessing.cpu_count())]
+            _logger.info("Building OMNeT++ in %s mode at %s started", mode, root)
+            if self.opp_env_workspace:
+                opp_env_project = self.opp_env_project or self.name
+                shell_cmd = "cd " + shlex.quote(root) + " && " + shlex.join(args)
+                args = ["opp_env", "-l", "WARN", "run", opp_env_project, "-w", self.opp_env_workspace, "-c", shell_cmd]
+                run_command_with_logging(args, error_message="Building OMNeT++ failed")
+            else:
+                run_command_with_logging(args, cwd=root, env=env, error_message="Building OMNeT++ failed")
+            _logger.info("Building OMNeT++ in %s mode at %s ended", mode, root)
 
     def ensure_mounted(self):
         if self._overlay is not None:
