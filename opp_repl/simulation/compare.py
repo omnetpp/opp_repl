@@ -476,7 +476,7 @@ def compare_simulations(**kwargs):
     return compare_simulations_using_multiple_tasks(multiple_simulation_tasks_1, multiple_simulation_tasks_2, **kwargs)
 compare_simulations.__signature__ = combine_signatures(compare_simulations, get_simulation_tasks)
 
-def compare_simulations_between_commits(simulation_project, git_hash_1, git_hash_2, **kwargs):
+def compare_simulations_between_commits(simulation_project=None, git_hash_1=None, git_hash_2=None, **kwargs):
     """Compare simulation results between two git versions of the same project.
 
     Creates git worktrees for each commit, builds both, and runs the
@@ -485,6 +485,7 @@ def compare_simulations_between_commits(simulation_project, git_hash_1, git_hash
     Parameters:
         simulation_project (:py:class:`SimulationProject`):
             The simulation project whose repository contains both commits.
+            If ``None``, the default simulation project is used.
         git_hash_1 (str):
             First git commit-ish (hash, tag, branch, etc.).
         git_hash_2 (str):
@@ -496,6 +497,8 @@ def compare_simulations_between_commits(simulation_project, git_hash_1, git_hash
         The result of :py:func:`compare_simulations_using_multiple_tasks`.
     """
     from opp_repl.simulation.project import make_worktree_simulation_project
+    if simulation_project is None:
+        simulation_project = get_default_simulation_project()
     project_1 = make_worktree_simulation_project(simulation_project, git_hash_1)
     project_2 = make_worktree_simulation_project(simulation_project, git_hash_2)
     return compare_simulations(simulation_project_1=project_1, simulation_project_2=project_2, **kwargs)
@@ -522,7 +525,7 @@ def compare_statistics(**kwargs):
     return compare_simulations(compare_stdout=False, compare_fingerprint=False, **kwargs)
 compare_statistics.__signature__ = combine_signatures(compare_statistics, compare_simulations)
 
-def compare_statistics_between_commits(simulation_project, git_hash_1, git_hash_2, **kwargs):
+def compare_statistics_between_commits(simulation_project=None, git_hash_1=None, git_hash_2=None, **kwargs):
     """Compare only statistical results between two git versions.
 
     Thin wrapper around :py:func:`compare_simulations_between_commits` with
@@ -530,6 +533,7 @@ def compare_statistics_between_commits(simulation_project, git_hash_1, git_hash_
 
     Parameters:
         simulation_project: The project whose repository contains both commits.
+            If ``None``, the default simulation project is used.
         git_hash_1 (str): First git commit-ish.
         git_hash_2 (str): Second git commit-ish.
 
@@ -551,7 +555,7 @@ def compare_stdout(**kwargs):
     return compare_simulations(compare_fingerprint=False, compare_statistics=False, **kwargs)
 compare_stdout.__signature__ = combine_signatures(compare_stdout, compare_simulations)
 
-def compare_stdout_between_commits(simulation_project, git_hash_1, git_hash_2, **kwargs):
+def compare_stdout_between_commits(simulation_project=None, git_hash_1=None, git_hash_2=None, **kwargs):
     """Compare only stdout trajectories between two git versions.
 
     Thin wrapper around :py:func:`compare_simulations_between_commits` with
@@ -559,6 +563,7 @@ def compare_stdout_between_commits(simulation_project, git_hash_1, git_hash_2, *
 
     Parameters:
         simulation_project: The project whose repository contains both commits.
+            If ``None``, the default simulation project is used.
         git_hash_1 (str): First git commit-ish.
         git_hash_2 (str): Second git commit-ish.
 
@@ -580,7 +585,7 @@ def compare_fingerprints(**kwargs):
     return compare_simulations(compare_stdout=False, compare_statistics=False, **kwargs)
 compare_fingerprints.__signature__ = combine_signatures(compare_fingerprints, compare_simulations)
 
-def compare_fingerprints_between_commits(simulation_project, git_hash_1, git_hash_2, **kwargs):
+def compare_fingerprints_between_commits(simulation_project=None, git_hash_1=None, git_hash_2=None, **kwargs):
     """Compare only fingerprint trajectories between two git versions.
 
     Thin wrapper around :py:func:`compare_simulations_between_commits` with
@@ -588,6 +593,7 @@ def compare_fingerprints_between_commits(simulation_project, git_hash_1, git_has
 
     Parameters:
         simulation_project: The project whose repository contains both commits.
+            If ``None``, the default simulation project is used.
         git_hash_1 (str): First git commit-ish.
         git_hash_2 (str): Second git commit-ish.
 
@@ -604,7 +610,7 @@ def compare_charts(**kwargs):
     """
     raise NotImplementedError("compare_charts is not yet implemented")
 
-def compare_charts_between_commits(simulation_project, git_hash_1, git_hash_2, **kwargs):
+def compare_charts_between_commits(simulation_project=None, git_hash_1=None, git_hash_2=None, **kwargs):
     """Compare chart images between two git versions.
 
     Not yet implemented.
@@ -618,7 +624,7 @@ def compare_speed(**kwargs):
     """
     raise NotImplementedError("compare_speed is not yet implemented")
 
-def compare_speed_between_commits(simulation_project, git_hash_1, git_hash_2, **kwargs):
+def compare_speed_between_commits(simulation_project=None, git_hash_1=None, git_hash_2=None, **kwargs):
     """Compare simulation speed between two git versions.
 
     Not yet implemented.
