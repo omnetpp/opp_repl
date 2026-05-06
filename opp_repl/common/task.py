@@ -105,7 +105,8 @@ class TaskProgress:
             raise Exception("Unknown scheduler")
 
     def get_progress(self):
-        return f"[{self.num_finished:0{self._width}d}/{self.num_progress_steps}]"
+        # +1 to display 1-based progress instead of 0-based
+        return f"[{self.num_finished + 1:0{self._width}d}/{self.num_progress_steps + 1}]"
 
     def get_string(self, include_progress=True, **kwargs):
         return (COLOR_LIGHT_GRAY + self.get_progress() + COLOR_RESET) if include_progress else ""
