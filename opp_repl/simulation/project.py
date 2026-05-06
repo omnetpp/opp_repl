@@ -605,13 +605,14 @@ class SimulationProject:
         self.ensure_mounted()
         if recursive:
             opp = self.get_omnetpp_project()
-            if opp is not None:
+            if self.used_projects:
+                ws = getattr(self, '_workspace', None) or get_default_simulation_workspace()
+                for used_project_name in self.used_projects:
+                    used_project = ws.get_simulation_project(used_project_name, None)
+                    if used_project is not None:
+                        used_project.build(mode=mode, recursive=recursive, **kwargs)
+            elif opp is not None:
                 opp.build(mode=mode)
-            ws = getattr(self, '_workspace', None) or get_default_simulation_workspace()
-            for used_project_name in self.used_projects:
-                used_project = ws.get_simulation_project(used_project_name, None)
-                if used_project is not None:
-                    used_project.build(mode=mode, recursive=recursive, **kwargs)
         import opp_repl.simulation.build
         opp_repl.simulation.build.build_project(simulation_project=self, mode=mode, **kwargs)
 
@@ -631,13 +632,14 @@ class SimulationProject:
     def clean(self, mode="release", recursive=True, **kwargs):
         if recursive:
             opp = self.get_omnetpp_project()
-            if opp is not None:
+            if self.used_projects:
+                ws = getattr(self, '_workspace', None) or get_default_simulation_workspace()
+                for used_project_name in self.used_projects:
+                    used_project = ws.get_simulation_project(used_project_name, None)
+                    if used_project is not None:
+                        used_project.clean(mode=mode, recursive=recursive, **kwargs)
+            elif opp is not None:
                 opp.clean(mode=mode)
-            ws = getattr(self, '_workspace', None) or get_default_simulation_workspace()
-            for used_project_name in self.used_projects:
-                used_project = ws.get_simulation_project(used_project_name, None)
-                if used_project is not None:
-                    used_project.clean(mode=mode, recursive=recursive, **kwargs)
         if self._overlay is not None:
             self._overlay.clean()
         else:
