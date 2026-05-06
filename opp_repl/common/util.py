@@ -633,6 +633,19 @@ class ScalarComparisonResult:
         ni, nd = len(self.identical), len(self.different)
         return f"ScalarComparisonResult({n1} and {n2} TOTAL, {ni} IDENTICAL, {nd} DIFFERENT)"
 
+    def refilter(self, **kwargs):
+        """Recompute the comparison with different filter parameters.
+
+        Accepts the same filter keyword arguments as
+        :py:func:`compare_scalar_dataframes` (``name_filter``,
+        ``exclude_name_filter``, ``module_filter``, ``exclude_module_filter``,
+        ``full_match``, ``unbounded_relative_error_threshold``).
+
+        Returns:
+            ScalarComparisonResult: A new comparison result with the updated filters applied.
+        """
+        return compare_scalar_dataframes(self.df_1, self.df_2, **kwargs)
+
 def compare_scalar_dataframes(
     df_1,
     df_2,
