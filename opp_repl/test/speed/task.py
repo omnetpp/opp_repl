@@ -14,20 +14,60 @@ _speed_test_append_args = ["-s", "-S", "--measure-cpu-usage=true",
                            "--record-vector-results=false", "--record-scalar-results=false", "--record-eventlog=false",
                            "--vector-recording=false", "--scalar-recording=false", "--bin-recording=false", "--param-recording=false"]
 
+class SpeedTestTaskResult(SimulationTestTaskResult):
+    """Result of a speed test task.
+
+    Stores the measured and expected instruction counts so the verdict
+    can be recomputed with a different tolerance without re-running.
+
+    Attributes:
+        num_cpu_instructions (int): Measured CPU instruction count.
+        expected_num_cpu_instructions (int): Baseline CPU instruction count.
+    """
+
+    def _compute_verdict(self, max_relative_error=0.1):
+        """Compute result and reason from stored instruction counts."""
+        if (self.num_cpu_instructions - self.expected_num_cpu_instructions) / self.expected_num_cpu_instructions > max_relative_error:
+            self.result = "FAIL"
+            self.reason = f"Number of CPU instructions is too large: {self.num_cpu_instructions} > {self.expected_num_cpu_instructions}"
+        elif (self.expected_num_cpu_instructions - self.num_cpu_instructions) / self.expected_num_cpu_instructions > max_relative_error:
+            self.result = "FAIL"
+            self.reason = f"Number of CPU instructions is too small: {self.num_cpu_instructions} < {self.expected_num_cpu_instructions}"
+        else:
+            self.result = "PASS"
+            self.reason = None
+        self.expected = self.expected_result == self.result
+        self.color = self.possible_result_colors[self.possible_results.index(self.result)]
+
+    def recheck(self, max_relative_error=0.1, **kwargs):
+        """Recompute the speed test verdict with a different tolerance.
+
+        Args:
+            max_relative_error (float): Maximum allowed relative difference
+                between measured and expected instruction counts (default 0.1).
+
+        Returns:
+            SpeedTestTaskResult: A new result with the updated verdict.
+        """
+        import copy
+        new_result = copy.copy(self)
+        if self.num_cpu_instructions is None or self.expected_num_cpu_instructions is None:
+            return new_result
+        new_result._compute_verdict(max_relative_error)
+        return new_result
+
 class SpeedTestTask(SimulationTestTask):
-    def __init__(self, expected_num_cpu_instructions=None, max_relative_error = 0.1, **kwargs):
-        super().__init__(**kwargs)
+    def __init__(self, expected_num_cpu_instructions=None, max_relative_error=0.1, task_result_class=SpeedTestTaskResult, **kwargs):
+        super().__init__(task_result_class=task_result_class, **kwargs)
         self.expected_num_cpu_instructions = expected_num_cpu_instructions
         self.max_relative_error = max_relative_error
 
     def check_simulation_task_result(self, simulation_task_result, **kwargs):
-        num_cpu_instructions = simulation_task_result.num_cpu_instructions
-        if (num_cpu_instructions - self.expected_num_cpu_instructions) / self.expected_num_cpu_instructions > self.max_relative_error:
-            return self.task_result_class(task=self, simulation_task_result=simulation_task_result, result="FAIL", expected_result="PASS", reason=f"Number of CPU instructions is too large: {num_cpu_instructions} > {self.expected_num_cpu_instructions}")
-        elif (self.expected_num_cpu_instructions - num_cpu_instructions) / self.expected_num_cpu_instructions > self.max_relative_error:
-            return self.task_result_class(task=self, simulation_task_result=simulation_task_result, result="FAIL", expected_result="PASS", reason=f"Number of CPU instructions is too small: {num_cpu_instructions} < {self.expected_num_cpu_instructions}")
-        else:
-            return super().check_simulation_task_result(simulation_task_result, **kwargs)
+        task_result = self.task_result_class(task=self, simulation_task_result=simulation_task_result, expected_result="PASS")
+        task_result.num_cpu_instructions = simulation_task_result.num_cpu_instructions
+        task_result.expected_num_cpu_instructions = self.expected_num_cpu_instructions
+        task_result._compute_verdict(self.max_relative_error)
+        return task_result
 
     def run_protected(self, **kwargs):
         return super().run_protected(nice=-10, append_args=_speed_test_append_args, **kwargs)
