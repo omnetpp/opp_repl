@@ -27,6 +27,48 @@ results = compare_simulations_between_commits(
 Both functions accept the same filter parameters as `run_simulations()` (e.g.
 `working_directory_filter`, `config_filter`, `run_number`).
 
+### Shorthand functions
+
+Dedicated shorthand functions are available for comparing a single axis.
+They accept the same parameters as `compare_simulations()`:
+
+```python
+# Compare only statistics
+results = compare_statistics(
+    simulation_project_1=inet_project,
+    simulation_project_2=inet_baseline_project,
+    working_directory_filter="examples/ethernet",
+    config_filter="General",
+    run_number=0)
+
+# Compare only statistics between git commits
+results = compare_statistics_between_commits(
+    inet_project, "HEAD~1", "HEAD",
+    config_filter="General",
+    run_number=0)
+
+# Compare only stdout trajectories
+results = compare_stdout(
+    simulation_project_1=inet_project,
+    simulation_project_2=inet_baseline_project,
+    run_number=0)
+
+# Compare only fingerprint trajectories
+results = compare_fingerprints(
+    simulation_project_1=inet_project,
+    simulation_project_2=inet_baseline_project,
+    run_number=0)
+```
+
+Each shorthand also has a `*_between_commits()` variant:
+
+- `compare_statistics_between_commits()`
+- `compare_stdout_between_commits()`
+- `compare_fingerprints_between_commits()`
+
+Chart and speed comparison (`compare_charts()`, `compare_speed()`) are planned
+but not yet implemented.
+
 ### Disabling individual comparison axes
 
 By default the comparison checks stdout trajectories, fingerprint trajectories,
