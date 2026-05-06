@@ -94,13 +94,7 @@ class CompareSimulationsTaskResult(TaskResult):
             self.multiple_tasks = multiple_task_results.multiple_tasks
 
             if self.task.compare_stdout:
-                self.stdout_trajectory_divergence_position = self._find_stdout_trajectory_divergence_position(**self.multiple_tasks.kwargs)
-                if self.stdout_trajectory_divergence_position:
-                    self.stdout_trajectory_comparison_result = "DIVERGENT"
-                    self.stdout_trajectory_comparison_color = COLOR_YELLOW
-                else:
-                    self.stdout_trajectory_comparison_result = "IDENTICAL"
-                    self.stdout_trajectory_comparison_color = COLOR_GREEN
+                self._compute_stdout_verdict(**self.multiple_tasks.kwargs)
             else:
                 self.stdout_trajectory_divergence_position = None
                 self.stdout_trajectory_comparison_result = None
@@ -120,37 +114,13 @@ class CompareSimulationsTaskResult(TaskResult):
                 self.fingerprint_trajectory_comparison_color = None
 
             if self.task.compare_statistics:
-                self._compare_statistical_results(**self.multiple_tasks.kwargs)
-                if not self.different_statistical_results.empty:
-                    self.statistical_comparison_result = "DIFFERENT"
-                    self.statistical_comparison_color = COLOR_YELLOW
-                else:
-                    self.statistical_comparison_result = "IDENTICAL"
-                    self.statistical_comparison_color = COLOR_GREEN
+                self._compute_statistical_verdict(**self.multiple_tasks.kwargs)
             else:
                 self.different_statistical_results = pd.DataFrame()
                 self.statistical_comparison_result = None
                 self.statistical_comparison_color = None
 
-            self.reason = ""
-            self.result = "IDENTICAL"
-            self.color = COLOR_GREEN
-            if self.stdout_trajectory_comparison_result == "DIVERGENT":
-                if self.result == "IDENTICAL":
-                    self.result = "DIVERGENT"
-                self.color = COLOR_YELLOW
-                self.reason = self.reason + ", different STDOUT trajectories"
-            if self.fingerprint_trajectory_comparison_result == "DIVERGENT":
-                if self.result == "IDENTICAL":
-                    self.result = "DIVERGENT"
-                self.color = COLOR_YELLOW
-                self.reason = self.reason + ", different fingerprint trajectories"
-            if self.statistical_comparison_result == "DIFFERENT":
-                if self.result == "IDENTICAL":
-                    self.result = "DIFFERENT"
-                self.color = COLOR_YELLOW
-                self.reason = self.reason + ", different statistics"
-            self.reason = None if self.reason == "" else self.reason[2:]
+            self._recompute_overall_result()
         else:
             self.stdout_trajectory_divergence_position = None
             self.stdout_trajectory_comparison_result = None
@@ -191,6 +161,78 @@ class CompareSimulationsTaskResult(TaskResult):
         else:
             statistical_desription = ""
         return TaskResult.__repr__(self) + "\n" + stdout_trajectory_divergence_description + fingerprint_trajectory_divergence_description + statistical_desription
+
+    def recompare(self, **kwargs):
+        """Re-run the comparison with new filter parameters.
+
+        Recomputes the stdout trajectory comparison (if ``stdout_filter`` or
+        ``exclude_stdout_filter`` are provided) and the statistical comparison
+        (if any of the statistical filter parameters are provided) using the
+        already-available simulation output.  Returns a **new** result object;
+        the original is unchanged.
+
+        Keyword Args:
+            stdout_filter (str or None): Regex to include only matching stdout lines.
+            exclude_stdout_filter (str or None): Regex to exclude matching stdout lines.
+            statistical_result_name_filter (str or None): Regex for scalar names.
+            exclude_statistic_name_filter (str or None): Regex to exclude scalar names.
+            statistical_result_module_filter (str or None): Regex for modules.
+            exclude_statistic_module_filter (str or None): Regex to exclude modules.
+            full_match (bool): Use ``re.fullmatch`` instead of ``re.search``.
+
+        Returns:
+            CompareSimulationsTaskResult: A new result with updated verdicts.
+        """
+        import copy
+        new_result = copy.copy(self)
+        if self.task.compare_stdout:
+            new_result._compute_stdout_verdict(**kwargs)
+        if self.task.compare_statistics:
+            new_result._compute_statistical_verdict(**kwargs)
+        new_result._recompute_overall_result()
+        return new_result
+
+    def _compute_stdout_verdict(self, **kwargs):
+        """Compute stdout trajectory comparison verdict."""
+        self.stdout_trajectory_divergence_position = self._find_stdout_trajectory_divergence_position(**kwargs)
+        if self.stdout_trajectory_divergence_position:
+            self.stdout_trajectory_comparison_result = "DIVERGENT"
+            self.stdout_trajectory_comparison_color = COLOR_YELLOW
+        else:
+            self.stdout_trajectory_comparison_result = "IDENTICAL"
+            self.stdout_trajectory_comparison_color = COLOR_GREEN
+
+    def _compute_statistical_verdict(self, **kwargs):
+        """Compute statistical comparison verdict."""
+        self._compare_statistical_results(**kwargs)
+        if not self.different_statistical_results.empty:
+            self.statistical_comparison_result = "DIFFERENT"
+            self.statistical_comparison_color = COLOR_YELLOW
+        else:
+            self.statistical_comparison_result = "IDENTICAL"
+            self.statistical_comparison_color = COLOR_GREEN
+
+    def _recompute_overall_result(self):
+        self.reason = ""
+        self.result = "IDENTICAL"
+        self.color = COLOR_GREEN
+        if self.stdout_trajectory_comparison_result == "DIVERGENT":
+            if self.result == "IDENTICAL":
+                self.result = "DIVERGENT"
+            self.color = COLOR_YELLOW
+            self.reason = self.reason + ", different STDOUT trajectories"
+        if self.fingerprint_trajectory_comparison_result == "DIVERGENT":
+            if self.result == "IDENTICAL":
+                self.result = "DIVERGENT"
+            self.color = COLOR_YELLOW
+            self.reason = self.reason + ", different fingerprint trajectories"
+        if self.statistical_comparison_result == "DIFFERENT":
+            if self.result == "IDENTICAL":
+                self.result = "DIFFERENT"
+            self.color = COLOR_YELLOW
+            self.reason = self.reason + ", different statistics"
+        self.reason = None if self.reason == "" else self.reason[2:]
+        self.expected = self.result == "IDENTICAL"
 
     def debug_at_stdout_divergence_position(self, num_cause_events=0, **kwargs):
         if self.stdout_trajectory_divergence_position:
