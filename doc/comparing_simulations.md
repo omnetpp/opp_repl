@@ -166,6 +166,32 @@ df[df["relative_error"] > 0.01]          # only differences above 1 %
 df[df["module"].str.contains("router")]  # only router modules
 ```
 
+### Re-filtering the comparison
+
+Running the comparison is expensive because it involves running two
+simulations.  Once you have the results, you can re-apply different
+filters and recompute the verdict without re-running anything.
+`recompare()` returns a **new** result object; the original is unchanged.
+
+```python
+# Re-run with different stdout and statistics filters
+r2 = r.recompare(
+    exclude_stdout_filter=".*DEBUG.*",
+    exclude_statistic_name_filter="jitter",
+    statistical_result_module_filter=".*router.*")
+
+r2.stdout_trajectory_comparison_result   # "IDENTICAL" or "DIVERGENT"
+r2.statistical_comparison_result         # "IDENTICAL" or "DIFFERENT"
+r2.result                                # overall verdict is recomputed
+```
+
+`recompare()` accepts the following keyword arguments:
+
+- **Stdout filters**: `stdout_filter`, `exclude_stdout_filter`
+- **Statistics filters**: `statistical_result_name_filter`,
+  `exclude_statistic_name_filter`, `statistical_result_module_filter`,
+  `exclude_statistic_module_filter`, `full_match`
+
 ### Interactive debugging and visualization
 
 Once you have identified a divergence, you can launch interactive debugging

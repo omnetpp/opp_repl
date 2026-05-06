@@ -33,6 +33,9 @@ and used NED types from the simulation's stdout/stderr.
 |---|---|---|
 | `TestTaskResult` / `MultipleTestTaskResults` | `TestTask` | `PASS`, `FAIL` |
 | `SimulationTestTaskResult` / `MultipleSimulationTestTaskResults` | `SimulationTestTask` | `PASS`, `FAIL` |
+| `StatisticalTestTaskResult` / `MultipleStatisticalTestTaskResults` | `StatisticalTestTask` | `PASS`, `FAIL` |
+| `SpeedTestTaskResult` | `SpeedTestTask` | `PASS`, `FAIL` |
+| `ChartTestTaskResult` | `ChartTestTask` | `PASS`, `FAIL` |
 | `FingerprintTestTaskResult` / `MultipleFingerprintTestTaskResults` | `FingerprintTestTask` | `PASS`, `FAIL` |
 | `SpeedUpdateTaskResult` | `SpeedUpdateTask` | `KEEP`, `INSERT`, `UPDATE` |
 
@@ -251,9 +254,67 @@ tr.fingerprint_mismatch      # True if they differ
 tr.simulation_task_result    # the underlying SimulationTaskResult
 ```
 
+### StatisticalTestTaskResult
+
+Extends `SimulationTestTaskResult` with stored DataFrames for post-run
+re-filtering:
+
+```python
+tr.stored_df       # baseline scalar DataFrame (or None)
+tr.current_df      # current scalar DataFrame
+tr.comparison      # ScalarComparisonResult (or None)
+```
+
+The `recheck()` method returns a **new** result with the comparison
+recomputed under different filters:
+
+```python
+tr2 = tr.recheck(exclude_name_filter="jitter")
+tr3 = tr.recheck(name_filter="throughput", module_filter=".*router.*")
+print(tr2.result)   # "PASS" or "FAIL"
+```
+
+The `MultipleStatisticalTestTaskResults` wrapper also supports bulk
+`recheck()` which returns a new results object with all verdicts
+recomputed.
+
+See [Statistical tests — Re-filtering](statistical_tests.md#re-filtering-results-after-a-run).
+
+### SpeedTestTaskResult
+
+Extends `SimulationTestTaskResult` with stored instruction counts for
+post-run re-evaluation with a different tolerance:
+
+```python
+tr.num_cpu_instructions           # measured during this run
+tr.expected_num_cpu_instructions  # from the speed store baseline
+```
+
+The `recheck()` method returns a **new** result with a different tolerance:
+
+```python
+tr2 = tr.recheck(max_relative_error=0.15)  # allow 15% instead of 10%
+print(tr2.result)   # "PASS" or "FAIL"
+```
+
+### ChartTestTaskResult
+
+Extends `TestTaskResult` with the stored image comparison metric:
+
+```python
+tr.metric   # RMSE between baseline and current chart (float or None)
+```
+
+The `recheck()` method returns a **new** result with a different threshold:
+
+```python
+tr2 = tr.recheck(metric_threshold=0.01)  # tolerate small differences
+print(tr2.result)   # "PASS" or "FAIL"
+```
+
 ### SpeedUpdateTaskResult
 
-Carries instruction counts for the speed comparison:
+Carries instruction counts for the speed update comparison:
 
 ```python
 tr.expected_num_cpu_instructions  # from the speed store baseline

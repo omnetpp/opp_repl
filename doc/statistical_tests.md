@@ -83,8 +83,8 @@ relative error 3.2e-07)"`.
 
 ## Inspecting results
 
-`run_statistical_tests()` returns a `MultipleSimulationTestTaskResults`.
-Each individual result is a `SimulationTestTaskResult`:
+`run_statistical_tests()` returns a `MultipleStatisticalTestTaskResults`.
+Each individual result is a `StatisticalTestTaskResult`:
 
 ```python
 r = run_statistical_tests(sim_time_limit="1s")
@@ -103,12 +103,20 @@ The `reason` string of a failing test shows the scalar with the largest
 relative error, including module path, scalar name, stored value, current
 value, and relative error.
 
+Each result stores the raw DataFrames used for comparison:
+
+```python
+tr = r.get_fail_results().results[0]
+tr.stored_df       # baseline scalar DataFrame
+tr.current_df      # current scalar DataFrame
+tr.comparison      # ScalarComparisonResult with .different and .identical
+```
+
 To inspect the full set of differences, open the `.csv` file written next
 to the baseline:
 
 ```python
 import pandas as pd
-tr = r.get_fail_results().results[0]
 cfg = tr.task.simulation_task.simulation_config
 proj = cfg.simulation_project
 csv_path = proj.get_full_path(
@@ -121,6 +129,52 @@ print(df.sort_values("relative_error", key=abs, ascending=False).head(20))
 The underlying simulation output is available via
 `tr.simulation_task_result` (stdout, stderr, timing, error details — see
 [Task results](task_results.md#simulationtaskresult-in-detail)).
+
+## Re-filtering results after a run
+
+Running statistical tests is expensive.  When some tests fail, you can
+re-apply different filters and recompute the verdict **without re-running
+any simulations**.
+
+### Re-checking all results at once
+
+```python
+r = run_statistical_tests(sim_time_limit="1s")
+
+# Some tests fail — try excluding a noisy scalar
+r2 = r.recheck(exclude_name_filter="jitter")
+
+# Or set an error threshold
+r3 = r.recheck(unbounded_relative_error_threshold=1e-6)
+```
+
+`recheck()` returns a **new** `MultipleStatisticalTestTaskResults` with
+every individual result re-evaluated and the overall summary recomputed.
+The original `r` is unchanged.
+
+### Re-checking a single result
+
+```python
+tr = r.results[3]
+tr2 = tr.recheck(exclude_name_filter="jitter",
+                 exclude_module_filter=".*scenarioManager.*")
+print(tr2.result)   # "PASS" or "FAIL"
+print(tr2.reason)
+```
+
+### Using the ScalarComparisonResult directly
+
+The `comparison` attribute on each result is a `ScalarComparisonResult` that
+also supports re-filtering:
+
+```python
+# Get a new comparison with different filters (returns a new object)
+new_comparison = tr.comparison.refilter(
+    name_filter="throughput",
+    module_filter=".*router.*")
+print(new_comparison)           # summary: N TOTAL, M IDENTICAL, K DIFFERENT
+print(new_comparison.different) # DataFrame of differences
+```
 
 ## Updating baselines
 

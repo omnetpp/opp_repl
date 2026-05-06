@@ -253,6 +253,14 @@ Simulations are run in `profile` mode.
 run_speed_tests(sim_time_limit="1s")
 ```
 
+Each `SpeedTestTaskResult` stores the measured instruction count so you
+can re-evaluate with a different tolerance without re-running:
+
+```python
+r = run_speed_tests(sim_time_limit="1s")
+tr2 = r.results[0].recheck(max_relative_error=0.15)  # allow 15%
+```
+
 ### Statistical tests
 
 Statistical tests compare scalar results against stored baseline `.sca`
@@ -262,6 +270,21 @@ triggers a `FAIL`.
 ```python
 run_statistical_tests(sim_time_limit="1s")
 ```
+
+The result is a `MultipleStatisticalTestTaskResults` whose individual
+entries are `StatisticalTestTaskResult` objects.  Each stores the raw
+DataFrames (`stored_df`, `current_df`) and a `comparison`
+(`ScalarComparisonResult`) so you can re-filter results post-run without
+re-running simulations:
+
+```python
+r = run_statistical_tests(sim_time_limit="1s")
+r2 = r.recheck(exclude_name_filter="jitter")   # bulk re-filter (returns new)
+tr2 = r.results[0].recheck(name_filter="throughput")  # single result (returns new)
+```
+
+See [Statistical tests](statistical_tests.md#re-filtering-results-after-a-run)
+for full details.
 
 ### Smoke tests
 
@@ -279,6 +302,14 @@ baseline images (under `media_folder`).
 
 ```python
 run_chart_tests()
+```
+
+Each `ChartTestTaskResult` stores the RMSE metric so you can re-evaluate
+with a different threshold without re-rendering the chart:
+
+```python
+r = run_chart_tests()
+tr2 = r.results[0].recheck(metric_threshold=0.01)  # tolerate small diffs
 ```
 
 ## Update tasks in detail
