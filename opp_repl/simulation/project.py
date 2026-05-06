@@ -480,7 +480,7 @@ class SimulationProject:
             used_project = ws.get_simulation_project(used_project_name, None)
             used_root = used_project.get_root_path()
             if used_root is not None:
-                env_var = used_project_name.upper().replace("-", "_") + "_ROOT"
+                env_var = used_project.root_folder_environment_variable or (used_project_name.upper().replace("-", "_") + "_ROOT")
                 env[env_var] = used_root
                 used_lib_dir = used_project.get_library_folder_full_path()
                 if used_lib_dir and used_lib_dir not in env.get("LD_LIBRARY_PATH", "").split(os.pathsep):
