@@ -74,6 +74,12 @@ opp_run_simulations
 # Explicitly load a .opp file from a different location
 opp_run_simulations --load /path/to/aloha.opp --filter PureAloha -t 1s
 
+# Load a directory of .opp files
+opp_run_simulations --load ~/workspace/omnetpp/samples/aloha -t 1s
+
+# Load the bundled .opp files shipped with opp_repl
+opp_run_simulations --load @opp --filter PureAloha -t 1s
+
 # Run on a SSH cluster in debug mode with a filter and time limit
 opp_run_simulations -m debug -t 1s --filter PureAlohaExperiment --hosts node1.local,node2.local
 ```
@@ -104,15 +110,22 @@ The `mode` parameter selects the build mode (see Concepts guide for available mo
 
 ## Loading projects at runtime
 
-Use `load_opp_file()` to load a single file or glob pattern, or
-`load_workspace()` to scan a directory for `*.opp` files:
+Use `load_opp_file()` to load a single file, directory, glob pattern, or
+the `@opp` token.  Use `load_workspace()` to scan a directory tree for
+`*.opp` files:
 
 ```python
 # Load a single .opp file
 load_opp_file("/path/to/aloha.opp")
 
+# Load all *.opp files from a directory
+load_opp_file("/home/user/workspace/omnetpp/samples/aloha")
+
 # Load all .opp files matching a glob pattern
 load_opp_file("/home/user/workspace/omnetpp/samples/*/*.opp")
+
+# Load the bundled .opp files shipped with opp_repl
+load_opp_file("@opp")
 
 # Scan a directory for *.opp files (like the automatic startup scan)
 load_workspace("/home/user/other-workspace")

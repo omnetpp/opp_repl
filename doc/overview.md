@@ -26,6 +26,7 @@ and [Getting started](getting_started.md) for a hands-on walkthrough.
 - **GitHub Actions integration** — dispatch CI workflows from the REPL
 - **IDE integration** — connect to the OMNeT++ IDE via Py4J
 - **MCP server** — expose the REPL to AI assistants via the Model Context Protocol
+- **Bundled project descriptors** — pre-packaged `.opp` files for OMNeT++ sample projects, loadable via `--load @opp`
 
 ## Using Python interactively
 

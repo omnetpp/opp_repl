@@ -13,9 +13,17 @@ opp_repl --load ~/workspace/omnetpp/omnetpp.opp \
          --load "~/workspace/omnetpp/samples/*/*.opp"
 ```
 
-The `--load` option accepts glob patterns, so you can load entire
-directories of projects in one go.  OMNeT++ projects are loaded first,
-then simulation projects, so dependencies resolve automatically.
+The `--load` option accepts glob patterns, single files, or directories.
+When a directory is given, all `*.opp` files in it are loaded.  Use the
+special token `@opp` to load the bundled `.opp` files shipped with
+opp_repl (useful for OMNeT++ sample projects):
+
+```bash
+opp_repl --load @opp
+```
+
+OMNeT++ projects are loaded first, then simulation projects, so
+dependencies resolve automatically.
 
 ## Exploring loaded projects
 
@@ -97,6 +105,16 @@ Every REPL function has a corresponding command-line tool.  For example:
 opp_run_simulations --load aloha.opp --filter PureAloha -t 1s
 opp_run_smoke_tests --load aloha.opp -t 1s
 opp_run_fingerprint_tests --load inet.opp
+```
+
+When no `--load` option is given, the command-line tools automatically
+load all `*.opp` files from the current working directory.  This means
+you can `cd` into a project directory that contains `.opp` files and run
+without extra arguments:
+
+```bash
+cd ~/workspace/omnetpp/samples/fifo
+opp_run_simulations -t 1s
 ```
 
 All tools accept `--help` for a full list of options.

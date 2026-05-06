@@ -184,8 +184,10 @@ p.build(mode="debug")
 p.clean(mode="release")       # clean all build artifacts
 ```
 
-The `recursive=True` default means OMNeT++ and all `used_projects` are
-built first.
+The `recursive=True` default means all `used_projects` are built first
+(and they in turn build their own dependencies, including OMNeT++).
+When a project has `used_projects`, the direct OMNeT++ build step is
+skipped because the dependency chain already handles it.
 
 ## Overlay builds
 

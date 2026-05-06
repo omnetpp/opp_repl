@@ -27,8 +27,14 @@ several ways to load them:
 # Load a single file
 load_opp_file("~/workspace/inet/inet.opp")
 
+# Load all *.opp files from a directory
+load_opp_file("~/workspace/omnetpp/samples/aloha")
+
 # Load with a glob pattern
 load_opp_file("~/workspace/omnetpp/samples/*/*.opp")
+
+# Load the bundled .opp files shipped with opp_repl
+load_opp_file("@opp")
 
 # Scan an entire workspace directory (loads all *.opp under it)
 load_workspace("~/workspace")

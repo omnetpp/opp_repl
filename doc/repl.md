@@ -13,8 +13,9 @@ opp_repl --load ~/workspace/omnetpp/omnetpp.opp \
 
 Key command-line options:
 
-- `--load OPP_FILE` — load `.opp` descriptor file(s), supports globs,
-  can be repeated.
+- `--load OPP_FILE` — load `.opp` descriptor file(s); accepts single
+  files, directories (loads all `*.opp` inside), glob patterns, or the
+  special token `@opp` for the bundled files.  Can be repeated.
 - `-p PROJECT` — set the default simulation project by name.
 - `--mcp-port PORT` — start an MCP server on the given TCP port for AI
   assistant integration (0 to disable).

@@ -11,7 +11,14 @@ When you call `get_simulation_configs()` on a project (or any function that
 needs them, like `run_simulations()`), opp_repl scans the project's
 `ini_file_folders` recursively for `*.ini` files.  Each INI file is parsed
 to extract all `[Config ...]` sections and the `[General]` section.  The
-results are cached so subsequent calls are fast.
+results are cached so subsequent calls are fast.  The cache is
+automatically invalidated when any `.ini` file in the project's
+`ini_file_folders` is modified, so changes are picked up without a
+restart.
+
+If the project produces a dynamic library, it is built automatically
+before config discovery so that `opp_run -q numruns` can load the
+required modules.
 
 For each section the parser extracts:
 
