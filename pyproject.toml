@@ -98,7 +98,7 @@ opp_update_statistical_test_results = "opp_repl.main:update_statistical_test_res
 script-files = ["bin/opp_sandbox"]
 
 [tool.setuptools.package-data]
-opp_repl = ["etc/*.opp"]
+opp_repl = ["opp/*.opp"]
 
 [tool.setuptools.packages.find]
 include = ["opp_repl*"]

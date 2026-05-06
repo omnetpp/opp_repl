@@ -40,7 +40,7 @@ the sandbox environment and starts the MCP server without
 authentication:
 
 ```bash
-opp_sandbox -w ~/workspace -- opp_repl --load "etc/*.opp" --mcp-port 9966
+opp_sandbox -w ~/workspace -- opp_repl --load "opp/*.opp" --mcp-port 9966
 ```
 
 Use `-w` / `--writable` to grant the sandbox write access to
