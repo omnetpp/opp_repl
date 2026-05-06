@@ -58,9 +58,47 @@ def pad_to_size_centered(img, height, width):
 
     return np.pad(img, pad_width, mode="constant", constant_values=0)
 
+class ChartTestTaskResult(TestTaskResult):
+    """Result of a chart test task.
+
+    Stores the computed image metric so the verdict can be recomputed
+    with a different threshold without re-rendering the chart.
+
+    Attributes:
+        metric (float or None): RMSE metric between the baseline and current chart.
+    """
+
+    def _compute_verdict(self, metric_threshold=0):
+        """Compute result and reason from stored metric."""
+        if self.metric <= metric_threshold:
+            self.result = "PASS"
+            self.reason = None if self.metric == 0 else f"Metric {self.metric} within threshold {metric_threshold}"
+        else:
+            self.result = "FAIL"
+            self.reason = "Metric: " + str(self.metric)
+        self.expected = self.expected_result == self.result
+        self.color = self.possible_result_colors[self.possible_results.index(self.result)]
+
+    def recheck(self, metric_threshold=0, **kwargs):
+        """Recompute the chart test verdict with a different metric threshold.
+
+        Args:
+            metric_threshold (float): Maximum allowed RMSE metric value
+                for the test to pass (default 0, i.e. exact match).
+
+        Returns:
+            ChartTestTaskResult: A new result with the updated verdict.
+        """
+        import copy
+        new_result = copy.copy(self)
+        if not hasattr(self, 'metric') or self.metric is None:
+            return new_result
+        new_result._compute_verdict(metric_threshold)
+        return new_result
+
 class ChartTestTask(TestTask):
-    def __init__(self, analysis_file_name, id, chart_name, simulation_project=None, baseline_simulation_project=None, name="chart test", **kwargs):
-        super().__init__(name=name, **kwargs)
+    def __init__(self, analysis_file_name, id, chart_name, simulation_project=None, baseline_simulation_project=None, name="chart test", task_result_class=ChartTestTaskResult, **kwargs):
+        super().__init__(name=name, task_result_class=task_result_class, **kwargs)
         self.locals = locals()
         self.locals.pop("self")
         self.kwargs = kwargs
@@ -98,19 +136,26 @@ class ChartTestTask(TestTask):
                     old_image = pad_to_size_centered(old_image, target_h, target_w)
                     new_image = pad_to_size_centered(new_image, target_h, target_w)
                     if old_image.shape != new_image.shape:
-                        return self.task_result_class(self, result="FAIL", reason="Supplied images have different sizes" + str(old_image.shape) + " and " + str(new_image.shape))
+                        task_result = self.task_result_class(self, result="FAIL", reason="Supplied images have different sizes" + str(old_image.shape) + " and " + str(new_image.shape))
+                        task_result.metric = None
+                        return task_result
                     metric = sewar_rmse(old_image, new_image)
                     if metric == 0 or not keep_charts:
                         os.remove(new_file_name)
                     else:
                         image_diff = numpy.abs(new_image - old_image)
                         matplotlib.image.imsave(diff_file_name, image_diff[:, :, :3])
-                    result = "PASS" if metric == 0 else "FAIL"
-                    reason = "Metric: " + str(metric) if result == "FAIL" else None
-                    return self.task_result_class(self, result=result, reason=reason)
+                    task_result = self.task_result_class(self)
+                    task_result.metric = metric
+                    task_result._compute_verdict()
+                    return task_result
                 else:
-                    return self.task_result_class(self, result="FAIL", reason="Baseline chart not found")
-        return self.task_result_class(self, result="ERROR", reason="Chart not found")
+                    task_result = self.task_result_class(self, result="FAIL", reason="Baseline chart not found")
+                    task_result.metric = None
+                    return task_result
+        task_result = self.task_result_class(self, result="ERROR", reason="Chart not found")
+        task_result.metric = None
+        return task_result
 
 def get_chart_test_sim_time_limit(simulation_config, run=0):
     return simulation_config.sim_time_limit
@@ -160,7 +205,7 @@ def get_chart_test_tasks(simulation_project=None, baseline_simulation_project=No
                         if not list(builtins.filter(lambda element: element.simulation_config == simulation_task.simulation_config and element.run_number == simulation_task.run_number, simulation_tasks)):
                             simulation_tasks.append(simulation_task)
                 if multiple_simulation_tasks.tasks:
-                    test_tasks.append(ChartTestTask(simulation_project=simulation_project, baseline_simulation_project=baseline_simulation_project, analysis_file_name=analysis_file_name, id=chart.id, chart_name=chart.name, task_result_class=TestTaskResult))
+                    test_tasks.append(ChartTestTask(simulation_project=simulation_project, baseline_simulation_project=baseline_simulation_project, analysis_file_name=analysis_file_name, id=chart.id, chart_name=chart.name))
     return MultipleChartTestTasks(tasks=test_tasks, multiple_simulation_tasks=MultipleSimulationTasks(tasks=simulation_tasks, simulation_project=simulation_project, **kwargs), **dict(kwargs, scheduler="process"))
 get_chart_test_tasks.__signature__ = combine_signatures(get_chart_test_tasks, get_simulation_tasks)
 
