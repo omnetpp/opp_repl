@@ -151,15 +151,15 @@ class CppCompileTask(BuildTask):
 
         if cfg:
             import shlex
-            # Compiler from Makefile.inc (strip ccache prefix for direct invocation)
-            cxx = cfg.cxx.split()[-1] if "ccache" in cfg.cxx else cfg.cxx
+            # Compiler from Makefile.inc (may include ccache prefix)
+            cxx_parts = shlex.split(cfg.cxx)
             # Base flags from Makefile.inc
             cflags = shlex.split(cfg.cflags)
             cxxflags = shlex.split(cfg.cxxflags)
             import_defines = shlex.split(cfg.import_defines) if cfg.import_defines else []
             incl_dir = cfg.omnetpp_incl_dir
         else:
-            cxx = "clang++"
+            cxx_parts = ["clang++"]
             cflags = ["-O3", "-DNDEBUG=1", "-MMD", "-MP", "-fPIC",
                       "-Wno-deprecated-register", "-Wno-unused-function", "-fno-omit-frame-pointer"]
             cxxflags = ["-std=c++20"]
@@ -197,7 +197,7 @@ class CppCompileTask(BuildTask):
         # Extra cflags from project
         extra = sp.extra_cflags if hasattr(sp, 'extra_cflags') else []
 
-        args = [cxx, "-c",
+        args = [*cxx_parts, "-c",
                 *cxxflags,
                 *cflags,
                 *import_defines,
@@ -294,16 +294,16 @@ class LinkTask(BuildTask):
                 kernel_libs = shlex.split(cfg.kernel_libs)
                 sys_libs = shlex.split(cfg.sys_libs)
                 oppmain_lib = shlex.split(cfg.oppmain_lib)
-                cxx = cfg.cxx.split()[-1] if "ccache" in cfg.cxx else cfg.cxx
+                cxx_parts = shlex.split(cfg.cxx)
             else:
                 ldflags = ["-fuse-ld=lld", "-Wl,--export-dynamic"]
                 all_env_libs = ["-loppcmdenv", "-loppenvir", "-loppqtenv", "-loppenvir", "-lopplayout"]
                 kernel_libs = ["-loppsim"]
                 sys_libs = ["-lstdc++"]
                 oppmain_lib = ["-loppmain"]
-                cxx = "clang++"
+                cxx_parts = ["clang++"]
 
-            return [cxx,
+            return [*cxx_parts,
                     *ldflags,
                     *[f"-L{p}" for p in used_lib_paths],
                     *[f"-L{p}" for p in sp.external_library_folders],
