@@ -225,6 +225,23 @@ class OmnetppProject:
             return self._overlay.is_mounted()
         return False
 
+    def get_makefile_inc_config(self, mode="release"):
+        """
+        Returns a :py:class:`MakefileIncConfig <opp_repl.simulation.makefile_vars.MakefileIncConfig>`
+        with the evaluated Makefile.inc variables for the given build mode.
+
+        Results are cached per mode.
+        """
+        if not hasattr(self, "_makefile_inc_configs"):
+            self._makefile_inc_configs = {}
+        if mode not in self._makefile_inc_configs:
+            from opp_repl.simulation.makefile_vars import MakefileIncConfig
+            root = self.get_root_path()
+            if root is None:
+                raise RuntimeError("Cannot get Makefile.inc config: root path is not set")
+            self._makefile_inc_configs[mode] = MakefileIncConfig(root, mode)
+        return self._makefile_inc_configs[mode]
+
     def clean(self, mode="release"):
         if self._overlay is not None:
             self._overlay.clean()
