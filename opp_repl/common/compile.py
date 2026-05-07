@@ -170,9 +170,7 @@ class CppCompileTask(BuildTask):
             import_defines = ["-DOMNETPPLIBS_IMPORT"]
             incl_dir = "/usr/include"  # fallback
 
-        # Override -MF to point to our output
-        cflags = [f for f in cflags if not f.startswith("-MF")]
-        # Remove the bare filename that follows -MF (the .d target)
+        # Remove -MF and its argument (the .d target from Makefile.inc evaluation)
         filtered_cflags = []
         skip_next = False
         for f in cflags:
@@ -181,6 +179,8 @@ class CppCompileTask(BuildTask):
                 continue
             if f == "-MF":
                 skip_next = True
+                continue
+            if f.startswith("-MF"):
                 continue
             filtered_cflags.append(f)
         cflags = filtered_cflags
