@@ -323,7 +323,7 @@ class MultipleTaskResults:
         for possible_result in self.possible_results:
             self.num_expected[possible_result] = self.count_results(possible_result, True)
             self.num_unexpected[possible_result] = self.count_results(possible_result, False)
-        self.result = possible_results[0]
+        self.result = expected_result if not results else possible_results[0]
         for possible_result in self.possible_results:
             if self.num_expected[possible_result] != 0:
                 self.result = possible_result
@@ -700,8 +700,7 @@ class MultipleTasks:
             The task results.
         """
         if self.is_up_to_date():
-            task_results = list(map(lambda task: task.task_result_class(task=task, result="SKIP", expected_result="SKIP", reason="Up-to-date"), self.tasks))
-            return self.multiple_task_results_class(multiple_tasks=self, results=task_results)
+            return self.multiple_task_results_class(multiple_tasks=self, results=[], expected_result="SKIP")
         def run_internal(context=None, progress=None, output_stream=sys.stdout, **kwargs):
             elements = [e for e in [progress.get_string(**kwargs), context.get_string(**kwargs), "▶", str(len(self.tasks)), self.get_description()] if e != ""]
             print(" ".join(elements), file=output_stream)
