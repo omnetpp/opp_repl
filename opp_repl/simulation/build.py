@@ -286,10 +286,11 @@ class MultipleCppCompileTasks(MultipleTasks):
         return result
 
 class CopyBinaryTask(BuildTask):
-    def __init__(self, simulation_project=None, name="copy binaries task", type="dynamic library", mode="release", task_result_class=BuildTaskResult, **kwargs):
+    def __init__(self, simulation_project=None, name="copy binaries task", type="dynamic library", mode="release", makefile_inc_config=None, task_result_class=BuildTaskResult, **kwargs):
         super().__init__(simulation_project=simulation_project, name=name, task_result_class=task_result_class, **kwargs)
         self.type = type
         self.mode = mode
+        self.makefile_inc_config = makefile_inc_config
 
     def get_action_string(self, **kwargs):
         return "Copying"
@@ -297,18 +298,34 @@ class CopyBinaryTask(BuildTask):
     def get_parameters_string(self, **kwargs):
         return (self.type + "s" if self.type == "executable" else self.type[:-1] + "ies")
 
+    def get_output_folder(self):
+        if self.makefile_inc_config:
+            return f"out/{self.makefile_inc_config.configname}"
+        return f"out/clang-{self.mode}"
+
     def get_output_prefix(self):
+        if self.makefile_inc_config:
+            return "" if self.type == "executable" else self.makefile_inc_config.lib_prefix
         return "" if self.type == "executable" else "lib"
 
     def get_output_suffix(self):
+        if self.makefile_inc_config:
+            return self.makefile_inc_config.debug_suffix
         return "_dbg" if self.mode == "debug" else ""
 
     def get_output_extension(self):
+        if self.makefile_inc_config:
+            if self.type == "executable":
+                return self.makefile_inc_config.exe_suffix
+            elif self.type == "dynamic library":
+                return self.makefile_inc_config.shared_lib_suffix
+            else:
+                return self.makefile_inc_config.a_lib_suffix
         return "" if self.type == "executable" else (".so" if self.type == "dynamic library" else ".a")
 
     def get_input_files(self):
         result = []
-        output_folder = f"out/clang-{self.mode}"
+        output_folder = self.get_output_folder()
         if self.type == "executable":
             for executable in self.simulation_project.executables:
                 source_file_name = self.simulation_project.get_full_path(os.path.join(output_folder, executable + self.get_output_suffix()))
@@ -367,18 +384,37 @@ class BuildSimulationProjectTask(MultipleTasks):
         return self.simulation_project.get_name() + " " + super().get_description()
 
     def get_build_tasks(self, **kwargs):
-        output_folder = self.simulation_project.get_full_path(f"out/clang-{self.mode}")
+        # Get Makefile.inc configuration from the OMNeT++ project
+        makefile_inc_config = None
+        feature_cflags = []
+        feature_ldflags = []
+        omnetpp_project = self.simulation_project.get_omnetpp_project()
+        if omnetpp_project:
+            makefile_inc_config = omnetpp_project.get_makefile_inc_config(self.mode)
+
+        # Get feature flags if the project has .oppfeatures
+        from opp_repl.simulation.features import has_features, get_feature_cflags, get_feature_ldflags
+        if has_features(self.simulation_project):
+            feature_cflags = get_feature_cflags(self.simulation_project)
+            feature_ldflags = get_feature_ldflags(self.simulation_project)
+
+        # Determine output folder and ensure it exists
+        if makefile_inc_config:
+            output_folder = self.simulation_project.get_full_path(f"out/{makefile_inc_config.configname}")
+        else:
+            output_folder = self.simulation_project.get_full_path(f"out/clang-{self.mode}")
         if not os.path.exists(output_folder):
             os.makedirs(output_folder)
-        msg_compile_tasks = list(map(lambda msg_file: MsgCompileTask(simulation_project=self.simulation_project, file_path=msg_file, mode=self.mode), self.simulation_project.get_msg_files()))
+
+        msg_compile_tasks = list(map(lambda msg_file: MsgCompileTask(simulation_project=self.simulation_project, file_path=msg_file, mode=self.mode, makefile_inc_config=makefile_inc_config), self.simulation_project.get_msg_files()))
         multiple_msg_compile_tasks = MultipleMsgCompileTasks(simulation_project=self.simulation_project, mode=self.mode, tasks=msg_compile_tasks, concurrent=self.concurrent_child_tasks)
-        msg_cpp_compile_tasks = list(map(lambda msg_file: CppCompileTask(simulation_project=self.simulation_project, file_path=re.sub(r"\.msg", "_m.cc", msg_file), mode=self.mode), self.simulation_project.get_msg_files()))
-        cpp_compile_tasks = list(map(lambda cpp_file: CppCompileTask(simulation_project=self.simulation_project, file_path=cpp_file, mode=self.mode), self.simulation_project.get_cpp_files()))
+        msg_cpp_compile_tasks = list(map(lambda msg_file: CppCompileTask(simulation_project=self.simulation_project, file_path=re.sub(r"\.msg", "_m.cc", msg_file), mode=self.mode, makefile_inc_config=makefile_inc_config, feature_cflags=feature_cflags), self.simulation_project.get_msg_files()))
+        cpp_compile_tasks = list(map(lambda cpp_file: CppCompileTask(simulation_project=self.simulation_project, file_path=cpp_file, mode=self.mode, makefile_inc_config=makefile_inc_config, feature_cflags=feature_cflags), self.simulation_project.get_cpp_files()))
         all_cpp_compile_tasks = msg_cpp_compile_tasks + cpp_compile_tasks
         multiple_cpp_compile_tasks = MultipleCppCompileTasks(simulation_project=self.simulation_project, mode=self.mode, tasks=all_cpp_compile_tasks, concurrent=self.concurrent_child_tasks)
-        link_tasks = flatten(map(lambda library: list(map(lambda build_type: LinkTask(simulation_project=self.simulation_project, type=build_type, mode=self.mode, compile_tasks=all_cpp_compile_tasks), self.simulation_project.build_types)), self.simulation_project.executables))
+        link_tasks = flatten(map(lambda library: list(map(lambda build_type: LinkTask(simulation_project=self.simulation_project, type=build_type, mode=self.mode, compile_tasks=all_cpp_compile_tasks, makefile_inc_config=makefile_inc_config, feature_ldflags=feature_ldflags), self.simulation_project.build_types)), self.simulation_project.executables))
         multiple_link_tasks = MultipleBuildTasks(simulation_project=self.simulation_project, tasks=link_tasks, name="link task", concurrent=self.concurrent_child_tasks)
-        copy_binary_tasks = list(map(lambda build_type: CopyBinaryTask(simulation_project=self.simulation_project, type=build_type, mode=self.mode), self.simulation_project.build_types))
+        copy_binary_tasks = list(map(lambda build_type: CopyBinaryTask(simulation_project=self.simulation_project, type=build_type, mode=self.mode, makefile_inc_config=makefile_inc_config), self.simulation_project.build_types))
         multiple_copy_binary_tasks = MultipleBuildTasks(simulation_project=self.simulation_project, tasks=copy_binary_tasks, name="copy task", concurrent=self.concurrent_child_tasks)
         all_tasks = []
         if multiple_msg_compile_tasks.tasks:
