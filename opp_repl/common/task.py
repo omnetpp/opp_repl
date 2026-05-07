@@ -495,8 +495,11 @@ class Task:
     def __repr__(self):
         return repr(self)
 
+    def is_up_to_date(self):
+        return False
+
     def count_progress_steps(self):
-        return 1
+        return 0 if self.is_up_to_date() else 1
 
     def get_hash(self, **kwargs):
         hasher = hashlib.sha256()
@@ -542,6 +545,8 @@ class Task:
         """
         if self.cancel:
             return self.task_result_class(task=self, result="CANCEL", reason="Cancel by user")
+        elif self.is_up_to_date():
+            return self.task_result_class(task=self, result="SKIP", expected_result="SKIP", reason="Up-to-date")
         else:
             try:
                 if not progress:
@@ -666,7 +671,12 @@ class MultipleTasks:
     def __repr__(self):
         return repr(self)
 
+    def is_up_to_date(self):
+        return False
+
     def count_progress_steps(self):
+        if self.is_up_to_date():
+            return 0
         return sum(task.count_progress_steps() for task in self.tasks) + 1
 
     def set_cancel(self, cancel):
@@ -689,6 +699,9 @@ class MultipleTasks:
         Returns (:py:class:`MultipleTaskResults`):
             The task results.
         """
+        if self.is_up_to_date():
+            task_results = list(map(lambda task: task.task_result_class(task=task, result="SKIP", expected_result="SKIP", reason="Up-to-date"), self.tasks))
+            return self.multiple_task_results_class(multiple_tasks=self, results=task_results)
         def run_internal(context=None, progress=None, output_stream=sys.stdout, **kwargs):
             elements = [e for e in [progress.get_string(**kwargs), context.get_string(**kwargs), "▶", str(len(self.tasks)), self.get_description()] if e != ""]
             print(" ".join(elements), file=output_stream)

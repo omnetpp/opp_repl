@@ -34,14 +34,9 @@ class BuildTask(Task):
         input_file_modification_times = get_file_modification_times(self.get_input_files())
         output_file_modification_times = get_file_modification_times(self.get_output_files())
         return input_file_modification_times and output_file_modification_times and \
+               not list(filter(lambda timestamp: timestamp is None, input_file_modification_times)) and \
                not list(filter(lambda timestamp: timestamp is None, output_file_modification_times)) and \
                max(input_file_modification_times) < min(output_file_modification_times)
-
-    def run(self, **kwargs):
-        if self.is_up_to_date():
-            return self.task_result_class(task=self, result="SKIP", expected_result="SKIP", reason="Up-to-date")
-        else:
-            return super().run(**kwargs)
 
     def run_protected(self, **kwargs):
         args = self.get_arguments()
