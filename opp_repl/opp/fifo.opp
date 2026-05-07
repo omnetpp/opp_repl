@@ -4,7 +4,4 @@ SimulationProject(
     root_folder_environment_variable_relative_folder="samples/fifo",
     omnetpp_project="omnetpp",
     build_types=["executable"],
-    executables=["fifo"],
-    ned_folders=["."],
-    ini_file_folders=["."],
 )

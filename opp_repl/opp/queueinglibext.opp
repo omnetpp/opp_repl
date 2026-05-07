@@ -4,6 +4,4 @@ SimulationProject(
     root_folder_environment_variable_relative_folder="samples/queueinglibext",
     omnetpp_project="omnetpp",
     used_projects=["queueinglib"],
-    ned_folders=["."],
-    ini_file_folders=["."],
 )

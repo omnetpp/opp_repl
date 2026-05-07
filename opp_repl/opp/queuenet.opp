@@ -5,6 +5,4 @@ SimulationProject(
     omnetpp_project="omnetpp",
     build_types=["executable"],
     used_projects=["queueinglib"],
-    ned_folders=["."],
-    ini_file_folders=["."],
 )
