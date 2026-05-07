@@ -31,12 +31,16 @@ class BuildTask(Task):
             return os.path.getmtime(full_file_path) if os.path.exists(full_file_path) else None
         def get_file_modification_times(file_paths):
             return list(map(get_file_modification_time, file_paths))
-        input_file_modification_times = get_file_modification_times(self.get_input_files())
-        output_file_modification_times = get_file_modification_times(self.get_output_files())
-        return input_file_modification_times and output_file_modification_times and \
+        input_files = self.get_input_files()
+        output_files = self.get_output_files()
+        input_file_modification_times = get_file_modification_times(input_files)
+        output_file_modification_times = get_file_modification_times(output_files)
+        result = input_file_modification_times and output_file_modification_times and \
                not list(filter(lambda timestamp: timestamp is None, input_file_modification_times)) and \
                not list(filter(lambda timestamp: timestamp is None, output_file_modification_times)) and \
                max(input_file_modification_times) < min(output_file_modification_times)
+        _logger.debug(f"  {self.name} is_up_to_date={result}: input_files={input_files}, output_files={output_files}, input_times={input_file_modification_times}, output_times={output_file_modification_times}")
+        return result
 
     def run_protected(self, **kwargs):
         args = self.get_arguments()
