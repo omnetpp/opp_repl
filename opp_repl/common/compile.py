@@ -278,6 +278,7 @@ class LinkTask(BuildTask):
         input_files = self.get_input_files()
 
         # Resolve used project library paths
+        from opp_repl.simulation.project import get_simulation_project
         used_lib_paths = []
         used_lib_names = []
         for used_project_name in sp.used_projects:
