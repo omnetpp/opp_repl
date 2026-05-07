@@ -12,6 +12,7 @@ SimulationProject(
     include_folders=["src", "src/inet/transportlayer/tcp_lwip/lwip/include", "src/inet/transportlayer/tcp_lwip/lwip/include/ipv4", "src/inet/transportlayer/tcp_lwip/lwip/include/ipv6"],
     cpp_folders=["src"],
     cpp_defines=["HAVE_FFMPEG", "HAVE_FFMPEG_SWRESAMPLE"],
+    dll_symbol="INET",
     msg_folders=["src"],
     media_folder="doc/media",
     statistics_folder="statistics",
