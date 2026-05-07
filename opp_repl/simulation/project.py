@@ -278,6 +278,7 @@ class SimulationProject:
                  include_folders=["."], cpp_folders=["."], cpp_defines=[], msg_folders=["."],
                  media_folder=".", statistics_folder=".", fingerprint_store="fingerprint.json", speed_store="speed.json", dependency_store="dependency.json",
                  used_projects=[], external_bin_folders=[], external_library_folders=[], external_libraries=[], external_include_folders=[],
+                 dll_symbol=None, pkg_config_libraries=[], precompiled_header=None, extra_cflags=[], extra_ldflags=[],
                  simulation_configs=None, overlay_name=None, overlay_build_root=None, opp_env_workspace=None, opp_env_project=None,
                  github_owner=None, github_repository=None, github_workflows=None, **kwargs):
         """
@@ -412,6 +413,26 @@ class SimulationProject:
                 GitHub repository name (e.g. ``"inet"``).
                 Used by :py:func:`dispatch_workflow <opp_repl.common.github.dispatch_workflow>`.
 
+            dll_symbol (str or None):
+                The DLL export/import symbol for the project (e.g. ``"INET"``).
+                When set, ``-D<symbol>_EXPORT`` is passed to the C++ compiler
+                and ``-P<symbol>_API`` is passed to the message compiler.
+
+            pkg_config_libraries (list of str):
+                List of pkg-config library names to detect and link
+                (e.g. ``["libavcodec", "libavformat"]``).
+
+            precompiled_header (str or None):
+                Relative path to the precompiled header file template.
+                May contain ``{mode}`` placeholder (e.g.
+                ``"inet/common/precompiled_{mode}.h"``).
+
+            extra_cflags (list of str):
+                Additional compiler flags (e.g. ``["-Wno-overloaded-virtual"]``).
+
+            extra_ldflags (list of str):
+                Additional linker flags.
+
             github_workflows (list of str or None):
                 List of GitHub Actions workflow file names
                 (e.g. ``["fingerprint-tests.yml"]``).  Used by
@@ -462,6 +483,11 @@ class SimulationProject:
         self.simulation_configs = simulation_configs
         self.opp_env_workspace = opp_env_workspace
         self.opp_env_project = opp_env_project or name
+        self.dll_symbol = dll_symbol
+        self.pkg_config_libraries = pkg_config_libraries
+        self.precompiled_header = precompiled_header
+        self.extra_cflags = extra_cflags
+        self.extra_ldflags = extra_ldflags
         self.github_owner = github_owner
         self.github_repository = github_repository
         self.github_workflows = github_workflows
