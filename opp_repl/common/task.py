@@ -512,6 +512,13 @@ class Task:
     def set_cancel(self, cancel):
         self.cancel = cancel
 
+    def get_description(self):
+        return self.name
+
+    def log_structure(self, indent=0):
+        status = "up-to-date" if self.is_up_to_date() else "to be done"
+        _logger.debug(f"{'  ' * indent}{self.get_description()} ({status})")
+
     def get_action_string(self, **kwargs):
         return self.action
 
@@ -690,6 +697,12 @@ class MultipleTasks:
     def get_description(self):
         concurrency_description = "concurrently" if self.concurrent else "sequentially"
         return f"{self.name}s ({concurrency_description})"
+
+    def log_structure(self, indent=0):
+        status = "up-to-date" if self.is_up_to_date() else "to be done"
+        _logger.debug(f"{'  ' * indent}{self.get_description()}: {len(self.tasks)} tasks ({status})")
+        for task in self.tasks:
+            task.log_structure(indent=indent + 1)
 
     def run(self, context=None, progress=None, index=0, count=1, **kwargs):
         self.run_kwargs = kwargs

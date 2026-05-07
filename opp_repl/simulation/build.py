@@ -457,7 +457,9 @@ def build_project_using_tasks(simulation_project, **kwargs):
     Returns (None):
         Nothing.
     """
-    return BuildSimulationProjectTask(simulation_project, **dict(kwargs)).run(**kwargs)
+    build_task = BuildSimulationProjectTask(simulation_project, **dict(kwargs))
+    build_task.log_structure()
+    return build_task.run(**kwargs)
 
 def clean_project(simulation_project=None, mode="release", **kwargs):
     if simulation_project is None:
