@@ -26,6 +26,7 @@ SimulationProject(
         "VisualizationOsg": {"makefile_inc_libs": "OSG_LIBS"},
         "OpenMP": {"makefile_inc_flags": "OPENMP_FLAGS"},
     },
+    opp_defines_file="src/inet/opp_defines.h",
     extra_cflags=["-Wno-overloaded-virtual"],
     github_owner="inet-framework",
     github_repository="inet",

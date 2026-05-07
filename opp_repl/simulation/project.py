@@ -278,7 +278,7 @@ class SimulationProject:
                  include_folders=["."], cpp_folders=["."], cpp_defines=[], msg_folders=["."],
                  media_folder=".", statistics_folder=".", fingerprint_store="fingerprint.json", speed_store="speed.json", dependency_store="dependency.json",
                  used_projects=[], external_bin_folders=[], external_library_folders=[], external_libraries=[], external_include_folders=[],
-                 dll_symbol=None, feature_libraries=None, pkg_config_libraries=None, precompiled_header=None, extra_cflags=[], extra_ldflags=[],
+                 dll_symbol=None, feature_libraries=None, pkg_config_libraries=None, opp_defines_file=None, precompiled_header=None, extra_cflags=[], extra_ldflags=[],
                  simulation_configs=None, overlay_name=None, overlay_build_root=None, opp_env_workspace=None, opp_env_project=None,
                  github_owner=None, github_repository=None, github_workflows=None, **kwargs):
         """
@@ -506,6 +506,7 @@ class SimulationProject:
         self.dll_symbol = dll_symbol
         self.feature_libraries = feature_libraries or {}
         self.pkg_config_libraries = pkg_config_libraries  # deprecated, use feature_libraries
+        self.opp_defines_file = opp_defines_file
         self.precompiled_header = precompiled_header
         self.extra_cflags = extra_cflags
         self.extra_ldflags = extra_ldflags

@@ -18,6 +18,31 @@ from opp_repl.simulation.project import *
 
 _logger = logging.getLogger(__name__)
 
+
+def _generate_opp_defines(simulation_project, makefile_inc_config):
+    """
+    Generates the opp_defines.h file containing #define for each WITH_*
+    Makefile.inc variable whose value is "yes".
+    """
+    output_path = simulation_project.get_full_path(simulation_project.opp_defines_file)
+    lines = ["// Generated file, do not edit\n"]
+    for var_name in sorted(makefile_inc_config._vars.keys()):
+        if var_name.startswith("WITH_") and makefile_inc_config.get(var_name) == "yes":
+            lines.append(f"#ifndef {var_name}\n#define {var_name}\n#endif\n")
+    content = "".join(lines)
+    # Write only if changed
+    if os.path.exists(output_path):
+        with open(output_path, "r") as f:
+            if f.read() == content:
+                return
+    output_dir = os.path.dirname(output_path)
+    if not os.path.exists(output_dir):
+        os.makedirs(output_dir)
+    with open(output_path, "w") as f:
+        f.write(content)
+    _logger.info("Generated %s", output_path)
+
+
 def generate_makefile(simulation_project=None, **kwargs):
     """
     Generates a Makefile for a simulation project by running :command:`opp_makemake`.
@@ -406,6 +431,10 @@ class BuildSimulationProjectTask(MultipleTasks):
         feat_lib_cflags, feat_lib_ldflags = resolve_feature_libraries(self.simulation_project, makefile_inc_config)
         feature_cflags = feature_cflags + feat_lib_cflags
         feature_ldflags = feature_ldflags + feat_lib_ldflags
+
+        # Generate opp_defines.h from WITH_* Makefile.inc variables
+        if self.simulation_project.opp_defines_file and makefile_inc_config:
+            _generate_opp_defines(self.simulation_project, makefile_inc_config)
 
         # Determine output folder and ensure it exists
         if makefile_inc_config:
