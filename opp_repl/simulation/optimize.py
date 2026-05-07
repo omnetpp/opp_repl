@@ -44,15 +44,14 @@ def cost_function(parameter_values, simulation_task, expected_result_names, expe
     all_parameter_units = [*fixed_parameter_units, *parameter_units]
     all_parameter_assignment_args = list(map(lambda name, value, unit: "--" + name + "=" + (unit.format(value) if "{" in unit else str(value) + unit), all_parameter_assignments, all_parameter_values, all_parameter_units))
     suffix = "-".join(map(str, all_parameter_values))
-    output_scalar_file = "results/" + simulation_task.simulation_config.config + "-" + suffix + ".sca"
-    output_vector_file = "results/" + simulation_task.simulation_config.config + "-" + suffix + ".vec"
-    append_args = ["--output-scalar-file=" + output_scalar_file, "--output-vector-file=" + output_vector_file, *all_parameter_assignment_args]
-    simulation_result = simulation_task.run(append_args=append_args, **kwargs)
+    simulation_task.scalar_file_path = "results/" + simulation_task.simulation_config.config + "-" + suffix + ".sca"
+    simulation_task.vector_file_path = "results/" + simulation_task.simulation_config.config + "-" + suffix + ".vec"
+    simulation_result = simulation_task.run(append_args=all_parameter_assignment_args, **kwargs)
     if simulation_result.result == "DONE":
         working_dir = simulation_task.simulation_config.working_directory
         project = simulation_task.simulation_config.simulation_project
-        scalar_file = project.get_full_path(os.path.join(working_dir, output_scalar_file))
-        vector_file = project.get_full_path(os.path.join(working_dir, output_vector_file))
+        scalar_file = project.get_full_path(os.path.join(working_dir, simulation_result.scalar_file_path))
+        vector_file = project.get_full_path(os.path.join(working_dir, simulation_result.vector_file_path))
         result_files = [f for f in [scalar_file, vector_file] if os.path.exists(f)]
         result_values = []
         for result_name in expected_result_names:

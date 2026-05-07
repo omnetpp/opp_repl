@@ -122,15 +122,55 @@ class SimulationTaskResult(TaskResult):
             self.elapsed_cpu_time = float(match.group(1)) if match else None
             self.num_cpu_cycles = int(match.group(2)) if match else None
             self.num_cpu_instructions = int(match.group(3)) if match else None
-            self.stdout_file_path = self.task.stdout_file_path or f"results/{self.task.simulation_config.config}-#{str(self.task.run_number)}.out"
-            self.eventlog_file_path = self.task.eventlog_file_path or f"results/{self.task.simulation_config.config}-#{str(self.task.run_number)}.elog"
-            self.scalar_file_path = self.task.scalar_file_path or f"results/{self.task.simulation_config.config}-#{str(self.task.run_number)}.sca"
-            self.vector_file_path = self.task.vector_file_path or f"results/{self.task.simulation_config.config}-#{str(self.task.run_number)}.vec"
+            self.stdout_file_path = None
+            self.eventlog_file_path = None
+            self.scalar_file_path = None
+            self.vector_file_path = None
         else:
             self.last_event_number = None
             self.last_simulation_time = None
             self.error_message = None
             self.error_module = None
+
+    @property
+    def stdout_file_path(self):
+        if self._stdout_file_path is None:
+            self._stdout_file_path = self.task._resolve_output_file_path("cmdenv-output-file")
+        return self._stdout_file_path
+
+    @stdout_file_path.setter
+    def stdout_file_path(self, value):
+        self._stdout_file_path = value
+
+    @property
+    def eventlog_file_path(self):
+        if self._eventlog_file_path is None:
+            self._eventlog_file_path = self.task._resolve_output_file_path("eventlog-file")
+        return self._eventlog_file_path
+
+    @eventlog_file_path.setter
+    def eventlog_file_path(self, value):
+        self._eventlog_file_path = value
+
+    @property
+    def scalar_file_path(self):
+        if self._scalar_file_path is None:
+            self._scalar_file_path = self.task._resolve_output_file_path("output-scalar-file")
+        return self._scalar_file_path
+
+    @scalar_file_path.setter
+    def scalar_file_path(self, value):
+        self._scalar_file_path = value
+
+    @property
+    def vector_file_path(self):
+        if self._vector_file_path is None:
+            self._vector_file_path = self.task._resolve_output_file_path("output-vector-file")
+        return self._vector_file_path
+
+    @vector_file_path.setter
+    def vector_file_path(self, value):
+        self._vector_file_path = value
 
     def get_error_message(self, complete_error_message=True, **kwargs):
         if complete_error_message and self.error_module and self.error_message:
@@ -383,6 +423,29 @@ class SimulationTask(Task):
             match = re.search(r"The simulation wanted to ask a question|The simulation attempted to prompt for user input", subprocess_result.stderr)
             self.interactive = match is not None
         return self.interactive
+
+    def _resolve_output_file_path(self, option_name):
+        file_path_attr = {
+            "cmdenv-output-file": "stdout_file_path",
+            "eventlog-file": "eventlog_file_path",
+            "output-scalar-file": "scalar_file_path",
+            "output-vector-file": "vector_file_path",
+        }[option_name]
+        explicit_path = getattr(self, file_path_attr)
+        if explicit_path:
+            return explicit_path
+        simulation_config = self.simulation_config
+        simulation_project = simulation_config.simulation_project
+        executable = simulation_project.get_executable()
+        default_args = simulation_project.get_default_args()
+        inifile_entries_args = list(map(lambda inifile_entry: "--" + inifile_entry, self.inifile_entries))
+        result_folder_args = ["--result-dir", self.result_folder] if self.result_folder != "results" else []
+        args = [executable, *default_args, "-s", "-f", simulation_config.ini_file, "-c", simulation_config.config, "-r", str(self.run_number), *inifile_entries_args, *result_folder_args, "-e", option_name]
+        if simulation_project.opp_env_workspace:
+            subprocess_result = OppEnvSimulationRunner().run_args(simulation_project, args, cwd=simulation_project.get_full_path(simulation_config.working_directory))
+        else:
+            subprocess_result = run_command_with_logging(args, cwd=simulation_project.get_full_path(simulation_config.working_directory), env=simulation_project.get_env())
+        return subprocess_result.stdout.strip().strip('"')
 
     def get_expected_result(self):
         return self.simulation_config.expected_result
