@@ -51,7 +51,8 @@ class BuildTask(Task):
         elif subprocess_result.returncode == 0:
             return self.task_result_class(task=self, subprocess_result=subprocess_result, result="DONE")
         else:
-            return self.task_result_class(task=self, subprocess_result=subprocess_result, result="ERROR", reason=f"Non-zero exit code: {subprocess_result.returncode}")
+            error_message = subprocess_result.stderr.strip() if subprocess_result.stderr else None
+            return self.task_result_class(task=self, subprocess_result=subprocess_result, result="ERROR", reason=f"Non-zero exit code: {subprocess_result.returncode}", error_message=error_message)
 
 class MsgCompileTask(BuildTask):
     def __init__(self, simulation_project=None, file_path=None, name="MSG compile task", mode="release", makefile_inc_config=None, **kwargs):
