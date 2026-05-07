@@ -233,7 +233,9 @@ def clean_project_main():
     try:
         args = parse_clean_project_arguments()
         kwargs = process_clean_project_arguments(args)
-        clean_project(**kwargs)
+        result = clean_project(**kwargs)
+        if result:
+            print(result)
         sys.exit(0)
     except KeyboardInterrupt:
         _logger.warn("Program interrupted by user")
