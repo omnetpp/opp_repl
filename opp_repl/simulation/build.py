@@ -227,25 +227,12 @@ class MultipleMsgCompileTasks(MultipleTasks):
         super().__init__(name=name, mode=mode, concurrent=concurrent, multiple_task_results_class=multiple_task_results_class, **kwargs)
         self.simulation_project = simulation_project
         self.mode = mode
-        self.input_files = list(map(lambda input_file: self.simulation_project.get_full_path(input_file), self.simulation_project.get_msg_files()))
-        self.output_files = list(map(lambda output_file: re.sub(r"\.msg", "_m.cc", output_file), self.input_files)) + \
-                            list(map(lambda output_file: re.sub(r"\.msg", "_m.h", output_file), self.input_files))
 
     def get_description(self):
         return self.simulation_project.get_name() + " " + super().get_description()
 
     def is_up_to_date(self):
-        def get_file_modification_time(file_path):
-            full_file_path = self.simulation_project.get_full_path(file_path)
-            return os.path.getmtime(full_file_path) if os.path.exists(full_file_path) else None
-        def get_file_modification_times(file_paths):
-            return list(map(get_file_modification_time, file_paths))
-        input_file_modification_times = get_file_modification_times(self.input_files)
-        output_file_modification_times = get_file_modification_times(self.output_files)
-        return input_file_modification_times and output_file_modification_times and \
-               not list(filter(lambda timestamp: timestamp is None, input_file_modification_times)) and \
-               not list(filter(lambda timestamp: timestamp is None, output_file_modification_times)) and \
-               max(input_file_modification_times) < min(output_file_modification_times)
+        return all(t.is_up_to_date() for t in self.tasks)
 
     def run_protected(self, **kwargs):
         result = super().run_protected(**kwargs)
@@ -260,34 +247,12 @@ class MultipleCppCompileTasks(MultipleTasks):
         super().__init__(name=name, mode=mode, concurrent=concurrent, multiple_task_results_class=multiple_task_results_class, **kwargs)
         self.simulation_project = simulation_project
         self.mode = mode
-        msg_generated_headers = [re.sub(r"\.msg", "_m.h", msg_file) for msg_file in self.simulation_project.get_msg_files()]
-        input_files = self.simulation_project.get_cpp_files() + self.simulation_project.get_header_files() + msg_generated_headers
-        self.input_files = list(map(lambda input_file: self.simulation_project.get_full_path(input_file), input_files))
-        self.output_files = list(map(lambda output_file: self.simulation_project.get_full_path(output_file), self.get_object_files()))
 
     def get_description(self):
         return self.simulation_project.get_name() + " " + super().get_description()
 
-    def get_object_files(self):
-        output_folder = f"out/clang-{self.mode}"
-        object_files = []
-        for cpp_folder in self.simulation_project.cpp_folders:
-            file_paths = glob.glob(self.simulation_project.get_full_path(os.path.join(cpp_folder, "**/*.cc")), recursive=True)
-            object_files = object_files + list(map(lambda file_path: os.path.join(output_folder, self.simulation_project.get_relative_path(re.sub(r"\.cc", ".o", file_path))), file_paths))
-        return object_files
-
     def is_up_to_date(self):
-        def get_file_modification_time(file_path):
-            full_file_path = self.simulation_project.get_full_path(file_path)
-            return os.path.getmtime(full_file_path) if os.path.exists(full_file_path) else None
-        def get_file_modification_times(file_paths):
-            return list(map(get_file_modification_time, file_paths))
-        input_file_modification_times = get_file_modification_times(self.input_files)
-        output_file_modification_times = get_file_modification_times(self.output_files)
-        return input_file_modification_times and output_file_modification_times and \
-               not list(filter(lambda timestamp: timestamp is None, input_file_modification_times)) and \
-               not list(filter(lambda timestamp: timestamp is None, output_file_modification_times)) and \
-               max(input_file_modification_times) < min(output_file_modification_times)
+        return all(t.is_up_to_date() for t in self.tasks)
 
     def run_protected(self, **kwargs):
         result = super().run_protected(**kwargs)
