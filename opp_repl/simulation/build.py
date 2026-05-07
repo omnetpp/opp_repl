@@ -393,10 +393,11 @@ class BuildSimulationProjectTask(MultipleTasks):
             makefile_inc_config = omnetpp_project.get_makefile_inc_config(self.mode)
 
         # Get feature flags if the project has .oppfeatures
-        from opp_repl.simulation.features import has_features, get_feature_cflags, get_feature_ldflags
+        from opp_repl.simulation.features import has_features, get_feature_cflags, get_feature_ldflags, generate_features_header
         if has_features(self.simulation_project):
             feature_cflags = get_feature_cflags(self.simulation_project)
             feature_ldflags = get_feature_ldflags(self.simulation_project)
+            generate_features_header(self.simulation_project)
 
         # Determine output folder and ensure it exists
         if makefile_inc_config:
