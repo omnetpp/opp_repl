@@ -181,6 +181,7 @@ class MultipleBuildTasks(MultipleTasks):
         input_file_modification_times = get_file_modification_times(self.get_input_files())
         output_file_modification_times = get_file_modification_times(self.get_output_files())
         return input_file_modification_times and output_file_modification_times and \
+               not list(filter(lambda timestamp: timestamp is None, input_file_modification_times)) and \
                not list(filter(lambda timestamp: timestamp is None, output_file_modification_times)) and \
                max(input_file_modification_times) < min(output_file_modification_times)
 
@@ -224,6 +225,7 @@ class MultipleMsgCompileTasks(MultipleTasks):
         input_file_modification_times = get_file_modification_times(self.input_files)
         output_file_modification_times = get_file_modification_times(self.output_files)
         return input_file_modification_times and output_file_modification_times and \
+               not list(filter(lambda timestamp: timestamp is None, input_file_modification_times)) and \
                not list(filter(lambda timestamp: timestamp is None, output_file_modification_times)) and \
                max(input_file_modification_times) < min(output_file_modification_times)
 
@@ -269,6 +271,7 @@ class MultipleCppCompileTasks(MultipleTasks):
         input_file_modification_times = get_file_modification_times(self.input_files)
         output_file_modification_times = get_file_modification_times(self.output_files)
         return input_file_modification_times and output_file_modification_times and \
+               not list(filter(lambda timestamp: timestamp is None, input_file_modification_times)) and \
                not list(filter(lambda timestamp: timestamp is None, output_file_modification_times)) and \
                max(input_file_modification_times) < min(output_file_modification_times)
 
@@ -393,11 +396,16 @@ class BuildSimulationProjectTask(MultipleTasks):
             makefile_inc_config = omnetpp_project.get_makefile_inc_config(self.mode)
 
         # Get feature flags if the project has .oppfeatures
-        from opp_repl.simulation.features import has_features, get_feature_cflags, get_feature_ldflags, generate_features_header
+        from opp_repl.simulation.features import has_features, get_feature_cflags, get_feature_ldflags, generate_features_header, resolve_feature_libraries
         if has_features(self.simulation_project):
             feature_cflags = get_feature_cflags(self.simulation_project)
             feature_ldflags = get_feature_ldflags(self.simulation_project)
             generate_features_header(self.simulation_project)
+
+        # Resolve feature-conditional libraries (pkg-config, Makefile.inc vars)
+        feat_lib_cflags, feat_lib_ldflags = resolve_feature_libraries(self.simulation_project, makefile_inc_config)
+        feature_cflags = feature_cflags + feat_lib_cflags
+        feature_ldflags = feature_ldflags + feat_lib_ldflags
 
         # Determine output folder and ensure it exists
         if makefile_inc_config:

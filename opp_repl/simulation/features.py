@@ -123,6 +123,126 @@ def generate_features_header(simulation_project):
     return output_path
 
 
+def is_feature_enabled(simulation_project, feature_id):
+    """
+    Returns True if the given feature is enabled in the project.
+
+    Parameters:
+        simulation_project: The simulation project with .oppfeatures.
+        feature_id (str): The feature ID to check.
+
+    Returns (bool):
+        True if enabled, False otherwise.
+    """
+    if not has_features(simulation_project):
+        return False
+    # opp_featuretool isenabled uses exit code: 0=enabled, 1=disabled
+    return _run_featuretool_exitcode(simulation_project, ["-q", "isenabled", feature_id]) == 0
+
+
+def resolve_feature_libraries(simulation_project, makefile_inc_config=None):
+    """
+    Resolves feature-conditional libraries declared in
+    ``simulation_project.feature_libraries``.
+
+    For each feature that is enabled, resolves its library spec:
+
+    - ``pkg_config``: runs ``pkg-config --cflags`` and ``pkg-config --libs``
+    - ``makefile_inc_libs``: reads variable from Makefile.inc, adds to ldflags
+    - ``makefile_inc_flags``: reads variable from Makefile.inc, adds to both cflags and ldflags
+
+    Parameters:
+        simulation_project: The simulation project.
+        makefile_inc_config: A MakefileIncConfig instance (needed for makefile_inc_* specs).
+
+    Returns (tuple of (list, list)):
+        A tuple of (extra_cflags, extra_ldflags) resolved from feature libraries.
+    """
+    feature_libraries = getattr(simulation_project, 'feature_libraries', None)
+    if not feature_libraries:
+        return [], []
+
+    extra_cflags = []
+    extra_ldflags = []
+
+    for feature_id, spec in feature_libraries.items():
+        if not is_feature_enabled(simulation_project, feature_id):
+            _logger.debug("Feature %s is disabled, skipping libraries", feature_id)
+            continue
+
+        _logger.debug("Feature %s is enabled, resolving libraries: %s", feature_id, spec)
+
+        # pkg-config resolution
+        if "pkg_config" in spec:
+            pkg_names = spec["pkg_config"]
+            cflags, ldflags = _resolve_pkg_config(pkg_names)
+            if cflags or ldflags:
+                extra_cflags.extend(cflags)
+                extra_ldflags.extend(ldflags)
+                # Add explicit defines only when pkg-config succeeds
+                if "defines" in spec:
+                    extra_cflags.extend(f"-D{d}" for d in spec["defines"])
+            else:
+                _logger.warning("pkg-config packages not found for feature %s: %s", feature_id, pkg_names)
+
+        # Makefile.inc variable → ldflags only
+        if "makefile_inc_libs" in spec and makefile_inc_config:
+            var_name = spec["makefile_inc_libs"]
+            value = makefile_inc_config.get(var_name, "")
+            if value:
+                extra_ldflags.extend(shlex.split(value))
+            else:
+                _logger.warning("Makefile.inc variable %s is empty (feature %s)", var_name, feature_id)
+
+        # Makefile.inc variable → both cflags and ldflags
+        if "makefile_inc_flags" in spec and makefile_inc_config:
+            var_name = spec["makefile_inc_flags"]
+            value = makefile_inc_config.get(var_name, "")
+            if value:
+                flags = shlex.split(value)
+                extra_cflags.extend(flags)
+                extra_ldflags.extend(flags)
+            else:
+                _logger.debug("Makefile.inc variable %s is empty (feature %s), skipping", var_name, feature_id)
+
+    return extra_cflags, extra_ldflags
+
+
+def _resolve_pkg_config(pkg_names):
+    """
+    Runs pkg-config for the given packages. Returns (cflags, ldflags) lists.
+    Returns empty lists if pkg-config fails or packages not found.
+    """
+    # Check if all packages exist
+    try:
+        result = subprocess.run(
+            ["pkg-config", "--exists"] + pkg_names,
+            capture_output=True, text=True
+        )
+        if result.returncode != 0:
+            _logger.warning("pkg-config: packages not found: %s", " ".join(pkg_names))
+            return [], []
+    except FileNotFoundError:
+        _logger.warning("pkg-config not available")
+        return [], []
+
+    # Get cflags
+    result = subprocess.run(
+        ["pkg-config", "--cflags"] + pkg_names,
+        capture_output=True, text=True
+    )
+    cflags = shlex.split(result.stdout.strip()) if result.returncode == 0 else []
+
+    # Get ldflags
+    result = subprocess.run(
+        ["pkg-config", "--libs"] + pkg_names,
+        capture_output=True, text=True
+    )
+    ldflags = shlex.split(result.stdout.strip()) if result.returncode == 0 else []
+
+    return cflags, ldflags
+
+
 def _run_featuretool(simulation_project, args):
     """
     Runs opp_featuretool with the given arguments in the project root.
@@ -148,3 +268,22 @@ def _run_featuretool(simulation_project, args):
                         " ".join(args), result.returncode, result.stderr.strip())
         return ""
     return result.stdout
+
+
+def _run_featuretool_exitcode(simulation_project, args):
+    """
+    Runs opp_featuretool and returns the exit code.
+    """
+    cwd = simulation_project.get_full_path(".")
+    cmd = ["opp_featuretool"] + args
+
+    if simulation_project.opp_env_workspace:
+        shell_cmd = "cd " + shlex.quote(cwd) + " && " + shlex.join(cmd)
+        cmd = ["opp_env", "-l", "WARN", "run", simulation_project.opp_env_project,
+               "-w", simulation_project.opp_env_workspace, "-c", shell_cmd]
+        result = subprocess.run(cmd, capture_output=True, text=True)
+    else:
+        env = simulation_project.get_env()
+        result = subprocess.run(cmd, cwd=cwd, env=env, capture_output=True, text=True)
+
+    return result.returncode

@@ -278,7 +278,7 @@ class SimulationProject:
                  include_folders=["."], cpp_folders=["."], cpp_defines=[], msg_folders=["."],
                  media_folder=".", statistics_folder=".", fingerprint_store="fingerprint.json", speed_store="speed.json", dependency_store="dependency.json",
                  used_projects=[], external_bin_folders=[], external_library_folders=[], external_libraries=[], external_include_folders=[],
-                 dll_symbol=None, pkg_config_libraries=[], precompiled_header=None, extra_cflags=[], extra_ldflags=[],
+                 dll_symbol=None, feature_libraries=None, pkg_config_libraries=None, precompiled_header=None, extra_cflags=[], extra_ldflags=[],
                  simulation_configs=None, overlay_name=None, overlay_build_root=None, opp_env_workspace=None, opp_env_project=None,
                  github_owner=None, github_repository=None, github_workflows=None, **kwargs):
         """
@@ -418,9 +418,29 @@ class SimulationProject:
                 When set, ``-D<symbol>_EXPORT`` is passed to the C++ compiler
                 and ``-P<symbol>_API`` is passed to the message compiler.
 
-            pkg_config_libraries (list of str):
-                List of pkg-config library names to detect and link
-                (e.g. ``["libavcodec", "libavformat"]``).
+            feature_libraries (dict or None):
+                Maps feature IDs to their library requirements. Libraries are
+                only resolved and linked when the feature is enabled. Each value
+                is a dict with one or more of:
+
+                - ``"pkg_config"``: list of pkg-config package names.
+                  Resolved via ``pkg-config --cflags`` / ``--libs``.
+                - ``"defines"``: list of preprocessor defines (without ``-D``)
+                  added to cflags when pkg-config detection succeeds.
+                - ``"makefile_inc_libs"``: Makefile.inc variable name whose
+                  value is added to ldflags (e.g. ``"OSG_LIBS"``).
+                - ``"makefile_inc_flags"``: Makefile.inc variable name whose
+                  value is added to both cflags and ldflags (e.g.
+                  ``"OPENMP_FLAGS"``).
+
+                Example::
+
+                    feature_libraries={
+                        "VoipStream": {"pkg_config": ["libavcodec", "libavformat", "libavutil", "libswresample"]},
+                        "Z3GateSchedulingConfigurator": {"pkg_config": ["z3"]},
+                        "VisualizationOsg": {"makefile_inc_libs": "OSG_LIBS"},
+                        "OpenMP": {"makefile_inc_flags": "OPENMP_FLAGS"},
+                    }
 
             precompiled_header (str or None):
                 Relative path to the precompiled header file template.
@@ -484,7 +504,8 @@ class SimulationProject:
         self.opp_env_workspace = opp_env_workspace
         self.opp_env_project = opp_env_project or name
         self.dll_symbol = dll_symbol
-        self.pkg_config_libraries = pkg_config_libraries
+        self.feature_libraries = feature_libraries or {}
+        self.pkg_config_libraries = pkg_config_libraries  # deprecated, use feature_libraries
         self.precompiled_header = precompiled_header
         self.extra_cflags = extra_cflags
         self.extra_ldflags = extra_ldflags
