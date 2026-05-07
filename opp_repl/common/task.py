@@ -336,6 +336,9 @@ class MultipleTaskResults:
 
     def __repr__(self):
         if len(self.results) == 0:
+            if self.result != self.possible_results[0]:
+                reason = self.kwargs.get("reason", "")
+                return f"Multiple {self.multiple_tasks.name} results: " + self.color + self.result + COLOR_RESET + (f" ({reason})" if reason else "")
             return f"Empty {self.multiple_tasks.name} result"
         elif len(self.results) == 1:
             return f"Single {self.multiple_tasks.name} result: " + self.results[0].__repr__()
@@ -700,7 +703,7 @@ class MultipleTasks:
             The task results.
         """
         if self.is_up_to_date():
-            return self.multiple_task_results_class(multiple_tasks=self, results=[], expected_result="SKIP")
+            return self.multiple_task_results_class(multiple_tasks=self, results=[], expected_result="SKIP", reason="Up-to-date")
         def run_internal(context=None, progress=None, output_stream=sys.stdout, **kwargs):
             elements = [e for e in [progress.get_string(**kwargs), context.get_string(**kwargs), "▶", str(len(self.tasks)), self.get_description()] if e != ""]
             print(" ".join(elements), file=output_stream)
