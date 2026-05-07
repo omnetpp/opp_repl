@@ -52,7 +52,7 @@ def parse_run_tasks_arguments(task_name):
     parser.add_argument("--log-file", default=f"{task_name.replace(' ', '_')}.log", help="write all log messages to this file (default: <task_name>.log)")
     parser.add_argument("--handle-exception", action="store_true", help="display errors as short messages (default: enabled)")
     parser.add_argument("--no-handle-exception", dest="handle_exception", action="store_false")
-    parser.add_argument("--output-format", choices=["text", "json"], default="text", help="output format for results: text (default) or json for machine-readable structured output")
+    parser.add_argument("--result-file", default=None, help="write JSON result to this file; use '-' for stdout (after the text output)")
     parser.set_defaults(concurrent=True, build=True, dry_run=False, handle_exception=True)
     return parser.parse_args(sys.argv[1:])
 
@@ -67,7 +67,7 @@ def process_run_tasks_arguments(args):
     simulation_project = determine_default_simulation_project(name=args.simulation_project)
     kwargs = {k: v for k, v in vars(args).items() if v is not None}
     kwargs.pop("load", None)
-    kwargs.pop("output_format", None)
+    kwargs.pop("result_file", None)
     kwargs["simulation_project"] = simulation_project
     has_filter_kwarg = False
     for k in kwargs.keys():
@@ -98,10 +98,13 @@ def run_tasks_main(main_function, task_name):
         _logger.debug(f"Calling main function with: {kwargs}")
         result = main_function(**kwargs)
         _logger.debug(f"Main function returned: {result}")
-        if args.output_format == "json":
-            print(json.dumps(result.to_dict(), default=str))
-        else:
-            print(result)
+        print(result)
+        if args.result_file:
+            if args.result_file == "-":
+                print(json.dumps(result.to_dict(), default=str))
+            else:
+                with open(args.result_file, "w") as f:
+                    json.dump(result.to_dict(), f, default=str)
         sys.exit(0 if (result is None or result.is_all_results_expected()) else 1)
     except KeyboardInterrupt:
         _logger.warn("Program interrupted by user")
