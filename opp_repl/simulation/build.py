@@ -249,8 +249,10 @@ class MultipleMsgCompileTasks(MultipleTasks):
 
     def run_protected(self, **kwargs):
         result = super().run_protected(**kwargs)
-        for output_file in self.output_files:
-            os.utime(self.simulation_project.get_full_path(output_file), None)
+        for task_result in result.results:
+            if task_result.result == "DONE":
+                for output_file in task_result.task.get_output_files():
+                    os.utime(self.simulation_project.get_full_path(output_file), None)
         return result
 
 class MultipleCppCompileTasks(MultipleTasks):
@@ -289,8 +291,10 @@ class MultipleCppCompileTasks(MultipleTasks):
 
     def run_protected(self, **kwargs):
         result = super().run_protected(**kwargs)
-        for output_file in self.output_files:
-            os.utime(self.simulation_project.get_full_path(output_file), None)
+        for task_result in result.results:
+            if task_result.result == "DONE":
+                for output_file in task_result.task.get_output_files():
+                    os.utime(self.simulation_project.get_full_path(output_file), None)
         return result
 
 class CopyBinaryTask(BuildTask):
