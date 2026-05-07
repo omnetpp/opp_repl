@@ -64,7 +64,7 @@ class MsgCompileTask(BuildTask):
         return "Generating"
 
     def get_parameters_string(self, **kwargs):
-        return self.file_path
+        return re.sub(r"\.msg", "_m.cc", self.file_path)
 
     def get_output_folder(self):
         if self.makefile_inc_config:

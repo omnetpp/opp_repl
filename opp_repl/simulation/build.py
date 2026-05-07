@@ -304,7 +304,7 @@ class CopyBinaryTask(BuildTask):
         return "Copying"
 
     def get_parameters_string(self, **kwargs):
-        return (self.type + "s" if self.type == "executable" else self.type[:-1] + "ies")
+        return " ".join(self.get_output_files())
 
     def get_output_folder(self):
         if self.makefile_inc_config:
