@@ -466,9 +466,15 @@ def build_project_using_tasks(simulation_project, **kwargs):
     build_task.log_structure()
     return build_task.run(**kwargs)
 
-def clean_project(simulation_project=None, mode="release", **kwargs):
+def clean_project(simulation_project=None, mode="release", build_mode="makefile", **kwargs):
     if simulation_project is None:
         simulation_project = get_default_simulation_project()
+    if build_mode == "task":
+        return clean_project_using_tasks(simulation_project, mode=mode, **kwargs)
+    else:
+        return clean_project_using_makefile(simulation_project, mode=mode, **kwargs)
+
+def clean_project_using_makefile(simulation_project, mode="release", **kwargs):
     _logger.info(f"Cleaning {simulation_project.get_name()} started")
     cwd = simulation_project.get_full_path(".")
     if not os.path.isfile(os.path.join(cwd, "Makefile")):
@@ -482,3 +488,89 @@ def clean_project(simulation_project=None, mode="release", **kwargs):
     else:
         run_command_with_logging(args, cwd=cwd, env=simulation_project.get_env())
     _logger.info(f"Cleaning {simulation_project.get_name()} ended")
+
+class CleanFileTask(Task):
+    def __init__(self, simulation_project=None, file_path=None, name="clean file task", **kwargs):
+        super().__init__(name=name, action="Removing", **kwargs)
+        self.simulation_project = simulation_project
+        self.file_path = file_path
+
+    def get_description(self):
+        return self.file_path
+
+    def get_parameters_string(self, **kwargs):
+        return self.file_path
+
+    def is_up_to_date(self):
+        return not os.path.exists(self.simulation_project.get_full_path(self.file_path))
+
+    def run_protected(self, **kwargs):
+        full_path = self.simulation_project.get_full_path(self.file_path)
+        if os.path.exists(full_path):
+            os.remove(full_path)
+        return self.task_result_class(task=self, result="DONE")
+
+class CleanDirectoryTask(Task):
+    def __init__(self, simulation_project=None, directory_path=None, name="clean directory task", **kwargs):
+        super().__init__(name=name, action="Removing", **kwargs)
+        self.simulation_project = simulation_project
+        self.directory_path = directory_path
+
+    def get_description(self):
+        return self.directory_path
+
+    def get_parameters_string(self, **kwargs):
+        return self.directory_path
+
+    def is_up_to_date(self):
+        return not os.path.exists(self.simulation_project.get_full_path(self.directory_path))
+
+    def run_protected(self, **kwargs):
+        full_path = self.simulation_project.get_full_path(self.directory_path)
+        if os.path.exists(full_path):
+            shutil.rmtree(full_path)
+        return self.task_result_class(task=self, result="DONE")
+
+class MultipleCleanTasks(MultipleTasks):
+    def is_up_to_date(self):
+        return all(t.is_up_to_date() for t in self.tasks)
+
+class CleanSimulationProjectTask(MultipleCleanTasks):
+    def __init__(self, simulation_project=None, name="clean task", mode="release", **kwargs):
+        super().__init__(concurrent=False, name=name, **kwargs)
+        self.simulation_project = simulation_project
+        self.mode = mode
+        self.tasks = self.get_clean_tasks()
+
+    def get_description(self):
+        return self.simulation_project.get_name() + " " + super().get_description()
+
+    def get_clean_tasks(self):
+        tasks = []
+        # Generated MSG files (_m.cc, _m.h)
+        msg_clean_tasks = []
+        for msg_file in self.simulation_project.get_msg_files():
+            for suffix in ["_m.cc", "_m.h"]:
+                generated_file = re.sub(r"\.msg", suffix, msg_file)
+                msg_clean_tasks.append(CleanFileTask(simulation_project=self.simulation_project, file_path=generated_file))
+        if msg_clean_tasks:
+            tasks.append(MultipleCleanTasks(tasks=msg_clean_tasks, name="clean generated MSG file", concurrent=True))
+        # Copied binaries
+        binary_clean_tasks = []
+        for build_type in self.simulation_project.build_types:
+            if build_type == "executable":
+                for executable in self.simulation_project.executables:
+                    binary_clean_tasks.append(CleanFileTask(simulation_project=self.simulation_project, file_path=os.path.join(self.simulation_project.bin_folder, executable)))
+            elif build_type == "dynamic library":
+                for library in self.simulation_project.dynamic_libraries:
+                    binary_clean_tasks.append(CleanFileTask(simulation_project=self.simulation_project, file_path=os.path.join(self.simulation_project.library_folder, "lib" + library + ".so")))
+        if binary_clean_tasks:
+            tasks.append(MultipleCleanTasks(tasks=binary_clean_tasks, name="clean binary", concurrent=True))
+        # Output directory
+        tasks.append(CleanDirectoryTask(simulation_project=self.simulation_project, directory_path="out"))
+        return tasks
+
+def clean_project_using_tasks(simulation_project, mode="release", **kwargs):
+    clean_task = CleanSimulationProjectTask(simulation_project, mode=mode)
+    clean_task.log_structure()
+    return clean_task.run(**kwargs)

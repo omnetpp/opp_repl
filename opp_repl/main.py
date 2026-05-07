@@ -210,6 +210,7 @@ def parse_clean_project_arguments():
     parser.add_argument("-l", "--log-level", choices=["ERROR", "WARN", "INFO", "DEBUG"], default="WARN", help="controls the verbosity of log messages (default: WARN)")
     parser.add_argument("--external-command-log-level", choices=["ERROR", "WARN", "INFO", "DEBUG"], default="INFO", help="controls the verbosity of log messages from build tools (default: INFO)")
     parser.add_argument("--log-file", default="clean.log", help="write all log messages to this file (default: clean.log)")
+    parser.add_argument("-b", "--build-mode", choices=["makefile", "task"], default="makefile", help="clean method: makefile uses make clean, task removes build artifacts directly (default: makefile)")
     parser.add_argument("--handle-exception", default=True, action=argparse.BooleanOptionalAction, help="when enabled, errors are displayed as short messages; use --no-handle-exception to show full stack traces for debugging (default: enabled)")
     parser.add_argument("--load", action="append", default=[], metavar="OPP_FILE", help="load one or more .opp configuration files or directories at startup, can be specified multiple times and supports glob patterns (e.g. --load '*.opp'); when a directory is given, all *.opp files in it are loaded; use --load @opp to load the bundled .opp files shipped with opp_repl; if not specified, all *.opp files in the current working directory are loaded automatically")
     return parser.parse_args(sys.argv[1:])
