@@ -201,3 +201,44 @@ def build_project_main():
             sys.exit(1)
         else:
             raise e
+
+def parse_clean_project_arguments():
+    description = "Cleans the specified or enclosing simulation project."
+    parser = argparse.ArgumentParser(description=description)
+    parser.add_argument("-p", "--simulation-project", default=None, help="name of the simulation project to clean (auto-detected from the working directory if not specified)")
+    parser.add_argument("-m", "--mode", choices=["debug", "release"], help="build mode to clean (debug or release)")
+    parser.add_argument("-l", "--log-level", choices=["ERROR", "WARN", "INFO", "DEBUG"], default="WARN", help="controls the verbosity of log messages (default: WARN)")
+    parser.add_argument("--external-command-log-level", choices=["ERROR", "WARN", "INFO", "DEBUG"], default="INFO", help="controls the verbosity of log messages from build tools (default: INFO)")
+    parser.add_argument("--log-file", default="clean.log", help="write all log messages to this file (default: clean.log)")
+    parser.add_argument("--handle-exception", default=True, action=argparse.BooleanOptionalAction, help="when enabled, errors are displayed as short messages; use --no-handle-exception to show full stack traces for debugging (default: enabled)")
+    parser.add_argument("--load", action="append", default=[], metavar="OPP_FILE", help="load one or more .opp configuration files or directories at startup, can be specified multiple times and supports glob patterns (e.g. --load '*.opp'); when a directory is given, all *.opp files in it are loaded; use --load @opp to load the bundled .opp files shipped with opp_repl; if not specified, all *.opp files in the current working directory are loaded automatically")
+    return parser.parse_args(sys.argv[1:])
+
+def process_clean_project_arguments(args):
+    initialize_logging(args.log_level, args.external_command_log_level, args.log_file)
+    if args.load:
+        for opp_file in args.load:
+            load_opp_file(opp_file)
+    else:
+        for opp_file in sorted(glob.glob(os.path.join(os.getcwd(), "*.opp"))):
+            load_opp_file(opp_file)
+    simulation_project = determine_default_simulation_project(name=args.simulation_project)
+    kwargs = {k: v for k, v in vars(args).items() if v is not None}
+    kwargs.pop("load", None)
+    kwargs["simulation_project"] = simulation_project
+    return kwargs
+
+def clean_project_main():
+    try:
+        args = parse_clean_project_arguments()
+        kwargs = process_clean_project_arguments(args)
+        clean_project(**kwargs)
+        sys.exit(0)
+    except KeyboardInterrupt:
+        _logger.warn("Program interrupted by user")
+    except Exception as e:
+        if args.handle_exception:
+            _logger.error(str(e))
+            sys.exit(1)
+        else:
+            raise e
