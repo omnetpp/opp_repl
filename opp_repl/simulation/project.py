@@ -662,6 +662,12 @@ class SimulationProject:
     def get_effective_include_folders(self):
         return self.get_direct_include_folders() + flatten(map(lambda used_project: get_simulation_project(used_project, None).get_direct_include_folders(), self.used_projects))
 
+    def get_direct_msg_folders(self):
+        return list(map(lambda msg_folder: self.get_full_path(msg_folder), self.msg_folders))
+
+    def get_effective_msg_folders(self):
+        return self.get_direct_msg_folders() + flatten(map(lambda used_project: get_simulation_project(used_project, None).get_direct_msg_folders(), self.used_projects))
+
     def get_cpp_files(self):
         cpp_files = []
         for cpp_folder in self.cpp_folders:

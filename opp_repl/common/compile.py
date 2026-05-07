@@ -94,8 +94,8 @@ class MsgCompileTask(BuildTask):
         executable = cfg.msgc if cfg else "opp_msgc"
         output_folder = self.get_output_folder()
         header_file_path = re.sub(r"\.msg", "_m.h", self.file_path)
-        import_paths = list(map(lambda msg_folder: self.simulation_project.get_full_path(msg_folder), self.simulation_project.msg_folders))
-        include_paths = list(map(lambda include_folder: self.simulation_project.get_full_path(include_folder), self.simulation_project.include_folders))
+        import_paths = self.simulation_project.get_effective_msg_folders()
+        include_paths = self.simulation_project.get_effective_include_folders()
         dll_symbol = self.simulation_project.dll_symbol
         args = [executable,
                 "--msg6",
