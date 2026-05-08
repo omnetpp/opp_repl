@@ -326,6 +326,7 @@ class CopyBinaryTask(BuildTask):
     def run_protected(self, **kwargs):
         for output_file in self.get_output_files():
             full_path = self.simulation_project.get_full_path(output_file)
+            os.makedirs(os.path.dirname(full_path), exist_ok=True)
             if os.path.exists(full_path):
                 os.remove(full_path)
         for input_file, output_file in zip(self.get_input_files(), self.get_output_files()):
