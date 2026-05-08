@@ -8,8 +8,8 @@ _logger = logging.getLogger(__name__)
 
 try:
     from py4j.clientserver import JavaParameters, PythonParameters, ClientServer
-except ImportError as e:
-    _logger.warn(str(e) + ": optional opp_repl.common.ide package will not work") # optional feature
+except ImportError:
+    pass
 
 client_server = None
 

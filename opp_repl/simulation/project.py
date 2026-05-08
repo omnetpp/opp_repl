@@ -600,7 +600,7 @@ class SimulationProject:
                 if root:
                     self.omnetpp_project = ws.define_omnetpp_project(self.omnetpp_project, root_folder=root)
                 else:
-                    raise
+                    self.omnetpp_project = None
         result = self.omnetpp_project or get_default_omnetpp_project()
         if result is None:
             ws = getattr(self, '_workspace', None) or get_default_simulation_workspace()
