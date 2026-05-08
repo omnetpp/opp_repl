@@ -49,7 +49,7 @@ def parse_run_tasks_arguments(task_name):
     parser.add_argument("-x", "--nix-shell", default=None, help="name of the Nix shell environment to use on remote cluster nodes")
     parser.add_argument("-l", "--log-level", choices=["ERROR", "WARN", "INFO", "DEBUG"], default="WARN", help="controls the verbosity of log messages (default: WARN)")
     parser.add_argument("--external-command-log-level", choices=["ERROR", "WARN", "INFO", "DEBUG"], default="WARN", help="controls the verbosity of log messages from external commands such as simulations and build tools (default: WARN)")
-    parser.add_argument("--log-file", default=f"{task_name.replace(' ', '_')}.log", help="write all log messages to this file (default: <task_name>.log)")
+    parser.add_argument("--log-file", default=None, help="write all log messages to this file (disabled by default)")
     parser.add_argument("--handle-exception", action="store_true", help="display errors as short messages (default: enabled)")
     parser.add_argument("--no-handle-exception", dest="handle_exception", action="store_false")
     parser.add_argument("--result-file", default=None, help="write JSON result to this file; use '-' for stdout (after the text output)")
@@ -139,6 +139,9 @@ def run_speed_tests_main():
 def run_statistical_tests_main():
     run_tasks_main(run_statistical_tests, "statistical tests")
 
+def run_opp_tests_main():
+    run_tasks_main(lambda **kwargs: run_opp_tests(test_folder=os.getcwd(), **kwargs), "opp tests")
+
 def run_all_tests_main():
     run_tasks_main(run_all_tests, "tests")
 
@@ -165,7 +168,7 @@ def parse_build_project_arguments():
     parser.add_argument("--concurrent", default=True, action=argparse.BooleanOptionalAction, help="build multiple targets in parallel for faster compilation (default: enabled)")
     parser.add_argument("-l", "--log-level", choices=["ERROR", "WARN", "INFO", "DEBUG"], default="WARN", help="controls the verbosity of log messages (default: WARN)")
     parser.add_argument("--external-command-log-level", choices=["ERROR", "WARN", "INFO", "DEBUG"], default="INFO", help="controls the verbosity of log messages from build tools and compilers (default: INFO)")
-    parser.add_argument("--log-file", default="build.log", help="write all log messages to this file (default: build.log)")
+    parser.add_argument("--log-file", default=None, help="write all log messages to this file (disabled by default)")
     parser.add_argument("-b", "--build-mode", choices=["makefile", "task"], default="makefile", help="build method: makefile uses opp_makemake-generated Makefiles, task uses the built-in task system (default: makefile)")
     parser.add_argument("--handle-exception", default=True, action=argparse.BooleanOptionalAction, help="when enabled, errors are displayed as short messages; use --no-handle-exception to show full stack traces for debugging (default: enabled)")
     parser.add_argument("--load", action="append", default=[], metavar="OPP_FILE", help="load one or more .opp configuration files or directories at startup, can be specified multiple times and supports glob patterns (e.g. --load '*.opp'); when a directory is given, all *.opp files in it are loaded; use --load @opp to load the bundled .opp files shipped with opp_repl; if not specified, all *.opp files in the current working directory are loaded automatically")
@@ -209,7 +212,7 @@ def parse_clean_project_arguments():
     parser.add_argument("-m", "--mode", choices=["debug", "release"], help="build mode to clean (debug or release)")
     parser.add_argument("-l", "--log-level", choices=["ERROR", "WARN", "INFO", "DEBUG"], default="WARN", help="controls the verbosity of log messages (default: WARN)")
     parser.add_argument("--external-command-log-level", choices=["ERROR", "WARN", "INFO", "DEBUG"], default="INFO", help="controls the verbosity of log messages from build tools (default: INFO)")
-    parser.add_argument("--log-file", default="clean.log", help="write all log messages to this file (default: clean.log)")
+    parser.add_argument("--log-file", default=None, help="write all log messages to this file (disabled by default)")
     parser.add_argument("-b", "--build-mode", choices=["makefile", "task"], default="makefile", help="clean method: makefile uses make clean, task removes build artifacts directly (default: makefile)")
     parser.add_argument("--handle-exception", default=True, action=argparse.BooleanOptionalAction, help="when enabled, errors are displayed as short messages; use --no-handle-exception to show full stack traces for debugging (default: enabled)")
     parser.add_argument("--load", action="append", default=[], metavar="OPP_FILE", help="load one or more .opp configuration files or directories at startup, can be specified multiple times and supports glob patterns (e.g. --load '*.opp'); when a directory is given, all *.opp files in it are loaded; use --load @opp to load the bundled .opp files shipped with opp_repl; if not specified, all *.opp files in the current working directory are loaded automatically")
