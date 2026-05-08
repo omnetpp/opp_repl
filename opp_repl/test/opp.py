@@ -75,7 +75,9 @@ class OppTestTask(TestTask):
         if subprocess_result.returncode != 0:
             return self.task_result_class(self, result="ERROR", stderr=subprocess_result.stderr)
         library_name = self.simulation_project.dynamic_libraries[0]
-        args = ["opp_makemake", "-f", "--deep", f"-l{library_name}{binary_suffix}", "-L../../../../src", *([f"-ltest{binary_suffix}", "-L../../lib"] if has_lib else []), "-P", test_directory, "-I../../../../src", "-I../../lib"]
+        library_folder = self.simulation_project.get_library_folder_full_path()
+        include_folders = [self.simulation_project.get_full_path(f) for f in self.simulation_project.include_folders]
+        args = ["opp_makemake", "-f", "--deep", f"-l{library_name}{binary_suffix}", f"-L{library_folder}", *([f"-ltest{binary_suffix}", "-L../../lib"] if has_lib else []), "-P", test_directory, *[f"-I{d}" for d in include_folders], *(["-I../../lib"] if has_lib else [])]
         subprocess_result = run_command_with_logging(args, cwd=test_directory, env=self.simulation_project.get_env())
         if subprocess_result.returncode != 0:
             return self.task_result_class(self, result="ERROR", stderr=subprocess_result.stderr)
@@ -84,7 +86,8 @@ class OppTestTask(TestTask):
         if subprocess_result.returncode != 0:
             return self.task_result_class(self, result="ERROR", stderr=subprocess_result.stderr)
         test_program = f"{test_binary_name}/{test_binary_name}{binary_suffix}"
-        simulation_args = ["--check-signals=false", f"-l{library_name}", "-n", f"../../../../src:.:{'../../lib' if has_lib else ''}"]
+        ned_folders = [self.simulation_project.get_full_path(f) for f in self.simulation_project.ned_folders]
+        simulation_args = ["--check-signals=false", f"-l{library_name}", "-n", ":".join(ned_folders + ["."] + (["../../lib"] if has_lib else []))]
         if not self.debug:
             args = ["opp_test", "run", "-v", "-p", test_program, self.test_file_name, "-a", *simulation_args]
             subprocess_result = run_command_with_logging(args, cwd=self.working_directory, env=self.simulation_project.get_env())
@@ -123,11 +126,11 @@ def get_opp_test_tasks(test_folder, simulation_project=None, filter=".*", full_m
         The result can be run (and re-run) without providing additional parameters.
     """
     def create_test_task(test_file_name):
-        return OppTestTask(simulation_project, simulation_project.get_full_path(test_folder), os.path.basename(test_file_name), task_result_class=TestTaskResult, **dict(kwargs, pass_keyboard_interrupt=True))
+        return OppTestTask(simulation_project, os.path.dirname(test_file_name), os.path.basename(test_file_name), task_result_class=TestTaskResult, **dict(kwargs, pass_keyboard_interrupt=True))
     if simulation_project is None:
         simulation_project = get_default_simulation_project()
     test_file_names = list(builtins.filter(lambda test_file_name: matches_filter(test_file_name, filter, None, full_match),
-                                           glob.glob(os.path.join(simulation_project.get_full_path(test_folder), "*.test"))))
+                                           glob.glob(os.path.join(simulation_project.get_full_path(test_folder), "**/*.test"), recursive=True)))
     test_tasks = list(map(create_test_task, test_file_names))
     return MultipleOppTestTasks(tasks=test_tasks, simulation_project=simulation_project, test_folder=test_folder, multiple_task_results_class=MultipleTestTaskResults, **kwargs)
 get_opp_test_tasks.__signature__ = combine_signatures(get_opp_test_tasks, OppTestTask.__init__)
