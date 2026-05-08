@@ -843,7 +843,7 @@ class SimulationProject:
             simulation_configs.append(simulation_config)
         return simulation_configs
 
-    def collect_all_simulation_configs(self, ini_path_globs, concurrent=True, build=None, **kwargs):
+    def collect_all_simulation_configs(self, ini_path_globs, concurrent=True, build=None, build_mode="makefile", **kwargs):
         def local_collect_ini_file_simulation_configs(ini_path, **kwargs):
             return self.collect_ini_file_simulation_configs(ini_path, **kwargs)
         _logger.info(f"Collecting {self.name} simulation configs started")
@@ -851,7 +851,7 @@ class SimulationProject:
         if build is None:
             build = get_default_build_argument()
         if build:
-            self.build(mode="release")
+            self.build(mode="release", build_mode=build_mode)
         if concurrent:
             pool = multiprocessing.pool.ThreadPool(multiprocessing.cpu_count())
             result = list(itertools.chain.from_iterable(pool.map(local_collect_ini_file_simulation_configs, ini_paths)))

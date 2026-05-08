@@ -47,6 +47,7 @@ def parse_run_tasks_arguments(task_name):
     parser.add_argument("--simulation-runner", choices=["subprocess", "inprocess"], default="subprocess", help="how to run each simulation: subprocess (default) or inprocess for running within the Python process")
     parser.add_argument("--hosts", default="localhost", help="comma-separated list of hostnames for cluster execution (default: localhost)")
     parser.add_argument("-x", "--nix-shell", default=None, help="name of the Nix shell environment to use on remote cluster nodes")
+    parser.add_argument("-b", "--build-mode", choices=["makefile", "task"], default="makefile", help="build method: makefile uses opp_makemake-generated Makefiles, task uses the built-in task system (default: makefile)")
     parser.add_argument("-l", "--log-level", choices=["ERROR", "WARN", "INFO", "DEBUG"], default="WARN", help="controls the verbosity of log messages (default: WARN)")
     parser.add_argument("--external-command-log-level", choices=["ERROR", "WARN", "INFO", "DEBUG"], default="WARN", help="controls the verbosity of log messages from external commands such as simulations and build tools (default: WARN)")
     parser.add_argument("--log-file", default=None, help="write all log messages to this file (disabled by default)")

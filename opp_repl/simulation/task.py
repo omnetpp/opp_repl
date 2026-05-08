@@ -631,7 +631,7 @@ class MultipleSimulationTasks(MultipleTasks):
     """
     Represents multiple simulation tasks that can be run together.
     """
-    def __init__(self, simulation_project=None, mode="release", build=None, name="simulation", multiple_task_results_class=MultipleSimulationTaskResults, **kwargs):
+    def __init__(self, simulation_project=None, mode="release", build=None, build_mode="makefile", name="simulation", multiple_task_results_class=MultipleSimulationTaskResults, **kwargs):
         """
         Initializes a new multiple simulation tasks object.
 
@@ -642,6 +642,9 @@ class MultipleSimulationTasks(MultipleTasks):
             build (bool):
                 Determines if the simulation project is built before running any simulation.
 
+            build_mode (string):
+                Specifies the build method. Valid values are "makefile" and "task".
+
             kwargs (dict):
                 Additional arguments are inherited from :py:class:`MultipleTasks <opp_repl.common.task.MultipleTasks>` constructor.
         """
@@ -651,6 +654,7 @@ class MultipleSimulationTasks(MultipleTasks):
         self.kwargs = kwargs
         self.mode = mode
         self.build = build if build is not None else get_default_build_argument()
+        self.build_mode = build_mode
         self.simulation_project = simulation_project
 
     def run(self, **kwargs):
@@ -668,7 +672,7 @@ class MultipleSimulationTasks(MultipleTasks):
         return super().run(**kwargs)
 
     def build_before_run(self, **kwargs):
-        self.simulation_project.build(mode=self.mode)
+        self.simulation_project.build(mode=self.mode, build_mode=self.build_mode)
 
     def run_protected(self, **kwargs):
         if self.build:

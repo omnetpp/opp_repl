@@ -99,12 +99,13 @@ class SimulationTestTask(TestTask):
         return self.task_result_class(task=self, simulation_task_result=simulation_task_result, result=result, expected_result=expected_result, reason=simulation_task_result.reason)
 
 class MultipleSimulationTestTasks(MultipleTestTasks):
-    def __init__(self, build=None, mode="debug", simulation_project=None, **kwargs):
+    def __init__(self, build=None, build_mode="makefile", mode="debug", simulation_project=None, **kwargs):
         super().__init__(simulation_project=simulation_project, **kwargs)
         self.locals = locals()
         self.locals.pop("self")
         self.kwargs = kwargs
         self.build = build if build is not None else get_default_build_argument()
+        self.build_mode = build_mode
         self.mode = mode
         self.simulation_project = simulation_project
 
@@ -112,7 +113,7 @@ class MultipleSimulationTestTasks(MultipleTestTasks):
         return ((self.simulation_project.get_name() + " ") if self.simulation_project else "") + super().get_description()
 
     def build_before_run(self, **kwargs):
-        self.simulation_project.build(mode=self.mode)
+        self.simulation_project.build(mode=self.mode, build_mode=self.build_mode)
 
     def run_protected(self, **kwargs):
         if self.build:
