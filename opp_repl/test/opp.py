@@ -141,9 +141,10 @@ class MultipleOppTestTasks(MultipleSimulationTestTasks):
         self.test_folder = test_folder
 
     def build_before_run(self, **kwargs):
+        super().build_before_run(**kwargs)
         test_directory = self.simulation_project.get_full_path(self.test_folder)
         lib_directory = os.path.join(test_directory, "lib")
-        if os.path.exists(lib_directory):
+        if os.path.exists(lib_directory) and os.path.isfile(os.path.join(lib_directory, "Makefile")):
             args = ["make", f"MODE={self.mode}", "-j", str(multiprocessing.cpu_count())]
             subprocess_result = run_command_with_logging(args, cwd=lib_directory, env=self.simulation_project.get_env())
             if subprocess_result.returncode != 0:
