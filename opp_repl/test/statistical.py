@@ -85,19 +85,33 @@ class StatisticalTestTaskResult(SimulationTestTaskResult):
 
     def _compute_verdict(self, comparison):
         """Compute result and reason from a ScalarComparisonResult."""
-        if comparison.different.empty:
-            self.result = "PASS"
-            self.reason = "All differences filtered out"
+        has_differences = not comparison.different.empty or not comparison.added.empty or not comparison.removed.empty
+        if has_differences:
+            self.result = "FAIL"
         else:
+            self.result = "PASS"
+        parts = []
+        if not comparison.identical.empty:
+            parts.append(f"{len(comparison.identical)} compared")
+        if not comparison.added.empty:
+            parts.append(f"{len(comparison.added)} added")
+        if not comparison.removed.empty:
+            parts.append(f"{len(comparison.removed)} removed")
+        if comparison.num_filtered_out:
+            parts.append(f"{comparison.num_filtered_out} filtered out")
+        if comparison.num_below_threshold:
+            parts.append(f"{comparison.num_below_threshold} below threshold")
+        if not comparison.different.empty:
+            parts.append(f"{len(comparison.different)} different")
             df = comparison.different
             id = df["unbounded_relative_error"].idxmax()
             if math.isnan(id):
                 id = next(iter(df.index), None)
-            reason = df.loc[id].to_string()
-            reason = re.sub(r" +", " = ", reason)
-            reason = re.sub(r"\n", ", ", reason)
-            self.result = "FAIL"
-            self.reason = reason
+            detail = df.loc[id].to_string()
+            detail = re.sub(r" +", " = ", detail)
+            detail = re.sub(r"\n", ", ", detail)
+            parts.append("largest difference: " + detail)
+        self.reason = ", ".join(parts) if parts else None
         self.expected = self.expected_result == self.result
         self.color = self.possible_result_colors[self.possible_results.index(self.result)]
 
@@ -198,14 +212,6 @@ class StatisticalTestTask(SimulationTestTask):
                         scalar_result_csv_file_name = re.sub(r".sca$", ".csv", stored_scalar_result_file_name)
                         _logger.debug(f"Writing CSV file {scalar_result_csv_file_name}")
                         comparison.different.to_csv(scalar_result_csv_file_name, float_format="%.17g")
-                    elif unbounded_relative_error_threshold is not None:
-                        comparison_before_threshold = compare_scalar_dataframes(stored_df, current_df, suffixes=('_stored', '_current'),
-                                                                               name_filter=result_name_filter, exclude_name_filter=exclude_result_name_filter,
-                                                                               module_filter=result_module_filter, exclude_module_filter=exclude_result_module_filter,
-                                                                               full_match=full_match)
-                        if not comparison_before_threshold.different.empty:
-                            max_error = comparison_before_threshold.different["unbounded_relative_error"].abs().max()
-                            task_result.reason = f"All differences below relative error threshold {unbounded_relative_error_threshold} (max relative error {max_error:.6g})"
             else:
                 task_result = self.task_result_class(task=self, simulation_task_result=simulation_task_result, result="PASS")
         else:

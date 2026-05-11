@@ -117,6 +117,8 @@ class CompareSimulationsTaskResult(TaskResult):
                 self._compute_statistical_verdict(**self.multiple_tasks.kwargs)
             else:
                 self.different_statistical_results = pd.DataFrame()
+                self.added_statistical_results = pd.DataFrame()
+                self.removed_statistical_results = pd.DataFrame()
                 self.statistical_comparison_result = None
                 self.statistical_comparison_color = None
 
@@ -129,6 +131,8 @@ class CompareSimulationsTaskResult(TaskResult):
             self.fingerprint_trajectory_comparison_result = None
             self.fingerprint_trajectory_comparison_color = None
             self.different_statistical_results = pd.DataFrame()
+            self.added_statistical_results = pd.DataFrame()
+            self.removed_statistical_results = pd.DataFrame()
             self.statistical_comparison_result = None
             self.statistical_comparison_color = None
             if multiple_task_results:
@@ -149,13 +153,24 @@ class CompareSimulationsTaskResult(TaskResult):
             fingerprint_trajectory_divergence_description = f"\nFingerprint trajectory comparison result: {self.fingerprint_trajectory_comparison_color}{self.fingerprint_trajectory_comparison_result}{COLOR_RESET}"
         else:
             fingerprint_trajectory_divergence_description = ""
-        if not self.different_statistical_results.empty:
+        if not self.different_statistical_results.empty or not self.added_statistical_results.empty or not self.removed_statistical_results.empty:
             max_num_different_statistics = 3
-            different_unique_modules = self.different_statistical_results["module"].unique()
-            different_unique_statistics = self.different_statistical_results["name"].unique()
-            different_modules = ", ".join(map(lambda s: f"{COLOR_CYAN}{s}{COLOR_RESET}", different_unique_modules[0:max_num_different_statistics])) + (", ..." if len(different_unique_modules) > max_num_different_statistics else "")
-            different_statistics = ", ".join(map(lambda s: f"{COLOR_GREEN}{s}{COLOR_RESET}", different_unique_statistics[0:max_num_different_statistics])) + (", ..." if len(different_unique_statistics) > max_num_different_statistics else "")
-            statistical_desription = f"\nStatistical comparison result: {self.statistical_comparison_color}{self.statistical_comparison_result}{COLOR_RESET}, summary: {str(len(self.df_1))} and {str(len(self.df_2))} TOTAL, {COLOR_GREEN}{str(len(self.identical_statistical_results))} IDENTICAL{COLOR_RESET}, {COLOR_YELLOW}{str(len(self.different_statistical_results))} DIFFERENT{COLOR_RESET}, some differences: {different_statistics} in {different_modules}"
+            summary_parts = [f"{COLOR_GREEN}{str(len(self.identical_statistical_results))} IDENTICAL{COLOR_RESET}"]
+            if not self.added_statistical_results.empty:
+                summary_parts.append(f"{COLOR_YELLOW}{str(len(self.added_statistical_results))} ADDED{COLOR_RESET}")
+            if not self.removed_statistical_results.empty:
+                summary_parts.append(f"{COLOR_YELLOW}{str(len(self.removed_statistical_results))} REMOVED{COLOR_RESET}")
+            if not self.different_statistical_results.empty:
+                summary_parts.append(f"{COLOR_YELLOW}{str(len(self.different_statistical_results))} DIFFERENT{COLOR_RESET}")
+            summary_str = ", ".join(summary_parts)
+            detail_str = ""
+            if not self.different_statistical_results.empty:
+                different_unique_modules = self.different_statistical_results["module"].unique()
+                different_unique_statistics = self.different_statistical_results["name"].unique()
+                different_modules = ", ".join(map(lambda s: f"{COLOR_CYAN}{s}{COLOR_RESET}", different_unique_modules[0:max_num_different_statistics])) + (", ..." if len(different_unique_modules) > max_num_different_statistics else "")
+                different_statistics = ", ".join(map(lambda s: f"{COLOR_GREEN}{s}{COLOR_RESET}", different_unique_statistics[0:max_num_different_statistics])) + (", ..." if len(different_unique_statistics) > max_num_different_statistics else "")
+                detail_str = f", some differences: {different_statistics} in {different_modules}"
+            statistical_desription = f"\nStatistical comparison result: {self.statistical_comparison_color}{self.statistical_comparison_result}{COLOR_RESET}, summary: {summary_str}{detail_str}"
         elif self.statistical_comparison_result:
             statistical_desription = f"\nStatistical comparison result: {self.statistical_comparison_color}{self.statistical_comparison_result}{COLOR_RESET}"
         else:
@@ -205,7 +220,7 @@ class CompareSimulationsTaskResult(TaskResult):
     def _compute_statistical_verdict(self, **kwargs):
         """Compute statistical comparison verdict."""
         self._compare_statistical_results(**kwargs)
-        if not self.different_statistical_results.empty:
+        if not self.different_statistical_results.empty or not self.added_statistical_results.empty or not self.removed_statistical_results.empty:
             self.statistical_comparison_result = "DIFFERENT"
             self.statistical_comparison_color = COLOR_YELLOW
         else:
@@ -346,8 +361,11 @@ class CompareSimulationsTaskResult(TaskResult):
                                                name_filter=statistical_result_name_filter, exclude_name_filter=exclude_statistic_name_filter,
                                                module_filter=statistical_result_module_filter, exclude_module_filter=exclude_statistic_module_filter,
                                                full_match=full_match)
+        self.statistical_comparison = comparison
         self.different_statistical_results = comparison.different
         self.identical_statistical_results = comparison.identical
+        self.added_statistical_results = comparison.added
+        self.removed_statistical_results = comparison.removed
 
     def _get_result_file_name(self, simulation_task, extension):
         simulation_config = simulation_task.simulation_config

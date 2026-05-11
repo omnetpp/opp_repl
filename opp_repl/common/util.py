@@ -616,22 +616,43 @@ class ScalarComparisonResult:
         df_2 (pd.DataFrame): The second input DataFrame.
         is_equal (bool): ``True`` when the two DataFrames are equal.
         identical (pd.DataFrame): Rows present and equal in both DataFrames.
-        different (pd.DataFrame): Rows that differ, sorted by descending
-            ``|relative_error|``.  Contains the key columns plus
-            ``value_1``, ``value_2``, and the requested error columns.
+        different (pd.DataFrame): Rows that differ (present in both but with
+            different values), sorted by descending
+            ``|unbounded_relative_error|``.
+        added (pd.DataFrame): Rows only present in ``df_2`` (new statistics).
+        removed (pd.DataFrame): Rows only present in ``df_1`` (disappeared
+            statistics).
+        num_filtered_out (int): Number of differing rows excluded by
+            name/module filters.
+        num_below_threshold (int): Number of differing rows excluded because
+            their ``|unbounded_relative_error|`` was below the threshold.
     """
 
-    def __init__(self, df_1, df_2, is_equal, identical, different):
+    def __init__(self, df_1, df_2, is_equal, identical, different,
+                 added=None, removed=None, num_filtered_out=0, num_below_threshold=0):
         self.df_1 = df_1
         self.df_2 = df_2
         self.is_equal = is_equal
         self.identical = identical
         self.different = different
+        self.added = added if added is not None else pandas.DataFrame()
+        self.removed = removed if removed is not None else pandas.DataFrame()
+        self.num_filtered_out = num_filtered_out
+        self.num_below_threshold = num_below_threshold
 
     def __repr__(self):
-        n1, n2 = len(self.df_1), len(self.df_2)
-        ni, nd = len(self.identical), len(self.different)
-        return f"ScalarComparisonResult({n1} and {n2} TOTAL, {ni} IDENTICAL, {nd} DIFFERENT)"
+        parts = [f"{len(self.identical)} IDENTICAL"]
+        if not self.added.empty:
+            parts.append(f"{len(self.added)} ADDED")
+        if not self.removed.empty:
+            parts.append(f"{len(self.removed)} REMOVED")
+        if self.num_filtered_out:
+            parts.append(f"{self.num_filtered_out} FILTERED OUT")
+        if self.num_below_threshold:
+            parts.append(f"{self.num_below_threshold} BELOW THRESHOLD")
+        if not self.different.empty:
+            parts.append(f"{len(self.different)} DIFFERENT")
+        return f"ScalarComparisonResult({', '.join(parts)})"
 
     def refilter(self, **kwargs):
         """Recompute the comparison with different filter parameters.
@@ -699,11 +720,13 @@ def compare_scalar_dataframes(
 
     merged = df_1.merge(df_2, on=_KEY_COLUMNS, how='outer', suffixes=suffixes)
 
+    # --- separate added, removed, and changed -----------------------------
+    added = merged[merged[value_col_1].isna() & merged[value_col_2].notna()].copy()
+    removed = merged[merged[value_col_1].notna() & merged[value_col_2].isna()].copy()
     df = merged[
-        (merged[value_col_1].isna() & merged[value_col_2].notna()) |
-        (merged[value_col_1].notna() & merged[value_col_2].isna()) |
+        merged[value_col_1].notna() & merged[value_col_2].notna() &
         (merged[value_col_1] != merged[value_col_2])
-    ].dropna(subset=[value_col_1, value_col_2], how='all').copy()
+    ].copy()
 
     # --- error columns (always computed) ----------------------------------
     df["absolute_error"] = df.apply(
@@ -714,19 +737,36 @@ def compare_scalar_dataframes(
         lambda row: unbounded_relative_error(row[value_col_1], row[value_col_2]), axis=1)
 
     # --- filtering --------------------------------------------------------
+    num_filtered_out = 0
     if name_filter is not None or exclude_name_filter is not None or \
        module_filter is not None or exclude_module_filter is not None:
-        df = df[df.apply(
+        filter_mask = df.apply(
             lambda row: matches_filter(row["name"], name_filter, exclude_name_filter, full_match) and
                         matches_filter(row["module"], module_filter, exclude_module_filter, full_match),
-            axis=1)]
+            axis=1)
+        num_filtered_out = int((~filter_mask).sum())
+        df = df[filter_mask]
+        added_filter_mask = added.apply(
+            lambda row: matches_filter(row["name"], name_filter, exclude_name_filter, full_match) and
+                        matches_filter(row["module"], module_filter, exclude_module_filter, full_match),
+            axis=1) if not added.empty else pandas.Series(dtype=bool)
+        added = added[added_filter_mask] if not added.empty else added
+        removed_filter_mask = removed.apply(
+            lambda row: matches_filter(row["name"], name_filter, exclude_name_filter, full_match) and
+                        matches_filter(row["module"], module_filter, exclude_module_filter, full_match),
+            axis=1) if not removed.empty else pandas.Series(dtype=bool)
+        removed = removed[removed_filter_mask] if not removed.empty else removed
 
     # --- threshold --------------------------------------------------------
+    num_below_threshold = 0
     if unbounded_relative_error_threshold is not None and not df.empty:
-        df = df[df["unbounded_relative_error"].abs() >= unbounded_relative_error_threshold]
+        above_mask = df["unbounded_relative_error"].abs() >= unbounded_relative_error_threshold
+        num_below_threshold = int((~above_mask).sum())
+        df = df[above_mask]
 
     # --- sort by error magnitude ------------------------------------------
-    df = df.loc[df["unbounded_relative_error"].abs().sort_values(ascending=False).index]
+    if not df.empty:
+        df = df.loc[df["unbounded_relative_error"].abs().sort_values(ascending=False).index]
 
     return ScalarComparisonResult(
         df_1=df_1,
@@ -734,4 +774,8 @@ def compare_scalar_dataframes(
         is_equal=False,
         identical=pandas.merge(df_1, df_2, how="inner"),
         different=df,
+        added=added,
+        removed=removed,
+        num_filtered_out=num_filtered_out,
+        num_below_threshold=num_below_threshold,
     )
