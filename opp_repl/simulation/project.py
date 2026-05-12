@@ -601,9 +601,9 @@ class SimulationProject:
                     self.omnetpp_project = ws.define_omnetpp_project(self.omnetpp_project, root_folder=root)
                 else:
                     self.omnetpp_project = None
-        result = self.omnetpp_project or get_default_omnetpp_project()
+        ws = getattr(self, '_workspace', None) or get_default_simulation_workspace()
+        result = self.omnetpp_project or ws.get_default_omnetpp_project()
         if result is None:
-            ws = getattr(self, '_workspace', None) or get_default_simulation_workspace()
             omnetpp_projects = ws.get_omnetpp_projects()
             if ("omnetpp", None) in omnetpp_projects:
                 result = omnetpp_projects[("omnetpp", None)]
@@ -627,15 +627,17 @@ class SimulationProject:
         if self.build_types[0] == "dynamic library":
             for library in self.dynamic_libraries:
                 result.append(os.path.join(self.library_folder, library))
+            ws = getattr(self, '_workspace', None) or get_default_simulation_workspace()
             for used_project in self.used_projects:
-                simulation_project = get_simulation_project(used_project, None)
+                simulation_project = ws.get_simulation_project(used_project, None)
                 result = result + list(map(simulation_project.get_full_path, simulation_project.get_dynamic_libraries_for_running()))
         return result
 
     def get_ned_folders_for_running(self):
         result = self.ned_folders
+        ws = getattr(self, '_workspace', None) or get_default_simulation_workspace()
         for used_project in self.used_projects:
-            simulation_project = get_simulation_project(used_project, None)
+            simulation_project = ws.get_simulation_project(used_project, None)
             result = result + list(map(simulation_project.get_full_path, simulation_project.get_ned_folders_for_running()))
         return result
 
@@ -660,13 +662,15 @@ class SimulationProject:
         return list(map(lambda include_folder: self.get_full_path(include_folder), self.include_folders))
 
     def get_effective_include_folders(self):
-        return self.get_direct_include_folders() + flatten(map(lambda used_project: get_simulation_project(used_project, None).get_direct_include_folders(), self.used_projects))
+        ws = getattr(self, '_workspace', None) or get_default_simulation_workspace()
+        return self.get_direct_include_folders() + flatten(map(lambda used_project: ws.get_simulation_project(used_project, None).get_direct_include_folders(), self.used_projects))
 
     def get_direct_msg_folders(self):
         return list(map(lambda msg_folder: self.get_full_path(msg_folder), self.msg_folders))
 
     def get_effective_msg_folders(self):
-        return self.get_direct_msg_folders() + flatten(map(lambda used_project: get_simulation_project(used_project, None).get_direct_msg_folders(), self.used_projects))
+        ws = getattr(self, '_workspace', None) or get_default_simulation_workspace()
+        return self.get_direct_msg_folders() + flatten(map(lambda used_project: ws.get_simulation_project(used_project, None).get_direct_msg_folders(), self.used_projects))
 
     def get_cpp_files(self):
         cpp_files = []
