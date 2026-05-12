@@ -923,7 +923,7 @@ def _make_git_worktree(git_root, git_hash):
             cwd=git_root,
         )
         run_command_with_logging(
-            ["git", "worktree", "add", "-q", worktree_path, git_hash],
+            ["git", "worktree", "add", "--detach", "-q", worktree_path, git_hash],
             cwd=git_root, error_message="Failed to create git worktree",
         )
     return worktree_path
