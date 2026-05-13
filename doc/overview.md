@@ -14,6 +14,7 @@ and [Getting started](getting_started.md) for a hands-on walkthrough.
 - **Smoke tests** — verify that simulations start and terminate without crashing
 - **Fingerprint tests** — detect behavioral regressions by comparing event fingerprints against a stored baseline
 - **Statistical tests** — detect regressions in scalar results by comparing against stored baseline values
+- **Comparison tests** — detect regressions between two arbitrary projects or commits (or across a sequence of commits) without consulting any stored baseline
 - **Speed tests** — detect performance regressions by comparing CPU instruction counts against a baseline
 - **Chart tests** — detect visual regressions by comparing rendered analysis charts against baseline images
 - **Sanitizer tests** — find memory errors and undefined behavior using AddressSanitizer / UBSan instrumentation

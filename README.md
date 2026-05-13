@@ -58,6 +58,7 @@ See [Getting started](doc/getting_started.md) for a full walkthrough.
 - [**Smoke tests**](doc/smoke_tests.md) — smoke tests
 - [**Fingerprint tests**](doc/fingerprint_tests.md) — fingerprint tests
 - [**Statistical tests**](doc/statistical_tests.md) — statistical tests
+- [**Comparison tests**](doc/comparison_tests.md) — regression detection via simulation comparison
 - [**Speed tests**](doc/speed_tests.md) — speed tests
 - [**Chart tests**](doc/chart_tests.md) — chart tests
 - [**Sanitizer tests**](doc/sanitizer_tests.md) — sanitizer tests
