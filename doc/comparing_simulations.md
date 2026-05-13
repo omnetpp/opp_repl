@@ -1,8 +1,9 @@
 # Comparing Simulations
 
-Compare simulation results between two projects or two git commits.
-The comparison checks three aspects of each simulation run: stdout
-trajectories, fingerprint trajectories, and scalar statistical results.
+Compare simulation results between two projects, between two git commits,
+or across a sequence of commits.  The comparison checks three aspects of
+each simulation run: stdout trajectories, fingerprint trajectories, and
+scalar statistical results.
 
 ## Python API
 
@@ -38,6 +39,65 @@ results = compare_simulations_between_commits(
     run_number=0)
 ```
 
+### Comparing across a sequence of commits
+
+To walk a longer stretch of history, use `compare_simulations_across_commits()`.
+The `commits` argument accepts either an explicit list of commit-ishes
+(oldest → newest) or a git revision range string such as `"v1.0..HEAD"`,
+which is resolved with `git rev-list --reverse --first-parent`.
+
+Two comparison modes are supported:
+
+- **`comparison_mode="differential"`** (default) — compare each commit against
+  its predecessor: `(c[0], c[1]), (c[1], c[2]), ..., (c[N-2], c[N-1])`.  Useful
+  for walking history one step at a time to locate the change that introduced
+  a regression.
+- **`comparison_mode="baseline"`** — compare every later commit against the
+  first one: `(c[0], c[1]), (c[0], c[2]), ..., (c[0], c[N-1])`.  Useful for
+  tracking cumulative drift from a reference point.
+
+Each unique commit is built in a worktree at most once, so baseline mode does
+not rebuild the reference commit repeatedly.
+
+```python
+# Differential walk across the last few commits
+results = compare_simulations_across_commits(
+    inet_project,
+    commits="HEAD~5..HEAD",
+    comparison_mode="differential",
+    config_filter="General",
+    run_number=0)
+
+# Baseline comparison against a tagged release
+results = compare_simulations_across_commits(
+    inet_project,
+    commits=["v4.5.0", "v4.5.1", "v4.5.2", "HEAD"],
+    comparison_mode="baseline",
+    config_filter="General",
+    run_number=0)
+```
+
+Each task in the aggregate result is tagged with the short hashes of its pair
+(e.g. `[a1b2c3d4..e5f6g7h8]`) so individual outcomes are easy to identify.
+
+### Worktree cleanup
+
+`*_between_commits()` and `*_across_commits()` create git worktrees next to
+the source repository (named `<repo>-<short_hash>`) and reuse them on
+subsequent calls.  Pass `delete_worktree=True` to remove the worktrees after
+the comparison finishes (including on error):
+
+```python
+results = compare_simulations_between_commits(
+    inet_project, "HEAD~1", "HEAD",
+    delete_worktree=True,
+    config_filter="General",
+    run_number=0)
+```
+
+The default is `delete_worktree=False`, which keeps the worktrees so repeated
+comparisons against the same commits do not rebuild from scratch.
+
 ### Shorthand functions
 
 Dedicated shorthand functions are available for comparing a single axis.
@@ -71,11 +131,12 @@ results = compare_fingerprints(
     run_number=0)
 ```
 
-Each shorthand also has a `*_between_commits()` variant:
+Each shorthand also has a `*_between_commits()` variant for comparing two
+commits and a `*_across_commits()` variant for walking a sequence of commits:
 
-- `compare_statistics_between_commits()`
-- `compare_stdout_between_commits()`
-- `compare_fingerprints_between_commits()`
+- `compare_statistics_between_commits()` / `compare_statistics_across_commits()`
+- `compare_stdout_between_commits()` / `compare_stdout_across_commits()`
+- `compare_fingerprints_between_commits()` / `compare_fingerprints_across_commits()`
 
 Chart and speed comparison (`compare_charts()`, `compare_speed()`) are planned
 but not yet implemented.

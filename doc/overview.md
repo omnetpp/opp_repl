@@ -9,7 +9,7 @@ and [Getting started](getting_started.md) for a hands-on walkthrough.
 - **Build projects** — build simulation binaries from Python
 - **Run simulations** — run all or filtered simulations from a project,
   sequentially or concurrently, on localhost or an SSH cluster
-- **Simulation comparison** — compare stdout trajectories, fingerprint trajectories, and scalar results between two projects or git commits
+- **Simulation comparison** — compare stdout trajectories, fingerprint trajectories, and scalar results between two projects, between two git commits, or across a sequence of commits
 - **Parameter optimization** — find simulation parameter values that produce desired results using derivative-free optimization
 - **Smoke tests** — verify that simulations start and terminate without crashing
 - **Fingerprint tests** — detect behavioral regressions by comparing event fingerprints against a stored baseline
