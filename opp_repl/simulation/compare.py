@@ -494,7 +494,7 @@ def compare_simulations(**kwargs):
     return compare_simulations_using_multiple_tasks(multiple_simulation_tasks_1, multiple_simulation_tasks_2, **kwargs)
 compare_simulations.__signature__ = combine_signatures(compare_simulations, get_simulation_tasks)
 
-def compare_simulations_between_commits(simulation_project=None, git_hash_1=None, git_hash_2=None, **kwargs):
+def compare_simulations_between_commits(simulation_project=None, git_hash_1=None, git_hash_2=None, delete_worktree=False, **kwargs):
     """Compare simulation results between two git versions of the same project.
 
     Creates git worktrees for each commit, builds both, and runs the
@@ -508,18 +508,28 @@ def compare_simulations_between_commits(simulation_project=None, git_hash_1=None
             First git commit-ish (hash, tag, branch, etc.).
         git_hash_2 (str):
             Second git commit-ish.
+        delete_worktree (bool):
+            If ``True``, the git worktrees created for the two commits are
+            removed after the comparison finishes (including on error).
+            Default ``False`` (worktrees are kept for reuse).
         kwargs:
             Forwarded to :py:func:`compare_simulations`.
 
     Returns:
         The result of :py:func:`compare_simulations_using_multiple_tasks`.
     """
-    from opp_repl.simulation.project import make_worktree_simulation_project
+    from opp_repl.simulation.project import make_worktree_simulation_project, remove_worktree_simulation_project
     if simulation_project is None:
         simulation_project = get_default_simulation_project()
     project_1 = make_worktree_simulation_project(simulation_project, git_hash_1)
     project_2 = make_worktree_simulation_project(simulation_project, git_hash_2)
-    return compare_simulations(simulation_project_1=project_1, simulation_project_2=project_2, **kwargs)
+    try:
+        return compare_simulations(simulation_project_1=project_1, simulation_project_2=project_2, **kwargs)
+    finally:
+        if delete_worktree:
+            remove_worktree_simulation_project(project_1)
+            if project_2.get_root_path() != project_1.get_root_path():
+                remove_worktree_simulation_project(project_2)
 compare_simulations_between_commits.__signature__ = combine_signatures(compare_simulations_between_commits, compare_simulations)
 
 def compare_statistics(**kwargs):
@@ -543,22 +553,16 @@ def compare_statistics(**kwargs):
     return compare_simulations(compare_stdout=False, compare_fingerprint=False, **kwargs)
 compare_statistics.__signature__ = combine_signatures(compare_statistics, compare_simulations)
 
-def compare_statistics_between_commits(simulation_project=None, git_hash_1=None, git_hash_2=None, **kwargs):
+def compare_statistics_between_commits(**kwargs):
     """Compare only statistical results between two git versions.
 
     Thin wrapper around :py:func:`compare_simulations_between_commits` with
     stdout and fingerprint comparison disabled.
 
-    Parameters:
-        simulation_project: The project whose repository contains both commits.
-            If ``None``, the default simulation project is used.
-        git_hash_1 (str): First git commit-ish.
-        git_hash_2 (str): Second git commit-ish.
-
     Returns:
         The result of :py:func:`compare_simulations_between_commits`.
     """
-    return compare_simulations_between_commits(simulation_project, git_hash_1, git_hash_2, compare_stdout=False, compare_fingerprint=False, **kwargs)
+    return compare_simulations_between_commits(compare_stdout=False, compare_fingerprint=False, **kwargs)
 compare_statistics_between_commits.__signature__ = combine_signatures(compare_statistics_between_commits, compare_simulations_between_commits)
 
 def compare_stdout(**kwargs):
@@ -573,22 +577,16 @@ def compare_stdout(**kwargs):
     return compare_simulations(compare_fingerprint=False, compare_statistics=False, **kwargs)
 compare_stdout.__signature__ = combine_signatures(compare_stdout, compare_simulations)
 
-def compare_stdout_between_commits(simulation_project=None, git_hash_1=None, git_hash_2=None, **kwargs):
+def compare_stdout_between_commits(**kwargs):
     """Compare only stdout trajectories between two git versions.
 
     Thin wrapper around :py:func:`compare_simulations_between_commits` with
     fingerprint and statistics comparison disabled.
 
-    Parameters:
-        simulation_project: The project whose repository contains both commits.
-            If ``None``, the default simulation project is used.
-        git_hash_1 (str): First git commit-ish.
-        git_hash_2 (str): Second git commit-ish.
-
     Returns:
         The result of :py:func:`compare_simulations_between_commits`.
     """
-    return compare_simulations_between_commits(simulation_project, git_hash_1, git_hash_2, compare_fingerprint=False, compare_statistics=False, **kwargs)
+    return compare_simulations_between_commits(compare_fingerprint=False, compare_statistics=False, **kwargs)
 compare_stdout_between_commits.__signature__ = combine_signatures(compare_stdout_between_commits, compare_simulations_between_commits)
 
 def compare_fingerprints(**kwargs):
@@ -603,23 +601,160 @@ def compare_fingerprints(**kwargs):
     return compare_simulations(compare_stdout=False, compare_statistics=False, **kwargs)
 compare_fingerprints.__signature__ = combine_signatures(compare_fingerprints, compare_simulations)
 
-def compare_fingerprints_between_commits(simulation_project=None, git_hash_1=None, git_hash_2=None, **kwargs):
+def compare_fingerprints_between_commits(**kwargs):
     """Compare only fingerprint trajectories between two git versions.
 
     Thin wrapper around :py:func:`compare_simulations_between_commits` with
     stdout and statistics comparison disabled.
 
-    Parameters:
-        simulation_project: The project whose repository contains both commits.
-            If ``None``, the default simulation project is used.
-        git_hash_1 (str): First git commit-ish.
-        git_hash_2 (str): Second git commit-ish.
-
     Returns:
         The result of :py:func:`compare_simulations_between_commits`.
     """
-    return compare_simulations_between_commits(simulation_project, git_hash_1, git_hash_2, compare_stdout=False, compare_statistics=False, **kwargs)
+    return compare_simulations_between_commits(compare_stdout=False, compare_statistics=False, **kwargs)
 compare_fingerprints_between_commits.__signature__ = combine_signatures(compare_fingerprints_between_commits, compare_simulations_between_commits)
+
+def _resolve_commit_list(simulation_project, commits):
+    """Resolve *commits* into an ordered list of commit-ishes (oldest → newest).
+
+    *commits* is either a list of commit-ishes (used as-is) or a string
+    holding a git revision range such as ``"v1.0..HEAD"`` (resolved via
+    ``git rev-list --reverse --first-parent``).
+    """
+    if commits is None:
+        raise ValueError("'commits' must be a list of commit-ishes or a revision-range string")
+    if isinstance(commits, str):
+        # --reverse → chronological; --first-parent keeps merges sane on a mainline.
+        result = run_command_with_logging(
+            ["git", "-C", simulation_project.get_full_path("."),
+             "rev-list", "--reverse", "--first-parent", commits],
+            error_message=f"Failed to resolve commit range {commits!r}")
+        commits = result.stdout.strip().splitlines()
+    if len(commits) < 2:
+        raise ValueError(f"Need at least two commits to compare, got {len(commits)}")
+    return commits
+
+def _build_commit_pairs(commits, comparison_mode):
+    """Build (hash_1, hash_2) pairs from *commits* according to *comparison_mode*."""
+    if comparison_mode == "differential":
+        return list(zip(commits[:-1], commits[1:]))     # (c0,c1), (c1,c2), ...
+    if comparison_mode == "baseline":
+        return [(commits[0], c) for c in commits[1:]]   # (c0,c1), (c0,c2), ...
+    raise ValueError(f"Unknown comparison_mode: {comparison_mode!r} "
+                     f"(expected 'differential' or 'baseline')")
+
+def compare_simulations_across_commits(simulation_project=None, commits=None,
+                                       comparison_mode="differential", delete_worktree=False, **kwargs):
+    """Compare simulation results across a sequence of git commits.
+
+    Two comparison modes are supported:
+
+    * ``"differential"`` — compare each commit against its predecessor:
+      ``(c[0], c[1]), (c[1], c[2]), ..., (c[N-2], c[N-1])``.  Useful for
+      walking history one step at a time to locate the change that
+      introduced a regression.
+
+    * ``"baseline"`` — compare every later commit against the first one:
+      ``(c[0], c[1]), (c[0], c[2]), ..., (c[0], c[N-1])``.  Useful for
+      tracking cumulative drift from a reference point.
+
+    Each unique commit is checked out in a git worktree at most once, so
+    baseline mode does not rebuild the reference commit repeatedly.
+
+    Parameters:
+        simulation_project (:py:class:`SimulationProject`):
+            The project whose repository contains the commits.  If ``None``,
+            the default simulation project is used.
+        commits (list[str] | str):
+            Either a list of commit-ishes (oldest → newest) or a string
+            holding a git revision range such as ``"v1.0..HEAD"``.  Ranges
+            are resolved with ``git rev-list --reverse --first-parent``.
+        comparison_mode (str):
+            ``"differential"`` (default) or ``"baseline"``.
+        delete_worktree (bool):
+            If ``True``, every worktree created by this call is removed
+            after the comparison finishes (including on error).  Default
+            ``False`` (worktrees are kept for reuse).
+        kwargs:
+            Forwarded to :py:func:`compare_simulations` / :py:class:`CompareSimulationsTask`.
+
+    Returns:
+        :py:class:`MultipleCompareSimulationsTaskResults` — one result per
+        (pair, config) combination, flattened.  Each task is named with the
+        short hashes of the pair so results are identifiable.
+    """
+    from opp_repl.simulation.project import make_worktree_simulation_project, remove_worktree_simulation_project
+    if simulation_project is None:
+        simulation_project = get_default_simulation_project()
+
+    commits = _resolve_commit_list(simulation_project, commits)
+    pairs = _build_commit_pairs(commits, comparison_mode)
+
+    project_cache = {}
+    def project_for(commit):
+        if commit not in project_cache:
+            project_cache[commit] = make_worktree_simulation_project(simulation_project, commit)
+        return project_cache[commit]
+
+    # Per the compare_simulations convention, _1 / _2 suffixed kwargs are
+    # side-specific. Strip a user-supplied simulation_project_{1,2} so it
+    # cannot collide with the worktree projects we inject below.
+    kwargs_1 = {k[:-2]: v for k, v in kwargs.items() if k.endswith('_1')}
+    kwargs_2 = {k[:-2]: v for k, v in kwargs.items() if k.endswith('_2')}
+    kwargs_1.pop("simulation_project", None)
+    kwargs_2.pop("simulation_project", None)
+
+    try:
+        all_compare_tasks = []
+        for hash_1, hash_2 in pairs:
+            tasks_1 = get_simulation_tasks(simulation_project=project_for(hash_1), **kwargs_1, **kwargs)
+            tasks_2 = get_simulation_tasks(simulation_project=project_for(hash_2), **kwargs_2, **kwargs)
+            per_pair = get_compare_simulations_tasks(tasks_1, tasks_2, **kwargs)
+            tag = f"[{hash_1[:8]}..{hash_2[:8]}]"
+            for t in per_pair.tasks:
+                t.name = f"{t.name} {tag}"
+            all_compare_tasks.extend(per_pair.tasks)
+
+        aggregate = MultipleSimulationTasks(
+            tasks=all_compare_tasks, build=False,
+            name=f"simulation comparison across {len(commits)} commits ({comparison_mode})",
+            multiple_task_results_class=MultipleCompareSimulationsTaskResults, **kwargs)
+        return aggregate.run(**kwargs)
+    finally:
+        if delete_worktree:
+            for project in project_cache.values():
+                remove_worktree_simulation_project(project)
+compare_simulations_across_commits.__signature__ = combine_signatures(
+    compare_simulations_across_commits, get_simulation_tasks, CompareSimulationsTask.__init__)
+
+def compare_statistics_across_commits(**kwargs):
+    """Compare only statistical results across a sequence of git commits.
+
+    Thin wrapper around :py:func:`compare_simulations_across_commits` with
+    stdout and fingerprint comparison disabled.
+    """
+    return compare_simulations_across_commits(compare_stdout=False, compare_fingerprint=False, **kwargs)
+compare_statistics_across_commits.__signature__ = combine_signatures(
+    compare_statistics_across_commits, compare_simulations_across_commits)
+
+def compare_stdout_across_commits(**kwargs):
+    """Compare only stdout trajectories across a sequence of git commits.
+
+    Thin wrapper around :py:func:`compare_simulations_across_commits` with
+    fingerprint and statistics comparison disabled.
+    """
+    return compare_simulations_across_commits(compare_fingerprint=False, compare_statistics=False, **kwargs)
+compare_stdout_across_commits.__signature__ = combine_signatures(
+    compare_stdout_across_commits, compare_simulations_across_commits)
+
+def compare_fingerprints_across_commits(**kwargs):
+    """Compare only fingerprint trajectories across a sequence of git commits.
+
+    Thin wrapper around :py:func:`compare_simulations_across_commits` with
+    stdout and statistics comparison disabled.
+    """
+    return compare_simulations_across_commits(compare_stdout=False, compare_statistics=False, **kwargs)
+compare_fingerprints_across_commits.__signature__ = combine_signatures(
+    compare_fingerprints_across_commits, compare_simulations_across_commits)
 
 def compare_charts(**kwargs):
     """Compare chart images between two projects.

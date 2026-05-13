@@ -984,6 +984,31 @@ def make_worktree_simulation_project(simulation_project, git_hash):
 
     return project
 
+def remove_worktree_simulation_project(simulation_project):
+    """Remove the git worktree backing *simulation_project*.
+
+    Counterpart to :py:func:`make_worktree_simulation_project`.  The worktree
+    is located by asking ``git rev-parse --show-toplevel`` from the project's
+    root folder (so sub-directory projects are handled correctly) and removed
+    via ``git worktree remove --force``.  If the path no longer exists, the
+    call is a no-op.
+
+    Parameters:
+        simulation_project (:py:class:`SimulationProject`):
+            A project returned by :py:func:`make_worktree_simulation_project`.
+    """
+    root = simulation_project.get_root_path()
+    if not root or not os.path.isdir(root):
+        return
+    result = run_command_with_logging(
+        ["git", "rev-parse", "--show-toplevel"], cwd=root,
+        error_message="Failed to locate worktree top")
+    worktree_top = os.path.abspath(result.stdout.strip())
+    run_command_with_logging(
+        ["git", "worktree", "remove", "--force", worktree_top],
+        cwd=os.path.dirname(worktree_top),
+        error_message=f"Failed to remove git worktree {worktree_top}")
+
 def create_project(name, path=None, template="executable", namespace=False, omnetpp_project="omnetpp"):
     """
     Creates a new simulation project directory with boilerplate files.
