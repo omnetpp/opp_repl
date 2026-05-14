@@ -60,6 +60,36 @@ _MAKEFILE_INC_VARS = [
     "LDFLAG_LIB",
     "PLATFORM",
     "SHARED_LIBS",
+    # OMNeT++ self-build variables (used by build_omnetpp.py)
+    "YACC",
+    "LEX",
+    "PERL",
+    "MOC",
+    "UIC",
+    "RCC",
+    "RANLIB",
+    "QT_CFLAGS",
+    "QT_LIBS",
+    "LIBXML_CFLAGS",
+    "LIBXML_LIBS",
+    "MPI_CFLAGS",
+    "MPI_LIBS",
+    "PYTHON_EMBED_CFLAGS",
+    "PYTHON_EMBED_LDFLAGS",
+    "AKAROA_CFLAGS",
+    "BACKWARD_LDFLAGS",
+    "PTHREAD_CFLAGS",
+    "PTHREAD_LIBS",
+    "WITH_QTENV",
+    "WITH_PARSIM",
+    "WITH_PYTHON",
+    "WITH_BACKTRACE",
+    "PREFER_SQLITE_RESULT_FILES",
+    "OMNETPP_SRC_DIR",
+    "OMNETPP_BIN_DIR",
+    "OMNETPP_OUT_DIR",
+    "OMNETPP_IMAGE_PATH",
+    "SO_LIB_SUFFIX",
 ]
 
 _SEPARATOR = "===OPP_REPL_SEP==="
@@ -313,3 +343,121 @@ class MakefileIncConfig:
     @property
     def ldflag_lib(self):
         return self._vars["LDFLAG_LIB"]
+
+    # --- OMNeT++ self-build variables ---
+
+    @property
+    def yacc(self):
+        return self._vars.get("YACC", "")
+
+    @property
+    def lex(self):
+        return self._vars.get("LEX", "")
+
+    @property
+    def perl(self):
+        return self._vars.get("PERL", "perl")
+
+    @property
+    def moc(self):
+        return self._vars.get("MOC", "moc")
+
+    @property
+    def uic(self):
+        return self._vars.get("UIC", "uic")
+
+    @property
+    def rcc(self):
+        return self._vars.get("RCC", "rcc")
+
+    @property
+    def ranlib(self):
+        return self._vars.get("RANLIB", "ranlib")
+
+    @property
+    def qt_cflags(self):
+        return self._vars.get("QT_CFLAGS", "")
+
+    @property
+    def qt_libs(self):
+        return self._vars.get("QT_LIBS", "")
+
+    @property
+    def libxml_cflags(self):
+        return self._vars.get("LIBXML_CFLAGS", "")
+
+    @property
+    def libxml_libs(self):
+        return self._vars.get("LIBXML_LIBS", "")
+
+    @property
+    def mpi_cflags(self):
+        return self._vars.get("MPI_CFLAGS", "")
+
+    @property
+    def mpi_libs(self):
+        return self._vars.get("MPI_LIBS", "")
+
+    @property
+    def python_embed_cflags(self):
+        return self._vars.get("PYTHON_EMBED_CFLAGS", "")
+
+    @property
+    def python_embed_ldflags(self):
+        return self._vars.get("PYTHON_EMBED_LDFLAGS", "")
+
+    @property
+    def akaroa_cflags(self):
+        return self._vars.get("AKAROA_CFLAGS", "")
+
+    @property
+    def backward_ldflags(self):
+        return self._vars.get("BACKWARD_LDFLAGS", "")
+
+    @property
+    def pthread_cflags(self):
+        return self._vars.get("PTHREAD_CFLAGS", "")
+
+    @property
+    def pthread_libs(self):
+        return self._vars.get("PTHREAD_LIBS", "")
+
+    @property
+    def with_qtenv(self):
+        return self._vars.get("WITH_QTENV", "") == "yes"
+
+    @property
+    def with_parsim(self):
+        return self._vars.get("WITH_PARSIM", "") == "yes"
+
+    @property
+    def with_python(self):
+        return self._vars.get("WITH_PYTHON", "") == "yes"
+
+    @property
+    def with_backtrace(self):
+        return self._vars.get("WITH_BACKTRACE", "") == "yes"
+
+    @property
+    def prefer_sqlite_result_files(self):
+        return self._vars.get("PREFER_SQLITE_RESULT_FILES", "") == "yes"
+
+    @property
+    def omnetpp_src_dir(self):
+        return self._vars.get("OMNETPP_SRC_DIR", "")
+
+    @property
+    def omnetpp_bin_dir(self):
+        return self._vars.get("OMNETPP_BIN_DIR", "")
+
+    @property
+    def omnetpp_out_dir(self):
+        return self._vars.get("OMNETPP_OUT_DIR", "")
+
+    @property
+    def omnetpp_image_path(self):
+        return self._vars.get("OMNETPP_IMAGE_PATH", "")
+
+    @property
+    def so_lib_suffix(self):
+        return self._vars.get("SO_LIB_SUFFIX", self._vars.get("SHARED_LIB_SUFFIX", ".so"))
