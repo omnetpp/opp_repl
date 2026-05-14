@@ -661,12 +661,43 @@ def _qtenv_extra_compile_sources(omnetpp_project):
 # Builder
 # ---------------------------------------------------------------------------
 
-def _glob_component_cc_files(omnetpp_root, component, extra_subdirs=()):
-    """Return all *.cc files relative to omnetpp_root for a given component."""
+_STALE_CC_RE = re.compile(r"^lex\..*yy\.cc$")
+
+
+def _is_stale_generated_cc(basename, expected_generated):
+    """
+    True if *basename* looks like a leftover generated file (default flex
+    output, stray ``.tab.cc`` from a deleted yacc rule, etc.) and isn't on
+    the component's expected-generated-sources list.
+    """
+    if basename in expected_generated:
+        return False
+    if _STALE_CC_RE.match(basename):
+        return True
+    if basename.endswith(".tab.cc"):
+        return True
+    return False
+
+
+def _glob_component_cc_files(omnetpp_root, component, extra_subdirs=(), expected_generated=()):
+    """Return all *.cc files relative to omnetpp_root for a given component.
+
+    Skips leftover build artifacts from prior incompatible builds (e.g.
+    ``lex.<prefix>yy.cc`` default flex output, stray ``*.tab.cc`` files
+    that aren't on the canonical generator output list).
+    """
     base = os.path.join(omnetpp_root, "src", component)
-    files = sorted(glob.glob(os.path.join(base, "*.cc")))
+    expected = set(expected_generated)
+    files = []
+    for f in sorted(glob.glob(os.path.join(base, "*.cc"))):
+        if _is_stale_generated_cc(os.path.basename(f), expected):
+            continue
+        files.append(f)
     for sub in extra_subdirs:
-        files += sorted(glob.glob(os.path.join(base, sub, "*.cc")))
+        for f in sorted(glob.glob(os.path.join(base, sub, "*.cc"))):
+            if _is_stale_generated_cc(os.path.basename(f), expected):
+                continue
+            files.append(f)
     return [os.path.relpath(f, omnetpp_root) for f in files]
 
 
@@ -841,8 +872,12 @@ def _build_component_tasks(omnetpp_project, component, mode, makefile_inc_config
         for src in lib.get("source_files", []):
             excludes.add(src)
 
+    expected_generated = set(component.get("extra_compile_sources", []) or [])
+    if component.get("generators") == "qtenv-dynamic":
+        expected_generated |= set(_qtenv_extra_compile_sources(omnetpp_project))
     cc_files = _glob_component_cc_files(omnetpp_root, name,
-                                        extra_subdirs=_component_extra_subdirs(component, cfg))
+                                        extra_subdirs=_component_extra_subdirs(component, cfg),
+                                        expected_generated=expected_generated)
     cc_files = [f for f in cc_files if os.path.basename(f) not in excludes]
     c_files = _glob_component_c_files(omnetpp_root, name, component.get("c_files", []))
 
@@ -964,9 +999,10 @@ def _build_component_tasks(omnetpp_project, component, mode, makefile_inc_config
             extra_cflags=extra_cflags,
             extra_defines=extra_defines,
         )
-        tool_link_libs = [library_name] if library_name else []
+        debug_suffix = cfg.debug_suffix if cfg else ""
+        tool_link_libs = [f"-l{library_name}{debug_suffix}"] if library_name else []
         if tool.get("link_with"):
-            tool_link_libs.insert(0, tool["link_with"])
+            tool_link_libs.insert(0, f"-l{tool['link_with']}{debug_suffix}")
         component_tasks.append(tool_compile_task)
         component_tasks.append(OmnetppProjectLinkTask(
             omnetpp_project=omnetpp_project,
