@@ -238,27 +238,21 @@ class OmnetppProject:
             self._makefile_inc_configs[mode] = MakefileIncConfig(root, mode)
         return self._makefile_inc_configs[mode]
 
-    def clean(self, mode="release"):
+    def clean(self, mode="release", build_mode="makefile", **kwargs):
+        """
+        Clean OMNeT++.
+
+        Parameters:
+            mode (str): build mode to clean.
+            build_mode (str): ``"makefile"`` (default) to run ``make clean``,
+                or ``"task"`` to remove generated sources/build artifacts
+                directly. See :py:func:`clean_omnetpp <opp_repl.simulation.build_omnetpp.clean_omnetpp>`.
+        """
         if self._overlay is not None:
             self._overlay.clean()
-        else:
-            root = self.get_root_path()
-            if root is None:
-                raise RuntimeError("Cannot clean OMNeT++: root path is not set")
-            if not os.path.isfile(os.path.join(root, "Makefile")):
-                _logger.info("Cleaning OMNeT++ in %s mode at %s skipped (no Makefile)", mode, root)
-                return
-            env = self.get_env()
-            args = ["make", "MODE=" + mode, "clean"]
-            _logger.info("Cleaning OMNeT++ in %s mode at %s started", mode, root)
-            if self.opp_env_workspace:
-                opp_env_project = self.opp_env_project or self.name
-                shell_cmd = "cd " + shlex.quote(root) + " && " + shlex.join(args)
-                args = ["opp_env", "-l", "WARN", "run", opp_env_project, "-w", self.opp_env_workspace, "-c", shell_cmd]
-                run_command_with_logging(args)
-            else:
-                run_command_with_logging(args, cwd=root, env=env)
-            _logger.info("Cleaning OMNeT++ in %s mode at %s ended", mode, root)
+            return
+        from opp_repl.simulation.build_omnetpp import clean_omnetpp
+        return clean_omnetpp(omnetpp_project=self, mode=mode, build_mode=build_mode, **kwargs)
 
 class SimulationProject:
     """

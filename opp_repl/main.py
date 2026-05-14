@@ -272,6 +272,52 @@ def build_omnetpp_main():
         else:
             raise e
 
+def parse_clean_omnetpp_arguments():
+    description = "Cleans the specified or default OMNeT++ installation."
+    parser = argparse.ArgumentParser(description=description)
+    parser.add_argument("-p", "--omnetpp-project", default=None, help="name of the OMNeT++ project to clean (uses the workspace default if not specified)")
+    parser.add_argument("-m", "--mode", choices=["debug", "release"], help="build mode to clean (debug or release)")
+    parser.add_argument("-l", "--log-level", choices=["ERROR", "WARN", "INFO", "DEBUG"], default="WARN", help="controls the verbosity of log messages (default: WARN)")
+    parser.add_argument("--external-command-log-level", choices=["ERROR", "WARN", "INFO", "DEBUG"], default="INFO", help="controls the verbosity of log messages from build tools (default: INFO)")
+    parser.add_argument("--log-file", default=None, help="write all log messages to this file (disabled by default)")
+    parser.add_argument("-b", "--build-mode", choices=["makefile", "task"], default="makefile", help="clean method: makefile uses make clean, task removes build artifacts directly (default: makefile)")
+    parser.add_argument("--handle-exception", default=True, action=argparse.BooleanOptionalAction, help="when enabled, errors are displayed as short messages; use --no-handle-exception to show full stack traces for debugging (default: enabled)")
+    parser.add_argument("--load", action="append", default=[], metavar="OPP_FILE", help="load one or more .opp configuration files or directories at startup, can be specified multiple times and supports glob patterns (e.g. --load '*.opp'); when a directory is given, all *.opp files in it are loaded; use --load @opp to load the bundled .opp files shipped with opp_repl; if not specified, all *.opp files in the current working directory are loaded automatically")
+    return parser.parse_args(sys.argv[1:])
+
+def process_clean_omnetpp_arguments(args):
+    initialize_logging(args.log_level, args.external_command_log_level, args.log_file)
+    if args.load:
+        for opp_file in args.load:
+            load_opp_file(opp_file)
+    else:
+        for opp_file in sorted(glob.glob(os.path.join(os.getcwd(), "*.opp"))):
+            load_opp_file(opp_file)
+    omnetpp_project = _determine_default_omnetpp_project(name=args.omnetpp_project)
+    kwargs = {k: v for k, v in vars(args).items() if v is not None}
+    kwargs.pop("load", None)
+    kwargs.pop("omnetpp_project", None)
+    kwargs["omnetpp_project"] = omnetpp_project
+    return kwargs
+
+def clean_omnetpp_main():
+    try:
+        args = parse_clean_omnetpp_arguments()
+        kwargs = process_clean_omnetpp_arguments(args)
+        from opp_repl.simulation.build_omnetpp import clean_omnetpp
+        result = clean_omnetpp(**kwargs)
+        if result:
+            print(result)
+        sys.exit(0)
+    except KeyboardInterrupt:
+        _logger.warn("Program interrupted by user")
+    except Exception as e:
+        if args.handle_exception:
+            _logger.error(str(e))
+            sys.exit(1)
+        else:
+            raise e
+
 def parse_clean_project_arguments():
     description = "Cleans the specified or enclosing simulation project."
     parser = argparse.ArgumentParser(description=description)

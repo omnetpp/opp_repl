@@ -1090,6 +1090,243 @@ def build_omnetpp_using_makefile(omnetpp_project=None, mode="release", **kwargs)
     _logger.info("Building OMNeT++ in %s mode at %s ended", mode, root)
 
 
+# ---------------------------------------------------------------------------
+# Clean tasks
+# ---------------------------------------------------------------------------
+
+class _CleanFileTask(Task):
+    """Delete a single file, paths relative to a base directory."""
+
+    def __init__(self, working_dir=None, file_path=None, name="clean file task", **kwargs):
+        super().__init__(name=name, action="Removing", **kwargs)
+        self.working_dir = working_dir
+        self.file_path = file_path
+
+    def _full_path(self):
+        if os.path.isabs(self.file_path):
+            return self.file_path
+        return os.path.join(self.working_dir, self.file_path)
+
+    def get_description(self):
+        return self.file_path
+
+    def get_parameters_string(self, **kwargs):
+        return self.file_path
+
+    def is_up_to_date(self):
+        return not os.path.exists(self._full_path())
+
+    def run_protected(self, **kwargs):
+        full_path = self._full_path()
+        if os.path.exists(full_path):
+            os.remove(full_path)
+        return self.task_result_class(task=self, result="DONE")
+
+
+class _CleanDirectoryTask(Task):
+    """Recursively remove a directory, path relative to a base directory."""
+
+    def __init__(self, working_dir=None, directory_path=None, name="clean directory task", **kwargs):
+        super().__init__(name=name, action="Removing", **kwargs)
+        self.working_dir = working_dir
+        self.directory_path = directory_path
+
+    def _full_path(self):
+        if os.path.isabs(self.directory_path):
+            return self.directory_path
+        return os.path.join(self.working_dir, self.directory_path)
+
+    def get_description(self):
+        return self.directory_path
+
+    def get_parameters_string(self, **kwargs):
+        return self.directory_path
+
+    def is_up_to_date(self):
+        return not os.path.exists(self._full_path())
+
+    def run_protected(self, **kwargs):
+        import shutil
+        full_path = self._full_path()
+        if os.path.exists(full_path):
+            shutil.rmtree(full_path)
+        return self.task_result_class(task=self, result="DONE")
+
+
+class _MultipleCleanTasks(MultipleTasks):
+    def is_up_to_date(self):
+        return bool(self.tasks) and all(t.is_up_to_date() for t in self.tasks)
+
+
+def _build_component_clean_tasks(omnetpp_project, component, cfg, mode):
+    """Return clean tasks for one OMNeT++ component (generated sources +
+    installed libraries / executables / scripts). The shared ``out/`` tree is
+    cleaned once at the top level, not per component."""
+    name = component["name"]
+    omnetpp_root = omnetpp_project.get_root_path()
+    src_dir = _component_src_dir(omnetpp_root, name)
+    cvar = component.get("conditional_var")
+    if cvar and cfg and not getattr(cfg, cvar, True):
+        return []
+
+    debug_suffix = cfg.debug_suffix if cfg else ""
+    shared_ext = cfg.shared_lib_suffix if cfg else ".so"
+    exe_ext = cfg.exe_suffix if cfg else ""
+    lib_prefix = cfg.lib_prefix if cfg else "lib"
+    lib_dir = cfg.omnetpp_lib_dir if cfg else os.path.join(omnetpp_root, "lib")
+    bin_dir = (cfg.omnetpp_bin_dir if cfg and cfg.omnetpp_bin_dir
+               else os.path.join(omnetpp_root, "bin"))
+
+    tasks = []
+
+    # Generated sources (yacc/lex/perl/msgc/stringify outputs) in src/<comp>/
+    gens = component.get("generators")
+    if gens == "qtenv-dynamic":
+        for out in _qtenv_extra_compile_sources(omnetpp_project):
+            tasks.append(_CleanFileTask(working_dir=src_dir, file_path=out))
+        # Also remove ui_*.h files which aren't part of extra_compile_sources
+        for ui in sorted(glob.glob(os.path.join(src_dir, "*.ui"))):
+            stem = os.path.splitext(os.path.basename(ui))[0]
+            tasks.append(_CleanFileTask(working_dir=src_dir, file_path=f"ui_{stem}.h"))
+    elif gens:
+        for spec in gens:
+            kind = spec["kind"]
+            if kind in ("yacc", "lex", "perl"):
+                for out in spec.get("outputs", []):
+                    tasks.append(_CleanFileTask(working_dir=src_dir, file_path=out))
+            elif kind == "msgc":
+                for out in spec.get("outputs", []):
+                    tasks.append(_CleanFileTask(working_dir=src_dir, file_path=out))
+                # Also clean header installed to include/omnetpp/
+                if spec.get("install_header_to_include_dir") and cfg:
+                    header_name = next((o for o in spec.get("outputs", []) if o.endswith(".h")), None)
+                    if header_name:
+                        installed = os.path.join(cfg.omnetpp_incl_dir, "omnetpp", header_name)
+                        tasks.append(_CleanFileTask(working_dir=omnetpp_root, file_path=installed))
+            elif kind == "stringify":
+                tasks.append(_CleanFileTask(working_dir=src_dir, file_path=spec["output"]))
+            elif kind == "copy_script":
+                target = os.path.join(bin_dir, spec["target_basename"])
+                tasks.append(_CleanFileTask(working_dir=omnetpp_root, file_path=target))
+
+    # Installed library (lib/lib<name><D>.so)
+    library_name = component.get("library_name")
+    if library_name:
+        lib_file = os.path.join(lib_dir, lib_prefix + library_name + debug_suffix + shared_ext)
+        tasks.append(_CleanFileTask(working_dir=omnetpp_root, file_path=lib_file))
+
+    # Extra libraries (e.g. oppmain)
+    for extra_lib in component.get("extra_libraries", []):
+        lib_file = os.path.join(lib_dir, lib_prefix + extra_lib["basename"] + debug_suffix + shared_ext)
+        tasks.append(_CleanFileTask(working_dir=omnetpp_root, file_path=lib_file))
+
+    # Tool executables (opp_nedtool, opp_msgtool, opp_run, ...)
+    for tool in component.get("tools", []):
+        exe_file = os.path.join(bin_dir, tool["basename"] + debug_suffix + exe_ext)
+        tasks.append(_CleanFileTask(working_dir=omnetpp_root, file_path=exe_file))
+
+    # utils: scripts copied to bin/
+    if name == "utils":
+        utils_src = os.path.join(omnetpp_root, "src", "utils")
+        if os.path.isdir(utils_src):
+            for entry in sorted(os.listdir(utils_src)):
+                full = os.path.join(utils_src, entry)
+                if os.path.isfile(full) and os.access(full, os.X_OK):
+                    tasks.append(_CleanFileTask(
+                        working_dir=omnetpp_root,
+                        file_path=os.path.join(bin_dir, entry),
+                    ))
+
+    return tasks
+
+
+def clean_omnetpp(build_mode="makefile", **kwargs):
+    """
+    Cleans OMNeT++ using either :py:func:`clean_omnetpp_using_makefile` or
+    :py:func:`clean_omnetpp_using_tasks`.
+
+    Parameters:
+        build_mode (str):
+            ``"makefile"`` (default) runs ``make clean`` in the OMNeT++ tree.
+            ``"task"`` removes generated sources, built objects, libraries and
+            executables directly.
+    """
+    if build_mode == "makefile":
+        clean_function = clean_omnetpp_using_makefile
+    elif build_mode == "task":
+        clean_function = clean_omnetpp_using_tasks
+    else:
+        raise Exception(f"Unknown build_mode argument: {build_mode}")
+    return clean_function(**kwargs)
+
+
+def clean_omnetpp_using_makefile(omnetpp_project=None, mode="release", **kwargs):
+    """Run ``make clean`` in the OMNeT++ root for the given mode."""
+    if omnetpp_project is None:
+        raise RuntimeError("omnetpp_project is required")
+    omnetpp_project.ensure_mounted()
+    root = omnetpp_project.get_root_path()
+    if root is None:
+        raise RuntimeError("Cannot clean OMNeT++: root path is not set")
+    if not os.path.isfile(os.path.join(root, "Makefile")):
+        _logger.info("Cleaning OMNeT++ in %s mode at %s skipped (no Makefile)", mode, root)
+        return
+    env = omnetpp_project.get_env()
+    args = ["make", "MODE=" + mode, "clean"]
+    _logger.info("Cleaning OMNeT++ in %s mode at %s started", mode, root)
+    if omnetpp_project.opp_env_workspace:
+        opp_env_project = omnetpp_project.opp_env_project or omnetpp_project.name
+        shell_cmd = "cd " + shlex.quote(root) + " && " + shlex.join(args)
+        args = ["opp_env", "-l", "WARN", "run", opp_env_project, "-w", omnetpp_project.opp_env_workspace, "-c", shell_cmd]
+        run_command_with_logging(args)
+    else:
+        run_command_with_logging(args, cwd=root, env=env)
+    _logger.info("Cleaning OMNeT++ in %s mode at %s ended", mode, root)
+
+
+def clean_omnetpp_using_tasks(omnetpp_project=None, mode="release", concurrent=True, **kwargs):
+    """
+    Clean OMNeT++ using per-file tasks: remove generated sources, the build
+    output directory, installed libraries and executables.
+    """
+    if omnetpp_project is None:
+        raise RuntimeError("omnetpp_project is required")
+    omnetpp_project.ensure_mounted()
+    omnetpp_root = omnetpp_project.get_root_path()
+    if omnetpp_root is None:
+        raise RuntimeError("Cannot clean OMNeT++: root path is not set")
+
+    try:
+        cfg = omnetpp_project.get_makefile_inc_config(mode)
+    except Exception:
+        cfg = None
+
+    component_tasks = []
+    for component in OMNETPP_COMPONENTS:
+        comp_tasks = _build_component_clean_tasks(omnetpp_project, component, cfg, mode)
+        if comp_tasks:
+            component_tasks.append(_MultipleCleanTasks(
+                tasks=comp_tasks,
+                name=f"clean {component['name']}",
+                concurrent=concurrent,
+            ))
+
+    # Output directory (out/<configname>/, or all of out/ if no config)
+    out_path = f"out/{cfg.configname}" if cfg else "out"
+    component_tasks.append(_CleanDirectoryTask(
+        working_dir=omnetpp_root, directory_path=out_path,
+        name="clean output directory",
+    ))
+
+    top_task = _MultipleCleanTasks(
+        tasks=component_tasks,
+        name=f"clean OMNeT++ ({mode})",
+        concurrent=False,
+    )
+    top_task.log_structure()
+    return top_task.run(**kwargs)
+
+
 def build_omnetpp_using_tasks(omnetpp_project=None, mode="release", concurrent=True, **kwargs):
     """
     Build the OMNeT++ source tree using per-file tasks.
