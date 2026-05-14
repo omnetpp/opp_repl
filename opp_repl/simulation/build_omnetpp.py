@@ -22,6 +22,20 @@ from opp_repl.common.task import *
 _logger = logging.getLogger(__name__)
 
 
+class _RecursiveBuildTasks(MultipleTasks):
+    """
+    ``MultipleTasks`` variant whose ``is_up_to_date()`` is the conjunction of
+    its children's. Lets the wrapper skip the whole subtree (and all per-child
+    log output) once everything is built.
+    """
+
+    def __init__(self, multiple_task_results_class=MultipleBuildTaskResults, **kwargs):
+        super().__init__(multiple_task_results_class=multiple_task_results_class, **kwargs)
+
+    def is_up_to_date(self):
+        return bool(self.tasks) and all(t.is_up_to_date() for t in self.tasks)
+
+
 def _omnetpp_output_folder(makefile_inc_config, component, mode):
     if makefile_inc_config and makefile_inc_config.configname:
         return f"out/{makefile_inc_config.configname}/src/{component}"
@@ -853,11 +867,10 @@ def _build_component_tasks(omnetpp_project, component, mode, makefile_inc_config
                     ))
         if not copy_tasks:
             return None
-        return MultipleTasks(
+        return _RecursiveBuildTasks(
             tasks=copy_tasks,
             name=f"build {name}",
             concurrent=concurrent,
-            multiple_task_results_class=MultipleBuildTaskResults,
         )
 
     # Generator tasks (yacc/lex/perl/msgc/stringify/moc/uic/rcc)
@@ -927,19 +940,17 @@ def _build_component_tasks(omnetpp_project, component, mode, makefile_inc_config
     component_tasks = []
 
     if generator_tasks:
-        component_tasks.append(MultipleTasks(
+        component_tasks.append(_RecursiveBuildTasks(
             tasks=generator_tasks,
             name=f"generate {name}",
             concurrent=concurrent,
-            multiple_task_results_class=MultipleBuildTaskResults,
         ))
 
     if compile_tasks:
-        component_tasks.append(MultipleTasks(
+        component_tasks.append(_RecursiveBuildTasks(
             tasks=compile_tasks,
             name=f"compile {name}",
             concurrent=concurrent,
-            multiple_task_results_class=MultipleBuildTaskResults,
         ))
 
     if library_name and compile_tasks:
@@ -971,11 +982,10 @@ def _build_component_tasks(omnetpp_project, component, mode, makefile_inc_config
                 extra_defines=extra_defines,
             ))
         if extra_compile_tasks:
-            component_tasks.append(MultipleTasks(
+            component_tasks.append(_RecursiveBuildTasks(
                 tasks=extra_compile_tasks,
                 name=f"compile {extra_lib['basename']}",
                 concurrent=concurrent,
-                multiple_task_results_class=MultipleBuildTaskResults,
             ))
             component_tasks.append(OmnetppProjectLinkTask(
                 omnetpp_project=omnetpp_project,
@@ -1017,11 +1027,10 @@ def _build_component_tasks(omnetpp_project, component, mode, makefile_inc_config
 
     if not component_tasks:
         return None
-    return MultipleTasks(
+    return _RecursiveBuildTasks(
         tasks=component_tasks,
         name=f"build {name}",
         concurrent=False,  # within a component, ordering matters (compile -> link)
-        multiple_task_results_class=MultipleBuildTaskResults,
     )
 
 
@@ -1109,11 +1118,10 @@ def build_omnetpp_using_tasks(omnetpp_project=None, mode="release", concurrent=T
         if task is not None:
             component_tasks.append(task)
 
-    top_task = MultipleTasks(
+    top_task = _RecursiveBuildTasks(
         tasks=component_tasks,
         name=f"build OMNeT++ ({mode})",
         concurrent=False,  # components must be built in dependency order
-        multiple_task_results_class=MultipleBuildTaskResults,
     )
     top_task.log_structure()
     return top_task.run(**kwargs)
