@@ -726,9 +726,9 @@ class SimulationProject:
                     opp.clean(mode=mode, build_mode=build_mode)
         if self._overlay is not None:
             self._overlay.clean()
-        else:
-            import opp_repl.simulation.build
-            opp_repl.simulation.build.clean_project(simulation_project=self, mode=mode, build_mode=build_mode, **kwargs)
+            return None
+        import opp_repl.simulation.build
+        return opp_repl.simulation.build.clean_project(simulation_project=self, mode=mode, build_mode=build_mode, **kwargs)
 
     def get_num_runs_in_config(self, ini_path, config):
         num_runs_fast_regex = re.compile(r"(?m).*^\s*(include\s+.*\.ini|repeat\s*=\s*[0-9]+|.*\$\{.*\})")
