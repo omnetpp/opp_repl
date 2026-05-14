@@ -508,7 +508,7 @@ def _build_generator_tasks(omnetpp_project, component, cfg, mode):
     for spec in gens:
         kind = spec["kind"]
         if kind == "yacc":
-            yacc = cfg.yacc.strip() if cfg and cfg.yacc else "bison"
+            yacc = _split(cfg.yacc) if cfg and cfg.yacc else ["bison"]
             tasks.append(YaccTask(
                 working_dir=src_dir,
                 yacc=yacc,
@@ -518,7 +518,7 @@ def _build_generator_tasks(omnetpp_project, component, cfg, mode):
                 name=f"{name}: {os.path.basename(spec['input'])}",
             ))
         elif kind == "lex":
-            lex = cfg.lex.strip() if cfg and cfg.lex else "flex"
+            lex = _split(cfg.lex) if cfg and cfg.lex else ["flex"]
             tasks.append(LexTask(
                 working_dir=src_dir,
                 lex=lex,
@@ -528,7 +528,7 @@ def _build_generator_tasks(omnetpp_project, component, cfg, mode):
                 name=f"{name}: {os.path.basename(spec['input'])}",
             ))
         elif kind == "perl":
-            perl = cfg.perl.strip() if cfg and cfg.perl else "perl"
+            perl = _split(cfg.perl) if cfg and cfg.perl else ["perl"]
             extra_inputs = list(spec.get("extra_inputs", []))
             script_args = list(spec.get("script_args", []))
             if "dtd_kind" in spec:
@@ -608,9 +608,9 @@ def _build_qtenv_generator_tasks(omnetpp_project, cfg):
     if not os.path.isdir(src_dir):
         return []
     tasks = []
-    moc = cfg.moc.strip() if cfg and cfg.moc else "moc"
-    uic = cfg.uic.strip() if cfg and cfg.uic else "uic"
-    rcc = cfg.rcc.strip() if cfg and cfg.rcc else "rcc"
+    moc = _split(cfg.moc) if cfg and cfg.moc else ["moc"]
+    uic = _split(cfg.uic) if cfg and cfg.uic else ["uic"]
+    rcc = _split(cfg.rcc) if cfg and cfg.rcc else ["rcc"]
 
     # uic: <name>.ui -> ui_<name>.h
     for ui in sorted(glob.glob(os.path.join(src_dir, "*.ui"))):

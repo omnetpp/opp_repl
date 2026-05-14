@@ -226,7 +226,7 @@ class MsgCompileTask(BuildTask):
         return list(self.output_files)
 
     def get_arguments(self):
-        args = [self.msgc, *self.flags]
+        args = [*(self.msgc if isinstance(self.msgc, list) else [self.msgc]), *self.flags]
         if self.dependency_file:
             args += ["-MD", "-MP", "-MF", self.dependency_file]
         args += [f"-I{p}" for p in self.import_paths]
@@ -298,7 +298,7 @@ class YaccTask(BuildTask):
         return list(self.output_files)
 
     def get_arguments(self):
-        return [self.yacc, *self.flags, self.input_file]
+        return [*(self.yacc if isinstance(self.yacc, list) else [self.yacc]), *self.flags, self.input_file]
 
     def run_protected(self, **kwargs):
         self._ensure_output_dirs()
@@ -329,7 +329,7 @@ class LexTask(BuildTask):
         return list(self.output_files)
 
     def get_arguments(self):
-        return [self.lex, *self.flags, self.input_file]
+        return [*(self.lex if isinstance(self.lex, list) else [self.lex]), *self.flags, self.input_file]
 
     def run_protected(self, **kwargs):
         self._ensure_output_dirs()
@@ -361,7 +361,7 @@ class PerlGenerateTask(BuildTask):
         return list(self.output_files)
 
     def get_arguments(self):
-        return [self.perl, self.script, *self.script_args]
+        return [*(self.perl if isinstance(self.perl, list) else [self.perl]), self.script, *self.script_args]
 
     def run_protected(self, **kwargs):
         self._ensure_output_dirs()
@@ -393,7 +393,7 @@ class MocTask(BuildTask):
         return [self.output_file]
 
     def get_arguments(self):
-        return [self.moc, *self.defines, *self.flags, "-o", self.output_file, self.input_file]
+        return [*(self.moc if isinstance(self.moc, list) else [self.moc]), *self.defines, *self.flags, "-o", self.output_file, self.input_file]
 
     def run_protected(self, **kwargs):
         self._ensure_output_dirs()
@@ -424,7 +424,7 @@ class UicTask(BuildTask):
         return [self.output_file]
 
     def get_arguments(self):
-        return [self.uic, *self.flags, "-o", self.output_file, self.input_file]
+        return [*(self.uic if isinstance(self.uic, list) else [self.uic]), *self.flags, "-o", self.output_file, self.input_file]
 
     def run_protected(self, **kwargs):
         self._ensure_output_dirs()
@@ -455,7 +455,7 @@ class RccTask(BuildTask):
         return [self.output_file]
 
     def get_arguments(self):
-        return [self.rcc, *self.flags, "-o", self.output_file, self.input_file]
+        return [*(self.rcc if isinstance(self.rcc, list) else [self.rcc]), *self.flags, "-o", self.output_file, self.input_file]
 
     def run_protected(self, **kwargs):
         self._ensure_output_dirs()
