@@ -206,6 +206,72 @@ def build_project_main():
         else:
             raise e
 
+def parse_build_omnetpp_arguments():
+    description = "Builds the specified or default OMNeT++ installation."
+    parser = argparse.ArgumentParser(description=description)
+    parser.add_argument("-p", "--omnetpp-project", default=None, help="name of the OMNeT++ project to build (uses the workspace default if not specified)")
+    parser.add_argument("-m", "--mode", choices=["debug", "release"], help="build mode of the OMNeT++ binaries (debug or release)")
+    parser.add_argument("--concurrent", default=True, action=argparse.BooleanOptionalAction, help="build multiple targets in parallel for faster compilation (default: enabled)")
+    parser.add_argument("-l", "--log-level", choices=["ERROR", "WARN", "INFO", "DEBUG"], default="WARN", help="controls the verbosity of log messages (default: WARN)")
+    parser.add_argument("--external-command-log-level", choices=["ERROR", "WARN", "INFO", "DEBUG"], default="INFO", help="controls the verbosity of log messages from build tools and compilers (default: INFO)")
+    parser.add_argument("--log-file", default=None, help="write all log messages to this file (disabled by default)")
+    parser.add_argument("-b", "--build-mode", choices=["makefile", "task"], default="makefile", help="build method: makefile invokes make in the OMNeT++ tree, task uses the built-in task system (default: makefile)")
+    parser.add_argument("--handle-exception", default=True, action=argparse.BooleanOptionalAction, help="when enabled, errors are displayed as short messages; use --no-handle-exception to show full stack traces for debugging (default: enabled)")
+    parser.add_argument("--load", action="append", default=[], metavar="OPP_FILE", help="load one or more .opp configuration files or directories at startup, can be specified multiple times and supports glob patterns (e.g. --load '*.opp'); when a directory is given, all *.opp files in it are loaded; use --load @opp to load the bundled .opp files shipped with opp_repl; if not specified, all *.opp files in the current working directory are loaded automatically")
+    return parser.parse_args(sys.argv[1:])
+
+def _determine_default_omnetpp_project(name=None):
+    ws = get_default_simulation_workspace()
+    if name:
+        projects = ws.get_omnetpp_projects()
+        for (proj_name, _), project in projects.items():
+            if proj_name == name:
+                return project
+        raise Exception(f"OMNeT++ project '{name}' is not defined")
+    project = ws.get_default_omnetpp_project()
+    if project is not None:
+        return project
+    # Fall back to the OMNeT++ project of an enclosing simulation project (if any)
+    sim_project = ws.find_simulation_project_from_current_working_directory()
+    if sim_project is not None:
+        project = sim_project.get_omnetpp_project()
+        if project is not None:
+            return project
+    raise Exception("No OMNeT++ project is defined; specify one with --omnetpp-project or load an .opp file that defines one")
+
+def process_build_omnetpp_arguments(args):
+    initialize_logging(args.log_level, args.external_command_log_level, args.log_file)
+    if args.load:
+        for opp_file in args.load:
+            load_opp_file(opp_file)
+    else:
+        for opp_file in sorted(glob.glob(os.path.join(os.getcwd(), "*.opp"))):
+            load_opp_file(opp_file)
+    omnetpp_project = _determine_default_omnetpp_project(name=args.omnetpp_project)
+    kwargs = {k: v for k, v in vars(args).items() if v is not None}
+    kwargs.pop("load", None)
+    kwargs.pop("omnetpp_project", None)
+    kwargs["omnetpp_project"] = omnetpp_project
+    return kwargs
+
+def build_omnetpp_main():
+    try:
+        args = parse_build_omnetpp_arguments()
+        kwargs = process_build_omnetpp_arguments(args)
+        from opp_repl.simulation.build_omnetpp import build_omnetpp
+        result = build_omnetpp(**kwargs)
+        if result:
+            print(result)
+        sys.exit(0 if (result is None or result.is_all_results_expected()) else 1)
+    except KeyboardInterrupt:
+        _logger.warn("Program interrupted by user")
+    except Exception as e:
+        if args.handle_exception:
+            _logger.error(str(e))
+            sys.exit(1)
+        else:
+            raise e
+
 def parse_clean_project_arguments():
     description = "Cleans the specified or enclosing simulation project."
     parser = argparse.ArgumentParser(description=description)
