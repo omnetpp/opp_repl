@@ -11,6 +11,7 @@ The main entry point is :py:func:`build_omnetpp_using_tasks`.
 
 import glob
 import logging
+import multiprocessing
 import os
 import re
 import shlex
@@ -558,6 +559,62 @@ def _build_component_tasks(omnetpp_project, component, mode, makefile_inc_config
         concurrent=False,  # within a component, ordering matters (compile -> link)
         multiple_task_results_class=MultipleBuildTaskResults,
     )
+
+
+def build_omnetpp(build_mode="makefile", **kwargs):
+    """
+    Builds OMNeT++ using either :py:func:`build_omnetpp_using_makefile` or
+    :py:func:`build_omnetpp_using_tasks`.
+
+    Parameters:
+        build_mode (str):
+            Specifies the requested build mode. Valid values are
+            ``"makefile"`` and ``"task"``.
+
+        kwargs (dict):
+            Additional parameters are forwarded to the selected builder.
+    """
+    if build_mode == "makefile":
+        build_function = build_omnetpp_using_makefile
+    elif build_mode == "task":
+        build_function = build_omnetpp_using_tasks
+    else:
+        raise Exception(f"Unknown build_mode argument: {build_mode}")
+    return build_function(**kwargs)
+
+
+def build_omnetpp_using_makefile(omnetpp_project=None, mode="release", **kwargs):
+    """
+    Builds OMNeT++ by running ``make`` in the OMNeT++ root directory.
+
+    Parameters:
+        omnetpp_project (:py:class:`OmnetppProject <opp_repl.simulation.project.OmnetppProject>`):
+            The OMNeT++ project (installation) to build.
+
+        mode (str):
+            Build mode for the output binaries (``release``, ``debug``,
+            ``sanitize``, ``coverage``, ``profile``).
+    """
+    if omnetpp_project is None:
+        raise RuntimeError("omnetpp_project is required")
+    omnetpp_project.ensure_mounted()
+    omnetpp_project.ensure_configured()
+    root = omnetpp_project.get_root_path()
+    if root is None:
+        raise RuntimeError("Cannot build OMNeT++: root path is not set")
+    if omnetpp_project.is_build_up_to_date(mode=mode):
+        return
+    env = omnetpp_project.get_env()
+    args = ["make", "MODE=" + mode, "-j", str(multiprocessing.cpu_count())]
+    _logger.info("Building OMNeT++ in %s mode at %s started", mode, root)
+    if omnetpp_project.opp_env_workspace:
+        opp_env_project = omnetpp_project.opp_env_project or omnetpp_project.name
+        shell_cmd = "cd " + shlex.quote(root) + " && " + shlex.join(args)
+        args = ["opp_env", "-l", "WARN", "run", opp_env_project, "-w", omnetpp_project.opp_env_workspace, "-c", shell_cmd]
+        run_command_with_logging(args, error_message="Building OMNeT++ failed")
+    else:
+        run_command_with_logging(args, cwd=root, env=env, error_message="Building OMNeT++ failed")
+    _logger.info("Building OMNeT++ in %s mode at %s ended", mode, root)
 
 
 def build_omnetpp_using_tasks(omnetpp_project=None, mode="release", concurrent=True, **kwargs):

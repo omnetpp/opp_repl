@@ -201,29 +201,12 @@ class OmnetppProject:
             mode (str): build mode (``release``, ``debug``, ``sanitize``, ...).
             build_mode (str): ``"makefile"`` to run ``make`` (the default), or
                 ``"task"`` to drive the build via per-file
-                :py:mod:`opp_repl <opp_repl>` tasks (see
-                :py:func:`build_omnetpp_using_tasks <opp_repl.simulation.build_omnetpp.build_omnetpp_using_tasks>`).
+                :py:mod:`opp_repl <opp_repl>` tasks.
+
+        See :py:func:`build_omnetpp <opp_repl.simulation.build_omnetpp.build_omnetpp>`.
         """
-        if build_mode == "task":
-            from opp_repl.simulation.build_omnetpp import build_omnetpp_using_tasks
-            return build_omnetpp_using_tasks(omnetpp_project=self, mode=mode, **kwargs)
-        self.ensure_mounted()
-        self.ensure_configured()
-        root = self.get_root_path()
-        if root is None:
-            raise RuntimeError("Cannot build OMNeT++: root path is not set")
-        if not self.is_build_up_to_date(mode=mode):
-            env = self.get_env()
-            args = ["make", "MODE=" + mode, "-j", str(multiprocessing.cpu_count())]
-            _logger.info("Building OMNeT++ in %s mode at %s started", mode, root)
-            if self.opp_env_workspace:
-                opp_env_project = self.opp_env_project or self.name
-                shell_cmd = "cd " + shlex.quote(root) + " && " + shlex.join(args)
-                args = ["opp_env", "-l", "WARN", "run", opp_env_project, "-w", self.opp_env_workspace, "-c", shell_cmd]
-                run_command_with_logging(args, error_message="Building OMNeT++ failed")
-            else:
-                run_command_with_logging(args, cwd=root, env=env, error_message="Building OMNeT++ failed")
-            _logger.info("Building OMNeT++ in %s mode at %s ended", mode, root)
+        from opp_repl.simulation.build_omnetpp import build_omnetpp
+        return build_omnetpp(omnetpp_project=self, mode=mode, build_mode=build_mode, **kwargs)
 
     def ensure_mounted(self):
         if self._overlay is not None:
