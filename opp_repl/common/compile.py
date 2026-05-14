@@ -1,4 +1,7 @@
 import logging
+import os
+import re
+import shutil
 import signal
 import subprocess
 
@@ -8,7 +11,10 @@ __sphinx_mock__ = True # ignore this module in documentation
 
 _logger = logging.getLogger(__name__)
 
-# TODO: experimental native Python build tool
+# General task base classes parameterized by their inputs/outputs. They are
+# build-system agnostic and have no dependency on SimulationProject. Project-
+# specific behavior (deriving these parameters from a SimulationProject or an
+# OmnetppProject) lives in the build.py / build_omnetpp.py modules.
 
 class BuildTaskResult(TaskResult):
     def __init__(self, possible_results=["DONE", "SKIP", "CANCEL", "ERROR"], possible_result_colors=[COLOR_GREEN, COLOR_CYAN, COLOR_CYAN, COLOR_RED], **kwargs):
@@ -21,30 +27,33 @@ class MultipleBuildTaskResults(MultipleTaskResults):
             self.expected = True
 
 class BuildTask(Task):
-    def __init__(self, simulation_project=None, task_result_class=BuildTaskResult, **kwargs):
+    def __init__(self, working_dir=None, task_result_class=BuildTaskResult, **kwargs):
         super().__init__(task_result_class=task_result_class, **kwargs)
-        self.simulation_project = simulation_project
+        self.working_dir = working_dir
+
+    def _resolve(self, file_path):
+        if file_path is None:
+            return None
+        return file_path if os.path.isabs(file_path) else os.path.join(self.working_dir, file_path)
 
     def is_up_to_date(self):
-        def get_file_modification_time(file_path):
-            full_file_path = self.simulation_project.get_full_path(file_path)
-            return os.path.getmtime(full_file_path) if os.path.exists(full_file_path) else None
-        def get_file_modification_times(file_paths):
-            return list(map(get_file_modification_time, file_paths))
+        def get_mtime(p):
+            full = self._resolve(p)
+            return os.path.getmtime(full) if full and os.path.exists(full) else None
         input_files = self.get_input_files()
         output_files = self.get_output_files()
-        input_file_modification_times = get_file_modification_times(input_files)
-        output_file_modification_times = get_file_modification_times(output_files)
-        result = input_file_modification_times and output_file_modification_times and \
-               not list(filter(lambda timestamp: timestamp is None, input_file_modification_times)) and \
-               not list(filter(lambda timestamp: timestamp is None, output_file_modification_times)) and \
-               max(input_file_modification_times) < min(output_file_modification_times)
-        _logger.debug(f"  {self.name} is_up_to_date={result}: input_files={input_files}, output_files={output_files}, input_times={input_file_modification_times}, output_times={output_file_modification_times}")
+        input_times = list(map(get_mtime, input_files))
+        output_times = list(map(get_mtime, output_files))
+        result = input_times and output_times and \
+                 not list(filter(lambda t: t is None, input_times)) and \
+                 not list(filter(lambda t: t is None, output_times)) and \
+                 max(input_times) < min(output_times)
+        _logger.debug(f"  {self.name} is_up_to_date={result}: input_files={input_files}, output_files={output_files}, input_times={input_times}, output_times={output_times}")
         return result
 
     def run_protected(self, **kwargs):
         args = self.get_arguments()
-        subprocess_result = run_command_with_logging(args, cwd=self.simulation_project.get_full_path("."))
+        subprocess_result = run_command_with_logging(args, cwd=self.working_dir)
         if subprocess_result.returncode == signal.SIGINT.value or subprocess_result.returncode == -signal.SIGINT.value:
             return self.task_result_class(task=self, subprocess_result=subprocess_result, result="CANCEL", reason="Cancel by user")
         elif subprocess_result.returncode == 0:
@@ -53,316 +62,401 @@ class BuildTask(Task):
             error_message = subprocess_result.stderr.strip() if subprocess_result.stderr else None
             return self.task_result_class(task=self, subprocess_result=subprocess_result, result="ERROR", reason=f"Non-zero exit code: {subprocess_result.returncode}", error_message=error_message)
 
-class MsgCompileTask(BuildTask):
-    def __init__(self, simulation_project=None, file_path=None, name="MSG compile task", mode="release", makefile_inc_config=None, **kwargs):
-        super().__init__(simulation_project=simulation_project, name=name, **kwargs)
-        self.file_path = file_path
-        self.mode = mode
-        self.makefile_inc_config = makefile_inc_config
+    def _ensure_output_dirs(self):
+        for output_file in self.get_output_files():
+            full_path = self._resolve(output_file)
+            if full_path:
+                directory = os.path.dirname(full_path)
+                if directory and not os.path.exists(directory):
+                    try:
+                        os.makedirs(directory)
+                    except FileExistsError:
+                        pass
 
-    def get_action_string(self, **kwargs):
-        return "Generating"
-
-    def get_parameters_string(self, **kwargs):
-        return re.sub(r"\.msg", "_m.cc", self.file_path)
-
-    def get_output_folder(self):
-        if self.makefile_inc_config:
-            return f"out/{self.makefile_inc_config.configname}"
-        return f"out/clang-{self.mode}"
-
-    def get_input_files(self):
-        output_folder = self.get_output_folder()
-        object_path = re.sub(r"\.msg", "_m.cc", self.file_path)
-        dependency_file_path = re.sub(r"\.msg", "_m.h.d", self.file_path)
-        full_file_path = self.simulation_project.get_full_path(os.path.join(output_folder, dependency_file_path))
-        if os.path.exists(full_file_path):
-            dependency = read_dependency_file(full_file_path)
-            # KLUDGE: src folder hacked in and out
-            file_paths = dependency[re.sub(r"src/", "", object_path)]
-            return list(map(lambda file_path: self.simulation_project.get_full_path(os.path.join("src", file_path)), file_paths))
-        else:
-            return [self.file_path]
-
-    def get_output_files(self):
-        cpp_file_path = re.sub(r"\.msg", "_m.cc", self.file_path)
-        header_file_path = re.sub(r"\.msg", "_m.h", self.file_path)
-        return [f"{cpp_file_path}", f"{header_file_path}"]
-
-    def get_arguments(self):
-        cfg = self.makefile_inc_config
-        executable = cfg.msgc if cfg else "opp_msgc"
-        output_folder = self.get_output_folder()
-        header_file_path = re.sub(r"\.msg", "_m.h", self.file_path)
-        import_paths = self.simulation_project.get_effective_msg_folders()
-        include_paths = self.simulation_project.get_effective_include_folders()
-        dll_symbol = self.simulation_project.dll_symbol
-        args = [executable,
-                "--msg6",
-                "-s",
-                "_m.cc",
-                "-MD",
-                "-MP",
-                "-MF",
-                f"../{output_folder}/{header_file_path}.d",
-                *[f"-I{p}" for p in import_paths],
-                *[f"-I{p}" for p in include_paths]]
-        if dll_symbol:
-            args.append(f"-P{dll_symbol}_API")
-        args.append(self.file_path)
-        return args
 
 class CppCompileTask(BuildTask):
-    def __init__(self, simulation_project=None, file_path=None, name="C++ compile task", mode="release", makefile_inc_config=None, feature_cflags=None, **kwargs):
-        super().__init__(simulation_project=simulation_project, name=name, **kwargs)
-        self.file_path = file_path
-        self.mode = mode
-        self.makefile_inc_config = makefile_inc_config
-        self.feature_cflags = feature_cflags or []
+    """
+    Compiles a single C/C++ source file to an object file. The full toolchain
+    invocation is materialized from explicit parameters; no project context is
+    required.
+    """
+
+    def __init__(self, working_dir=None, compiler=None, cxxflags=None, cflags=None,
+                 defines=None, include_dirs=None, input_file=None, output_file=None,
+                 dependency_file=None, extra_args=None, name="C++ compile task", **kwargs):
+        super().__init__(working_dir=working_dir, name=name, **kwargs)
+        self.compiler = compiler or ["c++"]
+        self.cxxflags = cxxflags or []
+        self.cflags = cflags or []
+        self.defines = defines or []
+        self.include_dirs = include_dirs or []
+        self.input_file = input_file
+        self.output_file = output_file
+        self.dependency_file = dependency_file
+        self.extra_args = extra_args or []
 
     def get_action_string(self, **kwargs):
         return "Compiling"
 
     def get_parameters_string(self, **kwargs):
-        return self.file_path
-
-    def get_output_folder(self):
-        if self.makefile_inc_config:
-            return f"out/{self.makefile_inc_config.configname}"
-        return f"out/clang-{self.mode}"
+        return self.input_file
 
     def get_input_files(self):
-        output_folder = self.get_output_folder()
-        object_path = re.sub(r"\.cc", ".o", self.file_path)
-        dependency_file_path = re.sub(r"\.cc", ".o.d", self.file_path)
-        full_file_path = self.simulation_project.get_full_path(os.path.join(output_folder, dependency_file_path))
-        if os.path.exists(full_file_path):
-            dependency = read_dependency_file(full_file_path)
-            file_paths = dependency[os.path.join(output_folder, object_path)]
-            return list(map(lambda file_path: self.simulation_project.get_full_path(file_path), file_paths))
-        else:
-            return [self.file_path]
+        dep = self._resolve(self.dependency_file) if self.dependency_file else None
+        if dep and os.path.exists(dep):
+            dependency = read_dependency_file(dep)
+            target = self.output_file
+            if target in dependency:
+                return dependency[target]
+            if dependency:
+                return next(iter(dependency.values()))
+        return [self.input_file]
 
     def get_output_files(self):
-        output_folder = self.get_output_folder()
-        object_path = re.sub(r"\.cc", ".o", self.file_path)
-        return [f"{output_folder}/{object_path}"]
+        return [self.output_file]
 
     def get_arguments(self):
-        cfg = self.makefile_inc_config
-        output_file = self.get_output_files()[0]
-        sp = self.simulation_project
-
-        if cfg:
-            import shlex
-            # Compiler from Makefile.inc (may include ccache prefix)
-            cxx_parts = shlex.split(cfg.cxx)
-            # Base flags from Makefile.inc
-            cflags = shlex.split(cfg.cflags)
-            cxxflags = shlex.split(cfg.cxxflags)
-            import_defines = shlex.split(cfg.import_defines) if cfg.import_defines else []
-            incl_dir = cfg.omnetpp_incl_dir
-        else:
-            cxx_parts = ["clang++"]
-            cflags = ["-O3", "-DNDEBUG=1", "-MMD", "-MP", "-fPIC",
-                      "-Wno-deprecated-register", "-Wno-unused-function", "-fno-omit-frame-pointer"]
-            cxxflags = ["-std=c++20"]
-            import_defines = ["-DOMNETPPLIBS_IMPORT"]
-            incl_dir = "/usr/include"  # fallback
-
-        # Remove -MF and its argument (the .d target from Makefile.inc evaluation)
-        filtered_cflags = []
-        skip_next = False
-        for f in cflags:
-            if skip_next:
-                skip_next = False
-                continue
-            if f == "-MF":
-                skip_next = True
-                continue
-            if f.startswith("-MF"):
-                continue
-            filtered_cflags.append(f)
-        cflags = filtered_cflags
-
-        # DLL export define
-        dll_defines = []
-        if sp.dll_symbol:
-            dll_defines.append(f"-D{sp.dll_symbol}_EXPORT")
-
-        # Include paths
-        include_flags = [f"-I{incl_dir}"]
-        include_flags += [f"-I{p}" for p in sp.get_effective_include_folders()]
-        include_flags += [f"-I{p}" for p in sp.external_include_folders]
-
-        # Project defines
-        define_flags = [f"-D{d}" for d in sp.cpp_defines]
-
-        # Extra cflags from project
-        extra = sp.extra_cflags if hasattr(sp, 'extra_cflags') else []
-
-        args = [*cxx_parts, "-c",
-                *cxxflags,
-                *cflags,
-                *import_defines,
-                *dll_defines,
-                *self.feature_cflags,
-                *include_flags,
-                *define_flags,
-                *extra,
-                "-MF", f"{output_file}.d",
-                "-o", output_file,
-                self.file_path]
+        args = [*self.compiler, "-c",
+                *self.cxxflags,
+                *self.cflags,
+                *self.defines,
+                *[f"-I{p}" for p in self.include_dirs],
+                *self.extra_args]
+        if self.dependency_file:
+            args += ["-MF", self.dependency_file]
+        args += ["-o", self.output_file, self.input_file]
         return args
 
     def run_protected(self, **kwargs):
-        output_file = self.get_output_files()[0]
-        directory = os.path.dirname(self.simulation_project.get_full_path(output_file))
-        if not os.path.exists(directory):
-            try:
-                os.makedirs(directory)
-            except:
-                pass
+        self._ensure_output_dirs()
         return super().run_protected(**kwargs)
 
+
 class LinkTask(BuildTask):
-    def __init__(self, simulation_project=None, name="Link task", type="dynamic library", mode="release", compile_tasks=[], makefile_inc_config=None, feature_ldflags=None, **kwargs):
-        super().__init__(simulation_project=simulation_project, name=name, **kwargs)
+    """
+    Links a library or executable from object files. Variant is selected by
+    ``type``: ``"executable"``, ``"shared"`` (dynamic library), or ``"static"``.
+    """
+
+    def __init__(self, working_dir=None, linker=None, ldflags=None,
+                 input_files=None, output_file=None, libraries=None,
+                 library_dirs=None, rpath_dirs=None, type="shared",
+                 ar=None, ranlib=None, whole_archive_on=None, whole_archive_off=None,
+                 as_needed_off=None, extra_args=None, name="Link task", **kwargs):
+        super().__init__(working_dir=working_dir, name=name, **kwargs)
+        self.linker = linker or ["c++"]
+        self.ldflags = ldflags or []
+        self.input_files = input_files or []
+        self.output_file = output_file
+        self.libraries = libraries or []
+        self.library_dirs = library_dirs or []
+        self.rpath_dirs = rpath_dirs or []
         self.type = type
-        self.mode = mode
-        self.compile_tasks = compile_tasks
-        self.makefile_inc_config = makefile_inc_config
-        self.feature_ldflags = feature_ldflags or []
+        self.ar = ar or ["ar", "cr"]
+        self.ranlib = ranlib
+        self.whole_archive_on = whole_archive_on
+        self.whole_archive_off = whole_archive_off
+        self.as_needed_off = as_needed_off
+        self.extra_args = extra_args or []
 
     def get_action_string(self, **kwargs):
         return "Linking"
 
-    def get_output_folder(self):
-        if self.makefile_inc_config:
-            return f"out/{self.makefile_inc_config.configname}"
-        return f"out/clang-{self.mode}"
-
-    def get_output_prefix(self):
-        if self.makefile_inc_config:
-            return "" if self.type == "executable" else self.makefile_inc_config.lib_prefix
-        return "" if self.type == "executable" else "lib"
-
-    def get_output_suffix(self):
-        if self.makefile_inc_config:
-            return self.makefile_inc_config.debug_suffix
-        return "_dbg" if self.mode == "debug" else ""
-
-    def get_output_extension(self):
-        if self.makefile_inc_config:
-            if self.type == "executable":
-                return self.makefile_inc_config.exe_suffix
-            elif self.type == "dynamic library":
-                return self.makefile_inc_config.shared_lib_suffix
-            else:
-                return self.makefile_inc_config.a_lib_suffix
-        return "" if self.type == "executable" else (".so" if self.type == "dynamic library" else ".a")
-
     def get_parameters_string(self, **kwargs):
-        return self.get_output_prefix() + self.simulation_project.dynamic_libraries[0] + self.get_output_suffix() + self.get_output_extension()
+        return os.path.basename(self.output_file) if self.output_file else ""
 
     def get_input_files(self):
-        return flatten(map(lambda compile_task: compile_task.get_output_files(), self.compile_tasks))
+        return list(self.input_files)
 
     def get_output_files(self):
-        output_folder = self.get_output_folder()
-        return [os.path.join(output_folder, self.get_output_prefix() + self.simulation_project.dynamic_libraries[0] + self.get_output_suffix() + self.get_output_extension())]
+        return [self.output_file]
 
     def get_arguments(self):
-        cfg = self.makefile_inc_config
-        sp = self.simulation_project
-        input_files = self.get_input_files()
+        if self.type == "static":
+            args = [*self.ar, self.output_file, *self.input_files]
+            return args
+        args = [*self.linker,
+                *self.ldflags,
+                *[f"-L{p}" for p in self.library_dirs],
+                "-o", self.output_file,
+                *self.input_files,
+                *[f"-Wl,-rpath,{p}" for p in self.rpath_dirs],
+                *self.libraries,
+                *self.extra_args]
+        return args
 
-        # Resolve used project library paths
-        from opp_repl.simulation.project import get_simulation_project
-        used_lib_paths = []
-        used_lib_names = []
-        for used_project_name in sp.used_projects:
-            used_proj = get_simulation_project(used_project_name, None)
-            lib_path = used_proj.get_library_folder_full_path()
-            if lib_path:
-                used_lib_paths.append(lib_path)
-            if used_proj.dynamic_libraries:
-                used_lib_names.append(used_proj.dynamic_libraries[0])
+    def run_protected(self, **kwargs):
+        self._ensure_output_dirs()
+        result = super().run_protected(**kwargs)
+        if result.result == "DONE" and self.type == "static" and self.ranlib:
+            ranlib_cmd = self.ranlib if isinstance(self.ranlib, list) else [self.ranlib]
+            subprocess.run([*ranlib_cmd, self.output_file], cwd=self.working_dir)
+        return result
 
-        extra_ldflags = sp.extra_ldflags if hasattr(sp, 'extra_ldflags') else []
 
-        if self.type == "executable":
-            if cfg:
-                import shlex
-                ldflags = shlex.split(cfg.ldflags)
-                all_env_libs = shlex.split(cfg.all_env_libs)
-                kernel_libs = shlex.split(cfg.kernel_libs)
-                sys_libs = shlex.split(cfg.sys_libs)
-                oppmain_lib = shlex.split(cfg.oppmain_lib)
-                cxx_parts = shlex.split(cfg.cxx)
-            else:
-                ldflags = ["-fuse-ld=lld", "-Wl,--export-dynamic"]
-                all_env_libs = ["-loppcmdenv", "-loppenvir", "-loppqtenv", "-loppenvir", "-lopplayout"]
-                kernel_libs = ["-loppsim"]
-                sys_libs = ["-lstdc++"]
-                oppmain_lib = ["-loppmain"]
-                cxx_parts = ["clang++"]
+class MsgCompileTask(BuildTask):
+    """
+    Runs ``opp_msgc`` on a ``.msg`` file to generate ``_m.cc`` and ``_m.h``.
+    """
 
-            return [*cxx_parts,
-                    *ldflags,
-                    *[f"-L{p}" for p in used_lib_paths],
-                    *[f"-L{p}" for p in sp.external_library_folders],
-                    "-o", self.get_output_files()[0],
-                    *input_files,
-                    *[f"-Wl,-rpath,{p}" for p in used_lib_paths],
-                    *oppmain_lib,
-                    *all_env_libs,
-                    *kernel_libs,
-                    *[f"-l{n}" for n in used_lib_names],
-                    *[f"-l{lib}" for lib in sp.external_libraries],
-                    *self.feature_ldflags,
-                    *extra_ldflags,
-                    *sys_libs]
+    def __init__(self, working_dir=None, msgc="opp_msgc", flags=None,
+                 import_paths=None, include_paths=None, dll_symbol=None,
+                 input_file=None, output_files=None, dependency_file=None,
+                 name="MSG compile task", **kwargs):
+        super().__init__(working_dir=working_dir, name=name, **kwargs)
+        self.msgc = msgc
+        self.flags = flags if flags is not None else ["--msg6", "-s", "_m.cc"]
+        self.import_paths = import_paths or []
+        self.include_paths = include_paths or []
+        self.dll_symbol = dll_symbol
+        self.input_file = input_file
+        self.output_files = output_files or []
+        self.dependency_file = dependency_file
 
-        elif self.type == "dynamic library":
-            if cfg:
-                import shlex
-                shlib_ld_parts = shlex.split(cfg.shlib_ld)
-                ldflags = shlex.split(cfg.ldflags)
-                kernel_libs = shlex.split(cfg.kernel_libs)
-                sys_libs = shlex.split(cfg.sys_libs)
-                as_needed_off = cfg.as_needed_off
-                whole_archive_on = cfg.whole_archive_on
-                whole_archive_off = cfg.whole_archive_off
-            else:
-                shlib_ld_parts = ["clang++", "-shared", "-fPIC"]
-                ldflags = ["-fuse-ld=lld", "-Wl,--export-dynamic"]
-                kernel_libs = ["-loppsim"]
-                sys_libs = ["-lstdc++"]
-                as_needed_off = "-Wl,--no-as-needed"
-                whole_archive_on = "-Wl,--whole-archive"
-                whole_archive_off = "-Wl,--no-whole-archive"
+    def get_action_string(self, **kwargs):
+        return "Generating"
 
-            return [*shlib_ld_parts,
-                    *ldflags,
-                    *[f"-L{p}" for p in used_lib_paths],
-                    *[f"-L{p}" for p in sp.external_library_folders],
-                    "-o", self.get_output_files()[0],
-                    *input_files,
-                    as_needed_off,
-                    whole_archive_on,
-                    whole_archive_off,
-                    *[f"-Wl,-rpath,{p}" for p in used_lib_paths],
-                    "-loppenvir" + (cfg.debug_suffix if cfg else ""),
-                    *kernel_libs,
-                    *[f"-l{n}" for n in used_lib_names],
-                    *[f"-l{lib}" for lib in sp.external_libraries],
-                    *self.feature_ldflags,
-                    *extra_ldflags,
-                    *sys_libs]
+    def get_parameters_string(self, **kwargs):
+        return self.output_files[0] if self.output_files else self.input_file
 
-        else:
-            ar_cr = cfg.ar_cr if cfg else "ar cr"
-            return [*ar_cr.split(),
-                    self.get_output_files()[0],
-                    *input_files]
+    def get_input_files(self):
+        return [self.input_file]
+
+    def get_output_files(self):
+        return list(self.output_files)
+
+    def get_arguments(self):
+        args = [self.msgc, *self.flags]
+        if self.dependency_file:
+            args += ["-MD", "-MP", "-MF", self.dependency_file]
+        args += [f"-I{p}" for p in self.import_paths]
+        args += [f"-I{p}" for p in self.include_paths]
+        if self.dll_symbol:
+            args.append(f"-P{self.dll_symbol}_API")
+        args.append(self.input_file)
+        return args
+
+
+class CopyBinaryTask(BuildTask):
+    """
+    Copies a single file from ``source_file`` to ``target_file``. Optionally
+    runs ``postprocess_command`` (a list) on the destination afterwards.
+    """
+
+    def __init__(self, working_dir=None, source_file=None, target_file=None,
+                 postprocess_command=None, name="copy task", **kwargs):
+        super().__init__(working_dir=working_dir, name=name, **kwargs)
+        self.source_file = source_file
+        self.target_file = target_file
+        self.postprocess_command = postprocess_command
+
+    def get_action_string(self, **kwargs):
+        return "Copying"
+
+    def get_parameters_string(self, **kwargs):
+        return self.target_file
+
+    def get_input_files(self):
+        return [self.source_file]
+
+    def get_output_files(self):
+        return [self.target_file]
+
+    def run_protected(self, **kwargs):
+        target_full = self._resolve(self.target_file)
+        source_full = self._resolve(self.source_file)
+        os.makedirs(os.path.dirname(target_full), exist_ok=True)
+        if os.path.exists(target_full):
+            os.remove(target_full)
+        shutil.copy(source_full, target_full)
+        if self.postprocess_command:
+            subprocess.run([*self.postprocess_command, target_full], cwd=self.working_dir)
+        return self.task_result_class(task=self, result="DONE")
+
+
+class YaccTask(BuildTask):
+    """Runs a yacc/bison generator: input ``.y`` -> ``.cc`` / ``.h``."""
+
+    def __init__(self, working_dir=None, yacc="bison", flags=None,
+                 input_file=None, output_files=None, name="YACC task", **kwargs):
+        super().__init__(working_dir=working_dir, name=name, **kwargs)
+        self.yacc = yacc
+        self.flags = flags or []
+        self.input_file = input_file
+        self.output_files = output_files or []
+
+    def get_action_string(self, **kwargs):
+        return "Generating"
+
+    def get_parameters_string(self, **kwargs):
+        return self.output_files[0] if self.output_files else self.input_file
+
+    def get_input_files(self):
+        return [self.input_file]
+
+    def get_output_files(self):
+        return list(self.output_files)
+
+    def get_arguments(self):
+        return [self.yacc, *self.flags, self.input_file]
+
+    def run_protected(self, **kwargs):
+        self._ensure_output_dirs()
+        return super().run_protected(**kwargs)
+
+
+class LexTask(BuildTask):
+    """Runs a lex/flex generator: input ``.lex`` -> ``.cc`` / ``.h``."""
+
+    def __init__(self, working_dir=None, lex="flex", flags=None,
+                 input_file=None, output_files=None, name="LEX task", **kwargs):
+        super().__init__(working_dir=working_dir, name=name, **kwargs)
+        self.lex = lex
+        self.flags = flags or []
+        self.input_file = input_file
+        self.output_files = output_files or []
+
+    def get_action_string(self, **kwargs):
+        return "Generating"
+
+    def get_parameters_string(self, **kwargs):
+        return self.output_files[0] if self.output_files else self.input_file
+
+    def get_input_files(self):
+        return [self.input_file]
+
+    def get_output_files(self):
+        return list(self.output_files)
+
+    def get_arguments(self):
+        return [self.lex, *self.flags, self.input_file]
+
+    def run_protected(self, **kwargs):
+        self._ensure_output_dirs()
+        return super().run_protected(**kwargs)
+
+
+class PerlGenerateTask(BuildTask):
+    """Runs a Perl generator script that produces one or more files."""
+
+    def __init__(self, working_dir=None, perl="perl", script=None, script_args=None,
+                 input_files=None, output_files=None, name="Perl generate task", **kwargs):
+        super().__init__(working_dir=working_dir, name=name, **kwargs)
+        self.perl = perl
+        self.script = script
+        self.script_args = script_args or []
+        self.declared_input_files = input_files or ([script] if script else [])
+        self.output_files = output_files or []
+
+    def get_action_string(self, **kwargs):
+        return "Generating"
+
+    def get_parameters_string(self, **kwargs):
+        return self.output_files[0] if self.output_files else (self.script or "")
+
+    def get_input_files(self):
+        return list(self.declared_input_files)
+
+    def get_output_files(self):
+        return list(self.output_files)
+
+    def get_arguments(self):
+        return [self.perl, self.script, *self.script_args]
+
+    def run_protected(self, **kwargs):
+        self._ensure_output_dirs()
+        return super().run_protected(**kwargs)
+
+
+class MocTask(BuildTask):
+    """Runs Qt ``moc`` on a header: input ``.h`` -> ``moc_*.cpp`` (or as configured)."""
+
+    def __init__(self, working_dir=None, moc="moc", defines=None, flags=None,
+                 input_file=None, output_file=None, name="MOC task", **kwargs):
+        super().__init__(working_dir=working_dir, name=name, **kwargs)
+        self.moc = moc
+        self.defines = defines or []
+        self.flags = flags or []
+        self.input_file = input_file
+        self.output_file = output_file
+
+    def get_action_string(self, **kwargs):
+        return "MOC"
+
+    def get_parameters_string(self, **kwargs):
+        return self.output_file
+
+    def get_input_files(self):
+        return [self.input_file]
+
+    def get_output_files(self):
+        return [self.output_file]
+
+    def get_arguments(self):
+        return [self.moc, *self.defines, *self.flags, "-o", self.output_file, self.input_file]
+
+    def run_protected(self, **kwargs):
+        self._ensure_output_dirs()
+        return super().run_protected(**kwargs)
+
+
+class UicTask(BuildTask):
+    """Runs Qt ``uic`` on a ``.ui`` file to generate a header."""
+
+    def __init__(self, working_dir=None, uic="uic", flags=None,
+                 input_file=None, output_file=None, name="UIC task", **kwargs):
+        super().__init__(working_dir=working_dir, name=name, **kwargs)
+        self.uic = uic
+        self.flags = flags or []
+        self.input_file = input_file
+        self.output_file = output_file
+
+    def get_action_string(self, **kwargs):
+        return "UIC"
+
+    def get_parameters_string(self, **kwargs):
+        return self.output_file
+
+    def get_input_files(self):
+        return [self.input_file]
+
+    def get_output_files(self):
+        return [self.output_file]
+
+    def get_arguments(self):
+        return [self.uic, *self.flags, "-o", self.output_file, self.input_file]
+
+    def run_protected(self, **kwargs):
+        self._ensure_output_dirs()
+        return super().run_protected(**kwargs)
+
+
+class RccTask(BuildTask):
+    """Runs Qt ``rcc`` on a ``.qrc`` file to generate a C++ source."""
+
+    def __init__(self, working_dir=None, rcc="rcc", flags=None,
+                 input_file=None, output_file=None, name="RCC task", **kwargs):
+        super().__init__(working_dir=working_dir, name=name, **kwargs)
+        self.rcc = rcc
+        self.flags = flags or []
+        self.input_file = input_file
+        self.output_file = output_file
+
+    def get_action_string(self, **kwargs):
+        return "RCC"
+
+    def get_parameters_string(self, **kwargs):
+        return self.output_file
+
+    def get_input_files(self):
+        return [self.input_file]
+
+    def get_output_files(self):
+        return [self.output_file]
+
+    def get_arguments(self):
+        return [self.rcc, *self.flags, "-o", self.output_file, self.input_file]
+
+    def run_protected(self, **kwargs):
+        self._ensure_output_dirs()
+        return super().run_protected(**kwargs)
