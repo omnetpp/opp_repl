@@ -193,7 +193,8 @@ def build_project_main():
     try:
         args = parse_build_project_arguments()
         kwargs = process_build_project_arguments(args)
-        result = build_project(**kwargs)
+        simulation_project = kwargs.pop("simulation_project")
+        result = simulation_project.build(**kwargs)
         if result:
             print(result)
         sys.exit(0 if (result is None or result.is_all_results_expected()) else 1)
@@ -258,8 +259,8 @@ def build_omnetpp_main():
     try:
         args = parse_build_omnetpp_arguments()
         kwargs = process_build_omnetpp_arguments(args)
-        from opp_repl.simulation.build_omnetpp import build_omnetpp
-        result = build_omnetpp(**kwargs)
+        omnetpp_project = kwargs.pop("omnetpp_project")
+        result = omnetpp_project.build(**kwargs)
         if result:
             print(result)
         sys.exit(0 if (result is None or result.is_all_results_expected()) else 1)
@@ -304,8 +305,8 @@ def clean_omnetpp_main():
     try:
         args = parse_clean_omnetpp_arguments()
         kwargs = process_clean_omnetpp_arguments(args)
-        from opp_repl.simulation.build_omnetpp import clean_omnetpp
-        result = clean_omnetpp(**kwargs)
+        omnetpp_project = kwargs.pop("omnetpp_project")
+        result = omnetpp_project.clean(**kwargs)
         if result:
             print(result)
         sys.exit(0)
@@ -349,7 +350,8 @@ def clean_project_main():
     try:
         args = parse_clean_project_arguments()
         kwargs = process_clean_project_arguments(args)
-        result = clean_project(**kwargs)
+        simulation_project = kwargs.pop("simulation_project")
+        result = simulation_project.clean(**kwargs)
         if result:
             print(result)
         sys.exit(0)

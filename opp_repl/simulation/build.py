@@ -110,6 +110,10 @@ def build_project(build_mode="makefile", **kwargs):
     """
     Builds all output files of a simulation project using either :py:func:`build_project_using_makefile` or :py:func:`build_project_using_tasks`.
 
+    This is the non-recursive build primitive — it builds the named simulation
+    project only. To also build its OMNeT++ installation and used projects,
+    use :py:meth:`SimulationProject.build <opp_repl.simulation.project.SimulationProject.build>`.
+
     Parameters:
         build_mode (string):
             Specifies the requested build mode. Valid values are "makefile" and "task".

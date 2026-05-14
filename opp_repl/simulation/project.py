@@ -683,20 +683,21 @@ class SimulationProject:
             msg_files = msg_files + list(map(lambda file_path: self.get_relative_path(file_path), file_paths))
         return msg_files
 
-    def build(self, mode="release", recursive=True, **kwargs):
+    def build(self, mode="release", recursive=True, build_mode="makefile", **kwargs):
         self.ensure_mounted()
         if recursive:
-            opp = self.get_omnetpp_project()
             if self.used_projects:
                 ws = getattr(self, '_workspace', None) or get_default_simulation_workspace()
                 for used_project_name in self.used_projects:
                     used_project = ws.get_simulation_project(used_project_name, None)
                     if used_project is not None:
-                        used_project.build(mode=mode, recursive=recursive, **kwargs)
-            elif opp is not None:
-                opp.build(mode=mode)
+                        used_project.build(mode=mode, recursive=recursive, build_mode=build_mode, **kwargs)
+            else:
+                opp = self.get_omnetpp_project()
+                if opp is not None:
+                    opp.build(mode=mode, build_mode=build_mode)
         import opp_repl.simulation.build
-        opp_repl.simulation.build.build_project(simulation_project=self, mode=mode, **kwargs)
+        return opp_repl.simulation.build.build_project(simulation_project=self, mode=mode, build_mode=build_mode, **kwargs)
 
     def ensure_mounted(self):
         if self._overlay is not None:
@@ -711,22 +712,23 @@ class SimulationProject:
             return self._overlay.is_mounted()
         return False
 
-    def clean(self, mode="release", recursive=True, **kwargs):
+    def clean(self, mode="release", recursive=True, build_mode="makefile", **kwargs):
         if recursive:
-            opp = self.get_omnetpp_project()
             if self.used_projects:
                 ws = getattr(self, '_workspace', None) or get_default_simulation_workspace()
                 for used_project_name in self.used_projects:
                     used_project = ws.get_simulation_project(used_project_name, None)
                     if used_project is not None:
-                        used_project.clean(mode=mode, recursive=recursive, **kwargs)
-            elif opp is not None:
-                opp.clean(mode=mode)
+                        used_project.clean(mode=mode, recursive=recursive, build_mode=build_mode, **kwargs)
+            else:
+                opp = self.get_omnetpp_project()
+                if opp is not None:
+                    opp.clean(mode=mode, build_mode=build_mode)
         if self._overlay is not None:
             self._overlay.clean()
         else:
             import opp_repl.simulation.build
-            opp_repl.simulation.build.clean_project(simulation_project=self, mode=mode, **kwargs)
+            opp_repl.simulation.build.clean_project(simulation_project=self, mode=mode, build_mode=build_mode, **kwargs)
 
     def get_num_runs_in_config(self, ini_path, config):
         num_runs_fast_regex = re.compile(r"(?m).*^\s*(include\s+.*\.ini|repeat\s*=\s*[0-9]+|.*\$\{.*\})")
