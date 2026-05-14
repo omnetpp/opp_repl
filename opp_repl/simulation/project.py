@@ -193,7 +193,20 @@ class OmnetppProject:
             result = subprocess.run(args, cwd=root, env=env, capture_output=True)
         return result.returncode == 0
 
-    def build(self, mode="release"):
+    def build(self, mode="release", build_mode="makefile", **kwargs):
+        """
+        Build OMNeT++.
+
+        Parameters:
+            mode (str): build mode (``release``, ``debug``, ``sanitize``, ...).
+            build_mode (str): ``"makefile"`` to run ``make`` (the default), or
+                ``"task"`` to drive the build via per-file
+                :py:mod:`opp_repl <opp_repl>` tasks (see
+                :py:func:`build_omnetpp_using_tasks <opp_repl.simulation.build_omnetpp.build_omnetpp_using_tasks>`).
+        """
+        if build_mode == "task":
+            from opp_repl.simulation.build_omnetpp import build_omnetpp_using_tasks
+            return build_omnetpp_using_tasks(omnetpp_project=self, mode=mode, **kwargs)
         self.ensure_mounted()
         self.ensure_configured()
         root = self.get_root_path()
