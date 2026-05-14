@@ -61,14 +61,17 @@ class OmnetppProjectCppCompileTask(CppCompileTask):
         cxxflags = [] if is_c else _split(cfg.cxxflags) if cfg else []
 
         omnetpp_root = omnetpp_project.get_root_path()
+        include_dir = cfg.omnetpp_incl_dir if cfg else os.path.join(omnetpp_root, "include")
+        src_dir = cfg.omnetpp_src_dir if (cfg and cfg.omnetpp_src_dir) else os.path.join(omnetpp_root, "src")
         include_dirs = [
-            cfg.omnetpp_incl_dir if cfg else os.path.join(omnetpp_root, "include"),
-            cfg.omnetpp_src_dir if (cfg and cfg.omnetpp_src_dir) else os.path.join(omnetpp_root, "src"),
+            os.path.join(omnetpp_root, "src", component),  # component-local headers (for <yxml.h>, ui_*.h, moc_*.cpp)
+            include_dir,
+            src_dir,
+            os.path.join(include_dir, "omnetpp"),  # for generated msg headers (sim_std_m.h, etc.)
         ]
 
         output_folder = _omnetpp_output_folder(cfg, component, mode)
-        ext = ".c" if is_c else ".cc"
-        obj_name = re.sub(rf"\{ext}$", ".o", os.path.basename(source_file))
+        obj_name = re.sub(r"\.(cc|cpp|c\+\+|cxx|c)$", ".o", os.path.basename(source_file))
         output_file = os.path.join(output_folder, obj_name)
         dependency_file = f"{output_file}.d"
 
@@ -134,7 +137,7 @@ class OmnetppProjectLinkTask(LinkTask):
             linker = _split(cfg.cxx) if cfg else ["c++"]
             ldflags = _split(cfg.ldflags) if cfg else []
             output_file = os.path.join(bin_dir, library_name + debug_suffix + exe_ext)
-            libraries = [*[f"-l{lib}" for lib in (extra_libraries or [])], *sys_libs]
+            libraries = [*(extra_libraries or []), *sys_libs]
             super().__init__(
                 working_dir=omnetpp_root,
                 linker=linker,
@@ -151,7 +154,7 @@ class OmnetppProjectLinkTask(LinkTask):
             linker = _split(cfg.shlib_ld) if cfg else ["c++", "-shared", "-fPIC"]
             ldflags = _split(cfg.ldflags) if cfg else []
             output_file = os.path.join(lib_dir, lib_prefix + library_name + debug_suffix + shared_ext)
-            libraries = [*[f"-l{lib}" for lib in (extra_libraries or [])], *sys_libs]
+            libraries = [*(extra_libraries or []), *sys_libs]
             super().__init__(
                 working_dir=omnetpp_root,
                 linker=linker,
@@ -201,67 +204,137 @@ class OmnetppProjectCopyBinaryTask(CopyBinaryTask):
 #   define:           the EXPORT macro to pass when building the shared lib
 #   subdirs:          additional source subdirectories to include
 #   excludes:         basenames of .cc files to exclude (tool main files)
-#   utility_scripts:  for the "utils" component, list of files to copy to bin/
 #   conditional_var:  None or makefile_inc_config attr name (e.g. "with_qtenv")
 #                     to gate the whole component
 #   c_files:          .c (not .cc) files to compile
-#
-# Tool executables (e.g. opp_nedtool from nedxml) are linked from a single
-# .cc file plus the component's library — that mapping is in `tools` below.
+#   tools:            executables built from a single .cc plus the component lib
+#   extra_libraries:  additional libraries built within this component
+#                     (e.g. ``oppmain`` in envir)
+#   generators:       list of generator specs that run before compile. Each is
+#                     a dict with ``kind`` in ("yacc", "lex", "perl", "msgc",
+#                     "stringify", "script") plus tool-specific fields.
+#                     The special string ``"qtenv-dynamic"`` triggers globbing
+#                     of *.ui / *.h / *.qrc for moc/uic/rcc.
+#   extra_compile_sources:
+#                     generated .cc files (component-relative basenames) to be
+#                     added to the compile list — must match what `generators`
+#                     produces.
 OMNETPP_COMPONENTS = [
     {
         "name": "utils",
         "library_name": None,
         "define": None,
-        "subdirs": [],
-        "excludes": [],
-        "utility_scripts": [],  # populated dynamically by globbing src/utils
         "c_files": [],
     },
     {
         "name": "common",
         "library_name": "oppcommon",
         "define": "COMMON_EXPORT",
-        "subdirs": [],
-        "excludes": [],
         "c_files": ["sqlite3.c", "yxml.c"],
+        "generators": [
+            {"kind": "yacc", "input": "expression.y",
+             "outputs": ["expression.tab.cc", "expression.tab.h"],
+             "flags": ["-o", "expression.tab.cc", "--defines=expression.tab.h",
+                       "-p", "expressionyy", "-d"]},
+            {"kind": "lex", "input": "expression.lex",
+             "outputs": ["expression.lex.cc", "expression.lex.h"],
+             "flags": ["-oexpression.lex.cc", "--header-file=expression.lex.h",
+                       "-Pexpressionyy"]},
+            {"kind": "yacc", "input": "matchexpression.y",
+             "outputs": ["matchexpression.tab.cc", "matchexpression.tab.h"],
+             "flags": ["-o", "matchexpression.tab.cc", "--no-lines",
+                       "--defines=matchexpression.tab.h",
+                       "-p", "matchexpressionyy", "-d"]},
+        ],
+        "extra_compile_sources": [
+            "expression.tab.cc", "expression.lex.cc", "matchexpression.tab.cc",
+        ],
     },
     {
         "name": "nedxml",
         "library_name": "oppnedxml",
         "define": "NEDXML_EXPORT",
-        "subdirs": [],
         "excludes": ["opp_nedtool.cc", "opp_msgtool.cc"],
         "c_files": [],
         "tools": [
             {"basename": "opp_nedtool", "source": "opp_nedtool.cc"},
             {"basename": "opp_msgtool", "source": "opp_msgtool.cc"},
         ],
+        "generators": [
+            {"kind": "perl", "script": "dtdclassgen.pl",
+             "dtd_kind": "ned",
+             "outputs": [
+                 "nedelements.cc", "nedelements.h",
+                 "neddtdvalidator.cc", "neddtdvalidator.h",
+                 "nedvalidator.cc", "nedvalidator.h",
+             ]},
+            {"kind": "perl", "script": "dtdclassgen.pl",
+             "dtd_kind": "msg",
+             "outputs": [
+                 "msgelements.cc", "msgelements.h",
+                 "msgdtdvalidator.cc", "msgdtdvalidator.h",
+                 "msgvalidator.cc", "msgvalidator.h",
+             ]},
+            {"kind": "yacc", "input": "ned2.y",
+             "outputs": ["ned2.tab.cc", "ned2.tab.h"],
+             "flags": ["-o", "ned2.tab.cc", "--defines=ned2.tab.h",
+                       "-p", "ned2yy", "-d"]},
+            {"kind": "lex", "input": "ned2.lex",
+             "outputs": ["ned2.lex.cc", "ned2.lex.h"],
+             "flags": ["-oned2.lex.cc", "--header-file=ned2.lex.h", "-Pned2yy"]},
+            {"kind": "yacc", "input": "msg2.y",
+             "outputs": ["msg2.tab.cc", "msg2.tab.h"],
+             "flags": ["-o", "msg2.tab.cc", "--defines=msg2.tab.h",
+                       "-p", "msg2yy", "-d"]},
+            {"kind": "lex", "input": "msg2.lex",
+             "outputs": ["msg2.lex.cc", "msg2.lex.h"],
+             "flags": ["-omsg2.lex.cc", "--header-file=msg2.lex.h", "-Pmsg2yy"]},
+            {"kind": "stringify", "input": "../sim/sim_std.msg",
+             "output": "sim_std_msg.cc",
+             "varname": "SIM_STD_DEFINITIONS",
+             "namespace": "omnetpp::nedxml"},
+            {"kind": "copy_script", "source": "opp_msgc", "target_basename": "opp_msgc"},
+        ],
+        "extra_compile_sources": [
+            "nedelements.cc", "neddtdvalidator.cc", "nedvalidator.cc",
+            "msgelements.cc", "msgdtdvalidator.cc", "msgvalidator.cc",
+            "ned2.tab.cc", "ned2.lex.cc",
+            "msg2.tab.cc", "msg2.lex.cc",
+            "sim_std_msg.cc",
+        ],
     },
     {
         "name": "layout",
         "library_name": "opplayout",
         "define": "LAYOUT_EXPORT",
-        "subdirs": [],
-        "excludes": [],
         "c_files": [],
     },
     {
         "name": "eventlog",
         "library_name": "oppeventlog",
         "define": "EVENTLOG_EXPORT",
-        "subdirs": [],
         "excludes": ["opp_eventlogtool.cc"],
         "c_files": [],
         "tools": [
             {"basename": "opp_eventlogtool", "source": "opp_eventlogtool.cc"},
+        ],
+        "generators": [
+            {"kind": "perl", "script": "eventlogentries.pl",
+             "extra_inputs": ["eventlogentries.txt"],
+             "outputs": [
+                 "eventlogentries.csv",
+                 "eventlogentries.h", "eventlogentries.cc",
+                 "eventlogentryfactory.cc",
+             ]},
+        ],
+        "extra_compile_sources": [
+            "eventlogentries.cc", "eventlogentryfactory.cc",
         ],
     },
     {
         "name": "scave",
         "library_name": "oppscave",
         "define": "SCAVE_EXPORT",
-        "subdirs": [],
         "excludes": ["opp_scavetool.cc"],
         "c_files": [],
         "tools": [
@@ -272,15 +345,18 @@ OMNETPP_COMPONENTS = [
         "name": "sim",
         "library_name": "oppsim",
         "define": "SIM_EXPORT",
-        "subdirs": [],  # netbuilder, parsim added conditionally
-        "excludes": [],
         "c_files": [],
+        "generators": [
+            {"kind": "msgc", "input": "sim_std.msg",
+             "outputs": ["sim_std_m.cc", "sim_std_m.h"],
+             "install_header_to_include_dir": True},
+        ],
+        "extra_compile_sources": ["sim_std_m.cc"],
     },
     {
         "name": "envir",
         "library_name": "oppenvir",
         "define": "ENVIR_EXPORT",
-        "subdirs": [],
         "excludes": ["main.cc"],
         "c_files": [],
         "extra_libraries": [
@@ -289,25 +365,296 @@ OMNETPP_COMPONENTS = [
         "tools": [
             {"basename": "opp_run", "source": "main.cc", "link_with": "oppmain"},
         ],
+        "generators": [
+            {"kind": "perl", "script": "eventlogwriter.pl",
+             "extra_inputs": ["../eventlog/eventlogentries.txt"],
+             "outputs": ["eventlogwriter.cc", "eventlogwriter.h"]},
+        ],
+        "extra_compile_sources": ["eventlogwriter.cc"],
     },
     {
         "name": "cmdenv",
         "library_name": "oppcmdenv",
         "define": "CMDENV_EXPORT",
-        "subdirs": [],
-        "excludes": [],
         "c_files": [],
     },
     {
         "name": "qtenv",
         "library_name": "oppqtenv",
         "define": "QTENV_EXPORT",
-        "subdirs": [],
-        "excludes": [],
         "c_files": [],
         "conditional_var": "with_qtenv",
+        "generators": "qtenv-dynamic",  # handled specially in _build_component_tasks
     },
 ]
+
+
+# ---------------------------------------------------------------------------
+# Generator-task helpers
+# ---------------------------------------------------------------------------
+
+class _StringifyTask(BuildTask):
+    """
+    Wraps a text file into a C++ source by embedding it as a string literal
+    in a named namespace. Mirrors the ``STRINGIFY`` recipe used by
+    ``src/nedxml`` to embed ``sim_std.msg`` as a build-time string.
+    """
+
+    def __init__(self, working_dir=None, input_file=None, output_file=None,
+                 namespace="", varname="", name="STRINGIFY", **kwargs):
+        super().__init__(working_dir=working_dir, name=name, **kwargs)
+        self.input_file = input_file
+        self.output_file = output_file
+        self.namespace = namespace
+        self.varname = varname
+
+    def get_action_string(self, **kwargs):
+        return "Stringify"
+
+    def get_parameters_string(self, **kwargs):
+        return self.output_file
+
+    def get_input_files(self):
+        return [self.input_file]
+
+    def get_output_files(self):
+        return [self.output_file]
+
+    def run_protected(self, **kwargs):
+        in_path = self._resolve(self.input_file)
+        out_path = self._resolve(self.output_file)
+        with open(in_path, "r") as f:
+            content = f.read()
+        ns_open = " ".join(f"namespace {p} {{" for p in self.namespace.split("::") if p)
+        ns_close = " ".join("}" for p in self.namespace.split("::") if p)
+        body = (
+            "//\n// THIS IS A GENERATED FILE, DO NOT EDIT!\n//\n\n"
+            f"{ns_open} const char *{self.varname} = R\"ENDMARK(\n"
+            f"{content}\n)ENDMARK\"; {ns_close}\n"
+        )
+        os.makedirs(os.path.dirname(out_path), exist_ok=True)
+        with open(out_path, "w") as f:
+            f.write(body)
+        return self.task_result_class(task=self, result="DONE")
+
+
+class _MsgcWithHeaderInstallTask(MsgCompileTask):
+    """
+    Runs ``opp_msgc`` and then moves the produced ``*_m.h`` into
+    ``$(OMNETPP_INCL_DIR)/omnetpp/`` — needed for ``sim/sim_std.msg``.
+    """
+
+    def __init__(self, header_install_path=None, header_local_name=None, **kwargs):
+        super().__init__(**kwargs)
+        self.header_install_path = header_install_path
+        self.header_local_name = header_local_name
+
+    def get_output_files(self):
+        outs = list(super().get_output_files())
+        # Replace the local header path with the installed location so that
+        # is_up_to_date checks see the canonical output.
+        return [self.header_install_path if o == self.header_local_name else o
+                for o in outs]
+
+    def run_protected(self, **kwargs):
+        result = super().run_protected(**kwargs)
+        if result.result != "DONE":
+            return result
+        local_header = self._resolve(self.header_local_name)
+        target_header = self._resolve(self.header_install_path)
+        if os.path.exists(local_header):
+            os.makedirs(os.path.dirname(target_header), exist_ok=True)
+            import shutil
+            if os.path.exists(target_header):
+                os.remove(target_header)
+            shutil.move(local_header, target_header)
+        return result
+
+
+def _component_src_dir(omnetpp_root, component_name):
+    return os.path.join(omnetpp_root, "src", component_name)
+
+
+def _build_generator_tasks(omnetpp_project, component, cfg, mode):
+    """
+    Return a list of generator tasks for one component (yacc/lex/perl/msgc/
+    stringify/script-copy). Component sources are generated in-place under
+    ``src/<component>/`` so subsequent compile tasks pick them up.
+    """
+    name = component["name"]
+    omnetpp_root = omnetpp_project.get_root_path()
+    src_dir = _component_src_dir(omnetpp_root, name)
+    gens = component.get("generators")
+    if not gens:
+        return []
+    if gens == "qtenv-dynamic":
+        return _build_qtenv_generator_tasks(omnetpp_project, cfg)
+
+    tasks = []
+    for spec in gens:
+        kind = spec["kind"]
+        if kind == "yacc":
+            yacc = cfg.yacc.strip() if cfg and cfg.yacc else "bison"
+            tasks.append(YaccTask(
+                working_dir=src_dir,
+                yacc=yacc,
+                flags=list(spec.get("flags", [])),
+                input_file=spec["input"],
+                output_files=list(spec["outputs"]),
+                name=f"{name}: {os.path.basename(spec['input'])}",
+            ))
+        elif kind == "lex":
+            lex = cfg.lex.strip() if cfg and cfg.lex else "flex"
+            tasks.append(LexTask(
+                working_dir=src_dir,
+                lex=lex,
+                flags=list(spec.get("flags", [])),
+                input_file=spec["input"],
+                output_files=list(spec["outputs"]),
+                name=f"{name}: {os.path.basename(spec['input'])}",
+            ))
+        elif kind == "perl":
+            perl = cfg.perl.strip() if cfg and cfg.perl else "perl"
+            extra_inputs = list(spec.get("extra_inputs", []))
+            script_args = list(spec.get("script_args", []))
+            if "dtd_kind" in spec:
+                # dtdclassgen.pl takes a DTD path + a kind tag
+                dtd_kind = spec["dtd_kind"]
+                dtd_path = os.path.join(omnetpp_root, "doc", "etc", f"{dtd_kind}2.dtd")
+                script_args = [dtd_path, dtd_kind]
+                extra_inputs.append(dtd_path)
+            tasks.append(PerlGenerateTask(
+                working_dir=src_dir,
+                perl=perl,
+                script=spec["script"],
+                script_args=script_args,
+                input_files=[spec["script"], *extra_inputs],
+                output_files=list(spec["outputs"]),
+                name=f"{name}: {spec['script']}",
+            ))
+        elif kind == "msgc":
+            msgc_path = os.path.join(omnetpp_root, "bin", "opp_msgc")
+            install_header = spec.get("install_header_to_include_dir", False)
+            outputs = list(spec["outputs"])
+            if install_header and cfg:
+                # Mark the .h file as living in <incl>/omnetpp/<basename>
+                header_name = next((o for o in outputs if o.endswith(".h")), None)
+                if header_name:
+                    install_path = os.path.join(cfg.omnetpp_incl_dir, "omnetpp", header_name)
+                    tasks.append(_MsgcWithHeaderInstallTask(
+                        working_dir=src_dir,
+                        msgc=msgc_path,
+                        flags=["--msg6"],
+                        input_file=spec["input"],
+                        output_files=outputs,
+                        header_install_path=install_path,
+                        header_local_name=header_name,
+                        name=f"{name}: {spec['input']}",
+                    ))
+                    continue
+            tasks.append(MsgCompileTask(
+                working_dir=src_dir,
+                msgc=msgc_path,
+                flags=["--msg6"],
+                input_file=spec["input"],
+                output_files=outputs,
+                name=f"{name}: {spec['input']}",
+            ))
+        elif kind == "stringify":
+            tasks.append(_StringifyTask(
+                working_dir=src_dir,
+                input_file=spec["input"],
+                output_file=spec["output"],
+                namespace=spec.get("namespace", ""),
+                varname=spec.get("varname", "TEXT"),
+                name=f"{name}: stringify {os.path.basename(spec['input'])}",
+            ))
+        elif kind == "copy_script":
+            # Copy a shell-script tool (e.g. opp_msgc) to bin/
+            bin_dir = (cfg.omnetpp_bin_dir if cfg and cfg.omnetpp_bin_dir
+                       else os.path.join(omnetpp_root, "bin"))
+            source = os.path.join("src", name, spec["source"])
+            target = os.path.relpath(os.path.join(bin_dir, spec["target_basename"]), omnetpp_root)
+            tasks.append(OmnetppProjectCopyBinaryTask(
+                omnetpp_project=omnetpp_project,
+                source_file=source,
+                target_file=target,
+                postprocess_command=["chmod", "+x"],
+                name=f"{name}: install {spec['target_basename']}",
+            ))
+        else:
+            raise ValueError(f"Unknown generator kind: {kind}")
+    return tasks
+
+
+def _build_qtenv_generator_tasks(omnetpp_project, cfg):
+    """Glob qtenv's *.ui / *.h / *.qrc and create uic/moc/rcc tasks."""
+    omnetpp_root = omnetpp_project.get_root_path()
+    src_dir = _component_src_dir(omnetpp_root, "qtenv")
+    if not os.path.isdir(src_dir):
+        return []
+    tasks = []
+    moc = cfg.moc.strip() if cfg and cfg.moc else "moc"
+    uic = cfg.uic.strip() if cfg and cfg.uic else "uic"
+    rcc = cfg.rcc.strip() if cfg and cfg.rcc else "rcc"
+
+    # uic: <name>.ui -> ui_<name>.h
+    for ui in sorted(glob.glob(os.path.join(src_dir, "*.ui"))):
+        base = os.path.splitext(os.path.basename(ui))[0]
+        out = f"ui_{base}.h"
+        tasks.append(UicTask(
+            working_dir=src_dir, uic=uic,
+            input_file=os.path.basename(ui), output_file=out,
+            name=f"qtenv: uic {os.path.basename(ui)}",
+        ))
+
+    # moc: <name>.h -> moc_<name>.cpp (skip generated ui_*.h)
+    for hdr in sorted(glob.glob(os.path.join(src_dir, "*.h"))):
+        base = os.path.basename(hdr)
+        if base.startswith("ui_"):
+            continue
+        stem = os.path.splitext(base)[0]
+        out = f"moc_{stem}.cpp"
+        tasks.append(MocTask(
+            working_dir=src_dir, moc=moc,
+            flags=["--no-notes"],
+            input_file=base, output_file=out,
+            name=f"qtenv: moc {base}",
+        ))
+
+    # rcc: <name>.qrc -> qrc_<name>.cpp
+    # icons_dark.qrc is generated from icons.qrc + dark icons; we skip the
+    # dark-icon generation step and just rcc whatever .qrc files exist.
+    for qrc in sorted(glob.glob(os.path.join(src_dir, "*.qrc"))):
+        base = os.path.basename(qrc)
+        stem = os.path.splitext(base)[0]
+        out = f"qrc_{stem}.cpp"
+        tasks.append(RccTask(
+            working_dir=src_dir, rcc=rcc,
+            flags=["-name", stem],
+            input_file=base, output_file=out,
+            name=f"qtenv: rcc {base}",
+        ))
+    return tasks
+
+
+def _qtenv_extra_compile_sources(omnetpp_project):
+    """Return list of moc_*.cpp / qrc_*.cpp sources for qtenv compile."""
+    omnetpp_root = omnetpp_project.get_root_path()
+    src_dir = _component_src_dir(omnetpp_root, "qtenv")
+    if not os.path.isdir(src_dir):
+        return []
+    extras = []
+    for hdr in sorted(glob.glob(os.path.join(src_dir, "*.h"))):
+        base = os.path.basename(hdr)
+        if base.startswith("ui_"):
+            continue
+        stem = os.path.splitext(base)[0]
+        extras.append(f"moc_{stem}.cpp")
+    for qrc in sorted(glob.glob(os.path.join(src_dir, "*.qrc"))):
+        stem = os.path.splitext(os.path.basename(qrc))[0]
+        extras.append(f"qrc_{stem}.cpp")
+    return extras
 
 
 # ---------------------------------------------------------------------------
@@ -343,44 +690,102 @@ def _component_extra_subdirs(component, makefile_inc_config):
 
 
 def _component_extra_cflags(component, makefile_inc_config):
-    """Per-component extra compile flags from features (Qt, MPI, Python, ...)."""
+    """Per-component extra compile flags (warnings, includes, feature flags)."""
     cfg = makefile_inc_config
-    if not cfg:
-        return []
     name = component["name"]
     flags = []
     if name == "common":
+        flags += ["-Wno-unused-function"]
+        if cfg:
+            flags += _split(cfg.libxml_cflags)
+    if name == "nedxml" and cfg:
         flags += _split(cfg.libxml_cflags)
-        if cfg.with_backtrace:
-            flags.append("-DWITH_BACKTRACE")
+    if name == "scave" and cfg:
+        flags += ["-DTHREADED"]
+        flags += _split(cfg.pthread_cflags)
     if name == "sim":
-        if cfg.with_python:
-            flags += _split(cfg.python_embed_cflags)
+        flags += ["-Wno-unused-function"]
+        if cfg:
+            if cfg.with_python:
+                flags += _split(cfg.python_embed_cflags)
+            flags += _split(cfg.akaroa_cflags)
+    if name == "envir" and cfg:
         flags += _split(cfg.akaroa_cflags)
-    if name == "qtenv":
+        flags += [
+            f'-DSHARED_LIB_SUFFIX="{cfg.shared_lib_suffix}"',
+            f'-DOMNETPP_IMAGE_PATH="{cfg.omnetpp_image_path}"',
+            f'-DLIBSUFFIX="{cfg.debug_suffix}"',
+        ]
+        if cfg.with_parsim:
+            flags += _split(cfg.mpi_cflags)
+    if name == "qtenv" and cfg:
         flags += _split(cfg.qt_cflags)
-    if name == "envir" and cfg.with_parsim:
-        flags += _split(cfg.mpi_cflags)
+        flags += ["-Wno-deprecated-declarations",
+                  "-Wno-ignored-attributes",
+                  "-Wno-inconsistent-missing-override"]
     return flags
 
 
-def _component_extra_libraries(component, makefile_inc_config):
-    """Per-component extra link libraries (returned as bare names for -l)."""
+def _component_extra_defines(component, makefile_inc_config):
+    """Per-component extra preprocessor defines (besides the EXPORT macro)."""
     cfg = makefile_inc_config
-    if not cfg:
-        return []
     name = component["name"]
-    libs = []
-    if name == "common":
-        libs += [_strip_lflag(x) for x in _split(cfg.libxml_libs)]
-        if cfg.with_backtrace:
-            libs += [_strip_lflag(x) for x in _split(cfg.backward_ldflags)]
-    if name == "sim" and cfg.with_python:
-        libs += [_strip_lflag(x) for x in _split(cfg.python_embed_ldflags)]
+    defines = []
+    if name == "common" and cfg and cfg.with_backtrace:
+        defines.append("-DWITH_BACKTRACE")
     if name == "qtenv":
-        libs += [_strip_lflag(x) for x in _split(cfg.qt_libs)]
+        defines += ["-DUNICODE", "-DQT_NO_KEYWORDS",
+                    "-DQT_OPENGL_LIB", "-DQT_OPENGLWIDGETS_LIB",
+                    "-DQT_PRINTSUPPORT_LIB", "-DQT_WIDGETS_LIB",
+                    "-DQT_GUI_LIB", "-DQT_CORE_LIB"]
+    return defines
+
+
+# Per-component dependency on previously-built OMNeT++ libraries (mapped to
+# ``-l<lib>$D`` at link time). Mirrors the IMPLIBS lines in each component's
+# Makefile.
+_COMPONENT_LIB_DEPS = {
+    "common":   [],
+    "nedxml":   ["oppcommon"],
+    "layout":   ["oppcommon"],
+    "eventlog": ["oppcommon"],
+    "scave":    ["oppcommon"],
+    "sim":      ["oppcommon"],
+    "envir":    ["oppsim", "oppnedxml", "oppcommon"],
+    "cmdenv":   ["oppsim", "oppenvir", "oppcommon"],
+    "qtenv":    ["oppsim", "oppenvir", "opplayout", "oppcommon"],
+}
+
+
+def _component_extra_libraries(component, makefile_inc_config):
+    """
+    Per-component extra link tokens. Each entry is already in linker form —
+    ``-l<name>``, ``-L<path>``, or another raw ``ldflags`` token — so callers
+    can splat the list directly into the link command line.
+    """
+    cfg = makefile_inc_config
+    name = component["name"]
+    debug_suffix = cfg.debug_suffix if cfg else ""
+
+    libs = [f"-l{dep}{debug_suffix}" for dep in _COMPONENT_LIB_DEPS.get(name, [])]
+
+    if not cfg:
+        return libs
+
+    if name == "common":
+        libs += _split(cfg.libxml_libs)
+        if cfg.with_backtrace:
+            libs += _split(cfg.backward_ldflags)
+    if name == "nedxml":
+        libs += _split(cfg.libxml_libs)
+    if name == "scave":
+        libs += _split(cfg.pthread_libs)
+    if name == "sim" and cfg.with_python:
+        libs += _split(cfg.python_embed_ldflags)
+    if name == "qtenv":
+        libs += _split(cfg.qt_libs)
     if name == "envir" and cfg.with_parsim:
-        libs += [_strip_lflag(x) for x in _split(cfg.mpi_libs)]
+        libs += _split(cfg.mpi_libs)
     return [l for l in libs if l]
 
 
@@ -424,6 +829,9 @@ def _build_component_tasks(omnetpp_project, component, mode, makefile_inc_config
             multiple_task_results_class=MultipleBuildTaskResults,
         )
 
+    # Generator tasks (yacc/lex/perl/msgc/stringify/moc/uic/rcc)
+    generator_tasks = _build_generator_tasks(omnetpp_project, component, cfg, mode)
+
     # Compile tasks
     excludes = set(component.get("excludes", []))
     # Also exclude sources reserved for tools/extra libraries
@@ -438,10 +846,22 @@ def _build_component_tasks(omnetpp_project, component, mode, makefile_inc_config
     cc_files = [f for f in cc_files if os.path.basename(f) not in excludes]
     c_files = _glob_component_c_files(omnetpp_root, name, component.get("c_files", []))
 
+    # Add generated sources (.cc / .cpp) declared by the component, plus any
+    # qtenv-dynamic moc/qrc outputs. These files do not exist on disk at
+    # graph-construction time, so they have to be enumerated explicitly.
+    extra_sources = list(component.get("extra_compile_sources", []) or [])
+    if component.get("generators") == "qtenv-dynamic":
+        extra_sources += _qtenv_extra_compile_sources(omnetpp_project)
+    for extra in extra_sources:
+        rel = os.path.relpath(os.path.join(omnetpp_root, "src", name, extra), omnetpp_root)
+        if rel not in cc_files:
+            cc_files.append(rel)
+
     extra_cflags = _component_extra_cflags(component, cfg)
     extra_defines = []
     if component.get("define"):
         extra_defines.append(f"-D{component['define']}")
+    extra_defines += _component_extra_defines(component, cfg)
 
     compile_tasks = []
     for cc in cc_files:
@@ -470,6 +890,14 @@ def _build_component_tasks(omnetpp_project, component, mode, makefile_inc_config
     library_name = component.get("library_name")
     extra_libraries = _component_extra_libraries(component, cfg)
     component_tasks = []
+
+    if generator_tasks:
+        component_tasks.append(MultipleTasks(
+            tasks=generator_tasks,
+            name=f"generate {name}",
+            concurrent=concurrent,
+            multiple_task_results_class=MultipleBuildTaskResults,
+        ))
 
     if compile_tasks:
         component_tasks.append(MultipleTasks(
