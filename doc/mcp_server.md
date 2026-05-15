@@ -92,3 +92,29 @@ names (e.g. `SimulationWorkspace`).
 3. Read `opp-repl://packages` to find the relevant sub-package
 4. Read `opp-repl://package/{package_name}` for a compact API overview
 5. Drill into `opp-repl://class/…`, `opp-repl://method/…`, or `opp-repl://function/…` for full details
+
+## Client Configuration
+
+### Windsurf / Codeium
+
+Add the following to your MCP configuration file
+(`~/.codeium/windsurf/mcp_config.json`):
+
+```json
+{
+  "mcpServers": {
+    "opp_repl": {
+      "disabled": false,
+      "headers": {
+        "Authorization": "Bearer <your_token>"
+      },
+      "url": "http://localhost:9966/mcp"
+    }
+  }
+}
+```
+
+Replace `<your_token>` with the raw bearer token whose SHA-256 hash was
+passed to `--mcp-token-hash` when launching opp_repl.  If running inside
+`opp_sandbox` (no authentication), you can omit the `headers` field or
+use any placeholder value.
