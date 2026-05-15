@@ -466,7 +466,9 @@ def start_mcp_server(port=9966, token_hash=None):
         raise ImportError("MCP server requires the 'mcp' package. Install it with: pip install opp_repl[mcp]")
     if not token_hash and not is_running_in_sandbox():
         raise ValueError("MCP server requires --mcp-token-hash for authentication. "
-                         "Generate a token and pass its SHA-256 hex hash.")
+                         "Generate a token and pass its SHA-256 hex hash."
+                         "For example: echo -n your_passphrase | sha256sum | cut -d' ' -f1"
+                         "You also need to configure your_passhrase in your MCP client (e.g. Windsurf).")
 
     if token_hash:
         _mcp._token_verifier = _HashTokenVerifier(token_hash)
