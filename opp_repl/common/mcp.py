@@ -445,7 +445,7 @@ class _HashTokenVerifier:
             return AccessToken(token=token, client_id="opp_repl", scopes=[])
         return None
 
-def start_mcp_server(port=9966, token_hash=None):
+def start_mcp_server(port=9966, token_hash=None, bypass_token_hash=False):
     """Start the MCP server on a background thread using Streamable HTTP transport.
 
     The server uses stateless HTTP mode so each tool call is an independent
@@ -461,14 +461,21 @@ def start_mcp_server(port=9966, token_hash=None):
             inside ``opp_sandbox``, where the bubblewrap sandbox already
             provides filesystem-level isolation and authentication is
             skipped.
+        bypass_token_hash: When True, start the server without bearer token
+            authentication even outside ``opp_sandbox``.  Intended for
+            trusted environments only.
     """
     if not _mcp_available:
         raise ImportError("MCP server requires the 'mcp' package. Install it with: pip install opp_repl[mcp]")
-    if not token_hash and not is_running_in_sandbox():
+    if not token_hash and not bypass_token_hash and not is_running_in_sandbox():
         raise ValueError("MCP server requires --mcp-token-hash for authentication. "
                          "Generate a token and pass its SHA-256 hex hash."
                          "For example: echo -n your_passphrase | sha256sum | cut -d' ' -f1"
-                         "You also need to configure your_passhrase in your MCP client (e.g. Windsurf).")
+                         "You also need to configure your_passhrase in your MCP client (e.g. Windsurf)."
+                         "Alternatively, pass --mcp-bypass-token-hash to disable authentication (trusted environments only).")
+    if bypass_token_hash and token_hash:
+        _logger.warning("--mcp-bypass-token-hash overrides --mcp-token-hash; starting MCP server without authentication")
+        token_hash = None
 
     if token_hash:
         _mcp._token_verifier = _HashTokenVerifier(token_hash)
