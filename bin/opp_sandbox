@@ -115,6 +115,8 @@ ENV_PASSTHROUGH=(
     OMNETPP_RELEASE OMNETPP_IMAGE_PATH OMNETPP_DEBUGGER_COMMAND __omnetpp_root_dir
     # AI Chat LLM configuration
     LLM_PROVIDER ANTHROPIC_API_KEY OPENAI_API_KEY OPENROUTER_API_KEY OLLAMA_BASE_URL
+    # Python virtual environment
+    VIRTUAL_ENV
 )
 for var in "${ENV_PASSTHROUGH[@]}"; do
     [[ -n "${!var+x}" ]] && EXTRA_ARGS+=(--setenv "$var" "${!var}")
@@ -123,6 +125,11 @@ done
 # Expose XDG_RUNTIME_DIR for D-Bus portal and Wayland socket access
 if [ -n "$XDG_RUNTIME_DIR" ]; then
     EXTRA_ARGS+=(--ro-bind-try "$XDG_RUNTIME_DIR" "$XDG_RUNTIME_DIR")
+fi
+
+# Expose Python virtual environment if one is active
+if [ -n "$VIRTUAL_ENV" ]; then
+    EXTRA_ARGS+=(--ro-bind-try "$VIRTUAL_ENV" "$VIRTUAL_ENV")
 fi
 
 exec bwrap \
