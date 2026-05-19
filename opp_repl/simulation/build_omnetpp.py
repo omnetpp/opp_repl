@@ -377,7 +377,8 @@ OMNETPP_COMPONENTS = [
             {"basename": "oppmain", "source_files": ["main.cc"]},
         ],
         "tools": [
-            {"basename": "opp_run", "source": "main.cc", "link_with": "oppmain"},
+            {"basename": "opp_run", "source": "main.cc", "link_with": "oppmain",
+             "release_alias": "opp_run_release"},
         ],
         "generators": [
             {"kind": "perl", "script": "eventlogwriter.pl",
@@ -1014,7 +1015,7 @@ def _build_component_tasks(omnetpp_project, component, mode, makefile_inc_config
         if tool.get("link_with"):
             tool_link_libs.insert(0, f"-l{tool['link_with']}{debug_suffix}")
         component_tasks.append(tool_compile_task)
-        component_tasks.append(OmnetppProjectLinkTask(
+        tool_link_task = OmnetppProjectLinkTask(
             omnetpp_project=omnetpp_project,
             component=name,
             library_name=tool["basename"],
@@ -1023,7 +1024,23 @@ def _build_component_tasks(omnetpp_project, component, mode, makefile_inc_config
             makefile_inc_config=cfg,
             compile_tasks=[tool_compile_task],
             extra_libraries=tool_link_libs + extra_libraries,
-        ))
+        )
+        component_tasks.append(tool_link_task)
+        # Release-only alias (e.g. bin/opp_run -> bin/opp_run_release), to
+        # mirror the envir Makefile's TARGET_EXE_FILES rule for MODE=release.
+        release_alias = tool.get("release_alias")
+        if release_alias and mode == "release":
+            exe_ext = cfg.exe_suffix if cfg else ""
+            bin_dir = (cfg.omnetpp_bin_dir if cfg and cfg.omnetpp_bin_dir
+                       else os.path.join(omnetpp_root, "bin"))
+            source_rel = os.path.relpath(tool_link_task.output_file, omnetpp_root)
+            target_rel = os.path.relpath(os.path.join(bin_dir, release_alias + exe_ext), omnetpp_root)
+            component_tasks.append(OmnetppProjectCopyBinaryTask(
+                omnetpp_project=omnetpp_project,
+                source_file=source_rel,
+                target_file=target_rel,
+                name=f"{name}: install {release_alias}",
+            ))
 
     if not component_tasks:
         return None
@@ -1034,7 +1051,7 @@ def _build_component_tasks(omnetpp_project, component, mode, makefile_inc_config
     )
 
 
-def build_omnetpp(build_mode="makefile", **kwargs):
+def build_omnetpp(build_mode=None, **kwargs):
     """
     Builds OMNeT++ using either :py:func:`build_omnetpp_using_makefile` or
     :py:func:`build_omnetpp_using_tasks`.
@@ -1042,11 +1059,14 @@ def build_omnetpp(build_mode="makefile", **kwargs):
     Parameters:
         build_mode (str):
             Specifies the requested build mode. Valid values are
-            ``"makefile"`` and ``"task"``.
+            ``"makefile"`` and ``"task"``. If unspecified, the global default
+            from :py:func:`get_default_build_mode` is used.
 
         kwargs (dict):
             Additional parameters are forwarded to the selected builder.
     """
+    if build_mode is None:
+        build_mode = get_default_build_mode()
     if build_mode == "makefile":
         build_function = build_omnetpp_using_makefile
     elif build_mode == "task":
@@ -1224,6 +1244,10 @@ def _build_component_clean_tasks(omnetpp_project, component, cfg, mode):
     for tool in component.get("tools", []):
         exe_file = os.path.join(bin_dir, tool["basename"] + debug_suffix + exe_ext)
         tasks.append(_CleanFileTask(working_dir=omnetpp_root, file_path=exe_file))
+        release_alias = tool.get("release_alias")
+        if release_alias and mode == "release":
+            alias_file = os.path.join(bin_dir, release_alias + exe_ext)
+            tasks.append(_CleanFileTask(working_dir=omnetpp_root, file_path=alias_file))
 
     # utils: scripts copied to bin/
     if name == "utils":
