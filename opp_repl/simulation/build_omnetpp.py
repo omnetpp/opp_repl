@@ -1184,29 +1184,29 @@ class ConfigureOmnetppTask(Task):
         return self.task_result_class(task=self, result="DONE")
 
 
-def build_omnetpp(build_mode=None, **kwargs):
+def build_omnetpp(build_engine=None, **kwargs):
     """
     Builds OMNeT++ using either :py:func:`build_omnetpp_using_makefile` or
     :py:func:`build_omnetpp_using_tasks`.
 
     Parameters:
-        build_mode (str):
-            Specifies the requested build mode. Valid values are
+        build_engine (str):
+            Specifies the requested build engine. Valid values are
             ``"makefile"`` and ``"task"``. If unspecified, the global default
-            from :py:func:`get_default_build_mode` is used.
+            from :py:func:`get_default_build_engine` is used.
 
         kwargs (dict):
             Additional parameters are forwarded to the selected builder.
     """
-    if build_mode is None:
-        from opp_repl.simulation.build import get_default_build_mode
-        build_mode = get_default_build_mode()
-    if build_mode == "makefile":
+    if build_engine is None:
+        from opp_repl.simulation.build import get_default_build_engine
+        build_engine = get_default_build_engine()
+    if build_engine == "makefile":
         build_function = build_omnetpp_using_makefile
-    elif build_mode == "task":
+    elif build_engine == "task":
         build_function = build_omnetpp_using_tasks
     else:
-        raise Exception(f"Unknown build_mode argument: {build_mode}")
+        raise Exception(f"Unknown build_engine argument: {build_engine}")
     return build_function(**kwargs)
 
 
@@ -1398,27 +1398,27 @@ def _build_component_clean_tasks(omnetpp_project, component, cfg, mode):
     return tasks
 
 
-def clean_omnetpp(build_mode=None, **kwargs):
+def clean_omnetpp(build_engine=None, **kwargs):
     """
     Cleans OMNeT++ using either :py:func:`clean_omnetpp_using_makefile` or
     :py:func:`clean_omnetpp_using_tasks`.
 
     Parameters:
-        build_mode (str):
+        build_engine (str):
             ``"makefile"`` runs ``make clean`` in the OMNeT++ tree.
             ``"task"`` removes generated sources, built objects, libraries and
             executables directly. If unspecified, the global default from
-            :py:func:`get_default_build_mode` is used.
+            :py:func:`get_default_build_engine` is used.
     """
-    if build_mode is None:
-        from opp_repl.simulation.build import get_default_build_mode
-        build_mode = get_default_build_mode()
-    if build_mode == "makefile":
+    if build_engine is None:
+        from opp_repl.simulation.build import get_default_build_engine
+        build_engine = get_default_build_engine()
+    if build_engine == "makefile":
         clean_function = clean_omnetpp_using_makefile
-    elif build_mode == "task":
+    elif build_engine == "task":
         clean_function = clean_omnetpp_using_tasks
     else:
-        raise Exception(f"Unknown build_mode argument: {build_mode}")
+        raise Exception(f"Unknown build_engine argument: {build_engine}")
     return clean_function(**kwargs)
 
 

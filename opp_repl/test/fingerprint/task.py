@@ -365,12 +365,12 @@ class FingerprintUpdateTask(SimulationUpdateTask):
 
 class MultipleFingerprintUpdateTasks(MultipleSimulationUpdateTasks):
     def __init__(self, multiple_simulation_tasks=None, name="update fingerprint", **kwargs):
-        # Inherit simulation_project / mode / build_mode / concurrent from the inner
+        # Inherit simulation_project / mode / build_engine / concurrent from the inner
         # MultipleSimulationTasks so build_before_run has what it needs.
         if multiple_simulation_tasks is not None:
             kwargs.setdefault("simulation_project", multiple_simulation_tasks.simulation_project)
             kwargs.setdefault("mode", multiple_simulation_tasks.mode)
-            kwargs.setdefault("build_mode", multiple_simulation_tasks.build_mode)
+            kwargs.setdefault("build_engine", multiple_simulation_tasks.build_engine)
             kwargs.setdefault("concurrent", multiple_simulation_tasks.concurrent)
         super().__init__(name=name, **kwargs)
         self.locals = locals()
@@ -380,7 +380,7 @@ class MultipleFingerprintUpdateTasks(MultipleSimulationUpdateTasks):
 
     def run(self, **kwargs):
         # MultipleSimulationUpdateTasks.run_protected handles the optional build via
-        # self.build / self.mode / self.build_mode; no need to duplicate that here.
+        # self.build / self.mode / self.build_engine; no need to duplicate that here.
         multiple_fingerprint_update_results = super().run(**kwargs)
         simulation_project = self.simulation_project or self.multiple_simulation_tasks.simulation_project
         correct_fingerprint_store = get_correct_fingerprint_store(simulation_project)

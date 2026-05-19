@@ -18,15 +18,15 @@ from opp_repl.simulation.project import *
 
 _logger = logging.getLogger(__name__)
 
-_default_build_mode = "makefile"
+_default_build_engine = "makefile"
 
-def get_default_build_mode():
-    global _default_build_mode
-    return _default_build_mode
+def get_default_build_engine():
+    global _default_build_engine
+    return _default_build_engine
 
-def set_default_build_mode(value):
-    global _default_build_mode
-    _default_build_mode = value
+def set_default_build_engine(value):
+    global _default_build_engine
+    _default_build_engine = value
 
 
 def _generate_opp_defines(simulation_project, makefile_inc_config):
@@ -116,7 +116,7 @@ def make_makefiles(simulation_project=None, **kwargs):
     else:
         run_command_with_logging(args, cwd=cwd, env=simulation_project.get_env(), error_message=f"Making {simulation_project.get_name()} makefiles failed")
 
-def build_project(build_mode=None, **kwargs):
+def build_project(build_engine=None, **kwargs):
     """
     Builds all output files of a simulation project using either :py:func:`build_project_using_makefile` or :py:func:`build_project_using_tasks`.
 
@@ -125,10 +125,10 @@ def build_project(build_mode=None, **kwargs):
     use :py:meth:`SimulationProject.build <opp_repl.simulation.project.SimulationProject.build>`.
 
     Parameters:
-        build_mode (string):
+        build_engine (string):
             Specifies the build engine. Valid values are "makefile" (drives ``make`` via an
             ``opp_makemake``-generated Makefile) and "task" (drives the per-file task pipeline).
-            If unspecified, the global default from :py:func:`get_default_build_mode` is used.
+            If unspecified, the global default from :py:func:`get_default_build_engine` is used.
             Orthogonal to ``mode`` — see the :doc:`Building </building>` guide.
 
         kwargs (dict):
@@ -137,14 +137,14 @@ def build_project(build_mode=None, **kwargs):
     Returns (None):
         Nothing.
     """
-    if build_mode is None:
-        build_mode = get_default_build_mode()
-    if build_mode == "makefile":
+    if build_engine is None:
+        build_engine = get_default_build_engine()
+    if build_engine == "makefile":
         build_function = build_project_using_makefile
-    elif build_mode == "task":
+    elif build_engine == "task":
         build_function = build_project_using_tasks
     else:
-        raise Exception(f"Unknown build_mode argument: {build_mode}")
+        raise Exception(f"Unknown build_engine argument: {build_engine}")
     return build_function(**kwargs)
 
 def is_build_up_to_date(simulation_project=None, mode="release", **kwargs):
@@ -734,12 +734,12 @@ def build_project_using_tasks(simulation_project, **kwargs):
     build_task.log_structure()
     return build_task.run(**kwargs)
 
-def clean_project(simulation_project=None, mode="release", build_mode=None, **kwargs):
+def clean_project(simulation_project=None, mode="release", build_engine=None, **kwargs):
     if simulation_project is None:
         simulation_project = get_default_simulation_project()
-    if build_mode is None:
-        build_mode = get_default_build_mode()
-    if build_mode == "task":
+    if build_engine is None:
+        build_engine = get_default_build_engine()
+    if build_engine == "task":
         return clean_project_using_tasks(simulation_project, mode=mode, **kwargs)
     else:
         return clean_project_using_makefile(simulation_project, mode=mode, **kwargs)

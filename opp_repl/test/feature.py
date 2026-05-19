@@ -24,7 +24,7 @@ def enable_features(feature):
     run_command_with_logging(["opp_featuretool", "enable", "-f", feature])
 
 class FeatureTestTask(TestTask):
-    def __init__(self, simulation_project, feature, packages, type="enable", mode="debug", build_mode=None, **kwargs):
+    def __init__(self, simulation_project, feature, packages, type="enable", mode="debug", build_engine=None, **kwargs):
         super().__init__(**kwargs)
         self.locals = locals()
         self.locals.pop("self")
@@ -33,7 +33,7 @@ class FeatureTestTask(TestTask):
         self.feature = feature
         self.type = type
         self.mode = mode
-        self.build_mode = build_mode
+        self.build_engine = build_engine
         self.packages = packages
         self.multiple_simulation_tasks = self.get_multiple_simulation_tasks()
 
@@ -71,21 +71,21 @@ class FeatureTestTask(TestTask):
         else:
             raise Exception("Unknown test type")
         make_makefiles(simulation_project=self.simulation_project)
-        clean_project(simulation_project=self.simulation_project, mode=self.mode, build_mode=self.build_mode)
-        build_project(simulation_project=self.simulation_project, mode=self.mode, build_mode=self.build_mode)
+        clean_project(simulation_project=self.simulation_project, mode=self.mode, build_engine=self.build_engine)
+        build_project(simulation_project=self.simulation_project, mode=self.mode, build_engine=self.build_engine)
         multiple_simulation_tasks_result = self.multiple_simulation_tasks.run(**kwargs)
         result="PASS" if multiple_simulation_tasks_result.result == "DONE" else "FAIL" if multiple_simulation_tasks_result.result == "FAIL" else "ERROR"
         return self.task_result_class(self, result=result)
 
 class MultipleFeatureTestTasks(MultipleTestTasks):
-    def __init__(self, simulation_project=None, build=None, build_mode=None, mode="debug", **kwargs):
+    def __init__(self, simulation_project=None, build=None, build_engine=None, mode="debug", **kwargs):
         super().__init__(**kwargs)
         self.locals = locals()
         self.locals.pop("self")
         self.kwargs = kwargs
         self.simulation_project = simulation_project
         self.build = build if build is not None else get_default_build_argument()
-        self.build_mode = build_mode
+        self.build_engine = build_engine
         self.mode = mode
 
     def get_total_simulation_task_count(self):
@@ -100,7 +100,7 @@ class MultipleFeatureTestTasks(MultipleTestTasks):
         # ensures a consistent starting state and matches the convention used by
         # MultipleSimulationTestTasks.
         if self.simulation_project is not None:
-            self.simulation_project.build(mode=self.mode, build_mode=self.build_mode)
+            self.simulation_project.build(mode=self.mode, build_engine=self.build_engine)
 
     def run_protected(self, **kwargs):
         if self.build:

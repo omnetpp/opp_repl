@@ -176,7 +176,7 @@ class OmnetppProject:
             result = subprocess.run(args, cwd=root, env=env, capture_output=True)
         return result.returncode == 0
 
-    def build(self, mode="release", build_mode=None, **kwargs):
+    def build(self, mode="release", build_engine=None, **kwargs):
         """
         Build OMNeT++.
 
@@ -184,16 +184,16 @@ class OmnetppProject:
             mode (str): build mode — one of ``"release"``, ``"debug"``,
                 ``"sanitize"``, ``"coverage"``, ``"profile"``. See the
                 :doc:`Building </building>` guide for details.
-            build_mode (str): build engine — ``"makefile"`` to run ``make``,
+            build_engine (str): build engine — ``"makefile"`` to run ``make``,
                 or ``"task"`` to drive the build via per-file
                 :py:mod:`opp_repl <opp_repl>` tasks. If unspecified, the global
-                default from :py:func:`get_default_build_mode` is used.
+                default from :py:func:`get_default_build_engine` is used.
                 Orthogonal to ``mode``.
 
         See :py:func:`build_omnetpp <opp_repl.simulation.build_omnetpp.build_omnetpp>`.
         """
         from opp_repl.simulation.build_omnetpp import build_omnetpp
-        return build_omnetpp(omnetpp_project=self, mode=mode, build_mode=build_mode, **kwargs)
+        return build_omnetpp(omnetpp_project=self, mode=mode, build_engine=build_engine, **kwargs)
 
     def ensure_mounted(self):
         if self._overlay is not None:
@@ -225,7 +225,7 @@ class OmnetppProject:
             self._makefile_inc_configs[mode] = MakefileIncConfig(root, mode)
         return self._makefile_inc_configs[mode]
 
-    def clean(self, mode="release", build_mode=None, **kwargs):
+    def clean(self, mode="release", build_engine=None, **kwargs):
         """
         Clean OMNeT++.
 
@@ -233,17 +233,17 @@ class OmnetppProject:
             mode (str): build mode to clean — one of ``"release"``, ``"debug"``,
                 ``"sanitize"``, ``"coverage"``, ``"profile"``. See the
                 :doc:`Building </building>` guide for details.
-            build_mode (str): build engine — ``"makefile"`` to run ``make clean``,
+            build_engine (str): build engine — ``"makefile"`` to run ``make clean``,
                 or ``"task"`` to remove generated sources/build artifacts
                 directly. If unspecified, the global default from
-                :py:func:`get_default_build_mode` is used.
+                :py:func:`get_default_build_engine` is used.
                 See :py:func:`clean_omnetpp <opp_repl.simulation.build_omnetpp.clean_omnetpp>`.
         """
         if self._overlay is not None:
             self._overlay.clean()
             return
         from opp_repl.simulation.build_omnetpp import clean_omnetpp
-        return clean_omnetpp(omnetpp_project=self, mode=mode, build_mode=build_mode, **kwargs)
+        return clean_omnetpp(omnetpp_project=self, mode=mode, build_engine=build_engine, **kwargs)
 
 class SimulationProject:
     """
@@ -674,7 +674,7 @@ class SimulationProject:
             msg_files = msg_files + list(map(lambda file_path: self.get_relative_path(file_path), file_paths))
         return msg_files
 
-    def build(self, mode="release", recursive=True, build_mode=None, **kwargs):
+    def build(self, mode="release", recursive=True, build_engine=None, **kwargs):
         self.ensure_mounted()
         if recursive:
             if self.used_projects:
@@ -682,13 +682,13 @@ class SimulationProject:
                 for used_project_name in self.used_projects:
                     used_project = ws.get_simulation_project(used_project_name, None)
                     if used_project is not None:
-                        used_project.build(mode=mode, recursive=recursive, build_mode=build_mode, **kwargs)
+                        used_project.build(mode=mode, recursive=recursive, build_engine=build_engine, **kwargs)
             else:
                 opp = self.get_omnetpp_project()
                 if opp is not None:
-                    opp.build(mode=mode, build_mode=build_mode)
+                    opp.build(mode=mode, build_engine=build_engine)
         import opp_repl.simulation.build
-        return opp_repl.simulation.build.build_project(simulation_project=self, mode=mode, build_mode=build_mode, **kwargs)
+        return opp_repl.simulation.build.build_project(simulation_project=self, mode=mode, build_engine=build_engine, **kwargs)
 
     def ensure_mounted(self):
         if self._overlay is not None:
@@ -703,23 +703,23 @@ class SimulationProject:
             return self._overlay.is_mounted()
         return False
 
-    def clean(self, mode="release", recursive=True, build_mode=None, **kwargs):
+    def clean(self, mode="release", recursive=True, build_engine=None, **kwargs):
         if recursive:
             if self.used_projects:
                 ws = getattr(self, '_workspace', None) or get_default_simulation_workspace()
                 for used_project_name in self.used_projects:
                     used_project = ws.get_simulation_project(used_project_name, None)
                     if used_project is not None:
-                        used_project.clean(mode=mode, recursive=recursive, build_mode=build_mode, **kwargs)
+                        used_project.clean(mode=mode, recursive=recursive, build_engine=build_engine, **kwargs)
             else:
                 opp = self.get_omnetpp_project()
                 if opp is not None:
-                    opp.clean(mode=mode, build_mode=build_mode)
+                    opp.clean(mode=mode, build_engine=build_engine)
         if self._overlay is not None:
             self._overlay.clean()
             return None
         import opp_repl.simulation.build
-        return opp_repl.simulation.build.clean_project(simulation_project=self, mode=mode, build_mode=build_mode, **kwargs)
+        return opp_repl.simulation.build.clean_project(simulation_project=self, mode=mode, build_engine=build_engine, **kwargs)
 
     def get_num_runs_in_config(self, ini_path, config, mode="release"):
         num_runs_fast_regex = re.compile(r"(?m).*^\s*(include\s+.*\.ini|repeat\s*=\s*[0-9]+|.*\$\{.*\})")
@@ -832,7 +832,7 @@ class SimulationProject:
             simulation_configs.append(simulation_config)
         return simulation_configs
 
-    def collect_all_simulation_configs(self, ini_path_globs, concurrent=True, build=None, mode="release", build_mode=None, **kwargs):
+    def collect_all_simulation_configs(self, ini_path_globs, concurrent=True, build=None, mode="release", build_engine=None, **kwargs):
         def local_collect_ini_file_simulation_configs(ini_path):
             return self.collect_ini_file_simulation_configs(ini_path, mode=mode)
         _logger.info(f"Collecting {self.name} simulation configs started")
@@ -840,7 +840,7 @@ class SimulationProject:
         if build is None:
             build = get_default_build_argument()
         if build:
-            self.build(mode=mode, build_mode=build_mode)
+            self.build(mode=mode, build_engine=build_engine)
         if concurrent:
             pool = multiprocessing.pool.ThreadPool(multiprocessing.cpu_count())
             result = list(itertools.chain.from_iterable(pool.map(local_collect_ini_file_simulation_configs, ini_paths)))
