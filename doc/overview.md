@@ -39,7 +39,7 @@ A typical session:
 
 ```console
 $ cd ~/workspace/omnetpp && . setenv
-Environment for 'omnetpp-6.4.0' in directory '/home/user/workspace/omnetpp' is ready.
+Environment for 'omnetpp-X.Y.Z' in directory '/home/user/workspace/omnetpp' is ready.
 $ cd ~/workspace/opp_repl && . setenv
 opp_repl is ready (added /home/user/workspace/opp_repl to PATH).
 $ opp_repl --load ~/workspace/inet/inet.opp

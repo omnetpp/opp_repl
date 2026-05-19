@@ -178,10 +178,11 @@ what it should say.
     `get_simulation_tasks()` (`task.py:760-763`), not
     `SimulationTask.__init__`. Minor imprecision.
 
-31. **doc/mcp_server.md** — Doesn't mention the hardcoded `port=9966`
-    at FastMCP construction (`opp_repl/common/mcp.py:60`), which is
-    overridden later via `_mcp.settings.port = port` at line 483.
-    Verify override actually takes effect.
+31. **doc/mcp_server.md** — *Resolved: non-issue.*  Verified that
+    `_mcp.settings.port = port` (`mcp.py:623`) reassigns the port
+    before `_mcp.run()` starts the server, so `--mcp-port` works
+    correctly even though FastMCP is constructed at import time with a
+    placeholder.  Implementation detail not worth surfacing.
 
 32. **doc/concepts.md:79-81** — Filter list claim is correct in effect
     (filters flow through `**kwargs`), but the signature of
@@ -202,27 +203,29 @@ what it should say.
     `doc/getting_started.md:21`) is more robust for users following
     the README literally.
 
-36. **doc/getting_started.md:38** — Example `Out[1]` list is not in
-    sorted order, although `get_simulation_project_names()` returns
-    sorted (`workspace.py:108-110`). Illustrative-only, but
-    inconsistent.
+36. **doc/getting_started.md:38** — *Resolved: non-issue.*  Current
+    output `['aloha', 'fifo', 'tictoc', ...]` is already alphabetically
+    sorted.  The audit was written against an older version of the
+    file.
 
 37. **doc/overview.md:42-44** — Console banner version
     (`omnetpp-6.4.0`) is illustrative; harmless drift.
 
-38. **doc/omnetpp_projects.md:78-91** — "Overlay builds" heading
-    appears twice with awkward continuation.
+38. **doc/omnetpp_projects.md:78-91** — *Resolved: non-issue.*
+    "Overlay builds" heading appears only once at line 74; the audit
+    was written against an earlier version.
 
 39. **doc/github_actions.md:96** — Parameter table omits `**kwargs`
     for `dispatch_all_workflows()` even though `github.py:47`
     accepts them.
 
 40. **`SimulationProject.__repr__`
-    (`opp_repl/simulation/project.py:518-519`)** — Calls
-    `repr(self, ["name", "version", "git_hash", "git_diff_hash"])`.
-    The built-in `repr` only takes one argument; this would raise
-    `TypeError`. Real code bug, surfaced by auditing the doc's
-    `Out[2]: SimulationProject(...)` example.
+    (`opp_repl/simulation/project.py:516-517`)** —
+    *Resolved: non-issue.*  The `repr` called here is not the builtin
+    but the helper in `opp_repl/common/util.py:218`, which accepts an
+    optional `properties` list.  Verified: `repr(SimulationProject(...))`
+    returns the expected `SimulationProject(name=..., version=...)`
+    string without raising.
 
 ## Top 7 to fix first
 

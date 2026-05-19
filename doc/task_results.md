@@ -37,7 +37,6 @@ and used NED types from the simulation's stdout/stderr.
 | `SpeedTestTaskResult` | `SpeedTestTask` | `PASS`, `FAIL` |
 | `ChartTestTaskResult` | `ChartTestTask` | `PASS`, `FAIL` |
 | `FingerprintTestTaskResult` / `MultipleFingerprintTestTaskResults` | `FingerprintTestTask` | `PASS`, `FAIL` |
-| `SpeedUpdateTaskResult` | `SpeedUpdateTask` | `KEEP`, `INSERT`, `UPDATE` |
 
 Test results carry the underlying `SimulationTaskResult` so you can
 inspect both the test verdict and the raw simulation output.

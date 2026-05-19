@@ -82,6 +82,13 @@ property; a config is included only when all specified filters match.
 | `config_filter` | `exclude_config_filter` | config section name |
 | `run_number_filter` | `exclude_run_number_filter` | run number (as string) |
 
+The first four pairs are config-property filters: they are forwarded
+through `**kwargs` to `SimulationConfig.matches_filter()` and decide
+which configs survive.  The `run_number_filter` pair operates one
+level deeper — after config matching, it is applied per generated run
+number inside `get_simulation_tasks()` itself, which is why it
+appears as a direct parameter rather than a passthrough kwarg.
+
 In addition, the `simulation_config_filter` parameter accepts a
 **predicate function** that receives each `SimulationConfig` and returns
 `True`/`False`.  By default it excludes abstract and emulation configs.

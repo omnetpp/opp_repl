@@ -164,8 +164,11 @@ runner is chosen automatically but can be overridden with the
   `debug=True`.
 
 Setting `debug=True` (or passing `break_at_event_number` /
-`break_at_matching_event`) switches the mode to `debug` and the runner to
-`ide` automatically.
+`break_at_matching_event`) when calling `get_simulation_tasks()` (or
+any wrapper that delegates to it, e.g. `run_simulations()` and the
+`run_*_tests()` family) switches the mode to `debug` and the runner
+to `ide` automatically.  `SimulationTask.__init__` itself does not
+infer the mode — only the higher-level entry points do.
 
 ### Running multiple tasks
 

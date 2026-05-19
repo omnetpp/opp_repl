@@ -94,9 +94,10 @@ Iterates over the `github_workflows` list and dispatches each one.
 
 | Parameter | Type | Default | Description |
 |---|---|---|---|
-| `workflow_name` | `str` | — | Workflow file name (e.g. `"fingerprint-tests.yml"`) |
+| `workflow_name` | `str` | — | Workflow file name (e.g. `"fingerprint-tests.yml"`); only on `dispatch_workflow()` |
 | `simulation_project` | `SimulationProject` | default project | Source of `github_owner` / `github_repository` |
 | `ref` | `str` | `"master"` | Git ref to run the workflow against |
+| `**kwargs` | — | — | On `dispatch_all_workflows()`, forwarded to `dispatch_workflow` (typically to override `ref`) |
 
 ## Error handling
 

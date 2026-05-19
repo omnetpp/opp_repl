@@ -138,8 +138,8 @@ opp_run_simulations --hosts node1.local,node2.local \
 ```
 
 Binaries are automatically distributed to the workers before starting.
-An optional `--nix-shell` flag selects the Nix environment on remote
-nodes.
+An optional `--nix-shell` (short alias `-x`) flag selects the Nix
+environment on remote nodes.
 
 ## Troubleshooting
 

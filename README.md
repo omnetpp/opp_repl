@@ -28,7 +28,7 @@ First, source the OMNeT++ environment:
 Then launch the REPL using existing omnetpp installation:
 
 ```bash
-opp_repl --load "opp/*.opp"
+opp_repl --load @opp
 ```
 
 Then run simulations from the REPL:

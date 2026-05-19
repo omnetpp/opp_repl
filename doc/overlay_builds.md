@@ -115,8 +115,6 @@ The overlay is managed automatically:
   generated files land in the upper layer.
 - **Running** — simulations see the full merged tree (source + build
   output) as their working environment.
-- **Cleaning** — `clean()` on an overlay project unmounts and removes the
-  upper and work directories, effectively discarding all build artifacts.
 
 You can also manage overlays manually:
 
@@ -124,8 +122,12 @@ You can also manage overlays manually:
 project.ensure_mounted()   # mount if not already
 project.is_mounted()       # check mount status
 project.unmount()          # unmount (keeps upper layer on disk)
-project.clean()            # unmount and delete upper/work dirs
 ```
+
+`project.clean()` is the regular cleaning entry point (see
+[Building](building.md)); for overlay-backed projects it additionally
+unmounts and removes the upper/work directories, discarding all build
+artifacts.
 
 ## Housekeeping
 
