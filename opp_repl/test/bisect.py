@@ -27,7 +27,6 @@ import time
 import importlib.util
 
 from opp_repl.common import *
-from opp_repl.test.chart import run_chart_tests
 from opp_repl.test.fingerprint import run_fingerprint_tests, update_fingerprint_test_results
 from opp_repl.test.sanitizer import run_sanitizer_tests
 from opp_repl.test.smoke import run_smoke_tests
@@ -306,7 +305,8 @@ def bisect_chart_tests(simulation_project, good_hash, bad_hash, update_good_resu
                   is_good_result=lambda r: r.is_all_results_expected(),
                   update_good_results_function=update_chart_test_results if update_good_results else None,
                   **kwargs)
-bisect_chart_tests.__signature__ = combine_signatures(bisect_chart_tests, bisect_simulations_between_commits, run_chart_tests)
+if importlib.util.find_spec("matplotlib"):
+    bisect_chart_tests.__signature__ = combine_signatures(bisect_chart_tests, bisect_simulations_between_commits, run_chart_tests)
 
 def bisect_sanitizer_tests(simulation_project, good_hash, bad_hash, update_good_results=True, **kwargs):
     """Bisect to find the first commit that causes sanitizer tests to fail.
