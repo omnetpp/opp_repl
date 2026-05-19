@@ -35,6 +35,13 @@ specify the project root directory.  They are tried in the following order:
    under a common root (e.g. OMNeT++ samples under
    `$__omnetpp_root_dir/samples/`).
 
+The default of `root_folder_environment_variable` differs between the
+two project classes: `OmnetppProject` defaults to `"__omnetpp_root_dir"`
+(the variable exported by `omnetpp/setenv`), so step 2 works
+out-of-the-box for OMNeT++ installations.  `SimulationProject` has no
+default — step 2 only kicks in when you set
+`root_folder_environment_variable` explicitly.
+
 The recommended approach for `.opp` files that live inside the project
 tree is `root_folder="."`.
 
@@ -65,6 +72,8 @@ Describes a simulation project (INET, Simu5G, OMNeT++ samples, etc.).
 |---|---|---|---|
 | `name` | `str` | *(required)* | Human-readable project name |
 | `version` | `str` | `None` | Version string |
+| `git_hash` | `str` | `None` | Git hash of the corresponding repository for this version |
+| `git_diff_hash` | `str` | `None` | Hash of local modifications on top of the clean checkout |
 | `omnetpp_project` | `str` | `None` | Name of the `OmnetppProject` to use (resolved lazily) |
 | `root_folder` | `str` | `None` | Root folder; relative paths are resolved against the `.opp` file's directory |
 | `root_folder_environment_variable` | `str` | `None` | OS environment variable for the root folder (fallback when `root_folder` is not set) |
@@ -72,16 +81,36 @@ Describes a simulation project (INET, Simu5G, OMNeT++ samples, etc.).
 | `bin_folder` | `str` | `"."` | Binary output directory relative to root |
 | `library_folder` | `str` | `"."` | Library output directory relative to root |
 | `build_types` | `list[str]` | `["dynamic library"]` | Build output types: `"executable"`, `"dynamic library"`, `"static library"` |
-| `executables` | `list[str]` | `None` | Executable names to build |
-| `dynamic_libraries` | `list[str]` | `None` | Dynamic library names to build |
+| `executables` | `list[str]` | `None` (→ `[name]`) | Executable names to build; `None` is replaced by `[name]` |
+| `dynamic_libraries` | `list[str]` | `None` (→ `[name]`) | Dynamic library names to build; `None` is replaced by `[name]` |
+| `static_libraries` | `list[str]` | `None` (→ `[name]`) | Static library names to build; `None` is replaced by `[name]` |
 | `ned_folders` | `list[str]` | `["."]` | Directories containing NED files (relative to root) |
 | `ned_exclusions` | `list[str]` | `[]` | Excluded NED packages |
 | `ini_file_folders` | `list[str]` | `["."]` | Directories containing INI files (relative to root) |
+| `python_folders` | `list[str]` | `["python"]` | Directories containing Python source files (relative to root) |
+| `image_folders` | `list[str]` | `["."]` | Directories containing image files (relative to root) |
+| `include_folders` | `list[str]` | `["."]` | Directories containing C++ include files (relative to root) |
+| `cpp_folders` | `list[str]` | `["."]` | Directories containing C++ source files (relative to root) |
+| `cpp_defines` | `list[str]` | `[]` | C++ macro definitions passed to the compiler |
+| `msg_folders` | `list[str]` | `["."]` | Directories containing MSG files (relative to root) |
 | `used_projects` | `list[str]` | `[]` | Names of dependent simulation projects |
 | `media_folder` | `str` | `"."` | Directory for chart test baseline images (relative to root) |
 | `statistics_folder` | `str` | `"."` | Directory for statistical test baseline results (relative to root) |
 | `fingerprint_store` | `str` | `"fingerprint.json"` | Path to the JSON fingerprint store (relative to root) |
 | `speed_store` | `str` | `"speed.json"` | Path to the JSON speed measurement store (relative to root) |
+| `dependency_store` | `str` | `"dependency.json"` | Path to the JSON simulation-task dependency store (relative to root) |
+| `external_bin_folders` | `list[str]` | `[]` | Absolute directories containing external binaries |
+| `external_library_folders` | `list[str]` | `[]` | Absolute directories containing external libraries |
+| `external_libraries` | `list[str]` | `[]` | Names of external libraries to link |
+| `external_include_folders` | `list[str]` | `[]` | Absolute directories containing external C++ include files |
+| `dll_symbol` | `str` | `None` | DLL export/import symbol (e.g. `"INET"`); adds `-D<sym>_EXPORT` to the C++ compiler and `-P<sym>_API` to the message compiler |
+| `feature_libraries` | `dict` | `None` | Per-feature library requirements; supports `pkg_config`, `defines`, `makefile_inc_libs`, `makefile_inc_flags` (see source docstring for the full example) |
+| `pkg_config_libraries` | `list[str]` | `None` | *Deprecated* — use `feature_libraries` instead |
+| `opp_defines_file` | `str` | `None` | Path to an extra OPP defines file |
+| `precompiled_header` | `str` | `None` | Path to the precompiled-header template (`{mode}` is replaced by the build mode) |
+| `extra_cflags` | `list[str]` | `[]` | Additional compiler flags |
+| `extra_ldflags` | `list[str]` | `[]` | Additional linker flags |
+| `simulation_configs` | `list[SimulationConfig]` | `None` | Pre-declared `SimulationConfig`s available in this project |
 | `overlay_name` | `str` | `None` | Enable overlay builds with this name |
 | `overlay_build_root` | `str` | `None` | Override overlay build root; relative paths are resolved against the `.opp` file's directory |
 | `opp_env_workspace` | `str` | `None` | Path to opp_env workspace; relative paths are resolved against the `.opp` file's directory |

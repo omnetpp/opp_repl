@@ -56,8 +56,9 @@ echo "ghp_xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx" > ~/.ssh/github_repo_token
 chmod 600 ~/.ssh/github_repo_token
 ```
 
-The token is read at dispatch time and passed in the `Authorization`
-header.  It is never logged or stored elsewhere.
+The token is read at dispatch time and passed in the
+`Authorization: token <token>` header (GitHub's classic PAT scheme).
+It is never logged or stored elsewhere.
 
 ## Python API
 

@@ -107,6 +107,8 @@ Elapsed time: 6.38
 | `tol` | Convergence tolerance (default `1e-3`) |
 | `method` | `scipy.optimize` method (default `"Nelder-Mead"`) |
 | `concurrent` | Use `optimparallel` for parallel evaluations (default `False`) |
+| `simulation_runner` | Override the runner used to execute the simulation; defaults to the project's runner |
+| `**kwargs` | Forwarded to `simulation_task.run()` (e.g. `mode`, `cluster`, `scheduler`) |
 
 ## Units and distribution wrappers
 

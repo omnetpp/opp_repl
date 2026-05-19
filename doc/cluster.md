@@ -1,7 +1,7 @@
 # SSH Cluster Execution
 
 Distribute simulation tasks across multiple machines using Dask
-(requires the `cluster` extra: `dask` and `dask.distributed`).
+(requires the `cluster` extra: `dask` and `distributed`).
 
 ## Why use a cluster?
 
@@ -83,20 +83,11 @@ c.start()
 
 ## Distributing binaries
 
-Build the project and copy binaries to all worker nodes:
-
-```python
-p = get_simulation_project("aloha")
-build_project(simulation_project=p, mode="release")
-p.copy_binary_simulation_distribution_to_cluster(["node1.local", "node2.local"])
-```
-
-See [Building](building.md) for the accepted `mode` values
+Build the project on each host that will run simulations (e.g. via a
+shared filesystem, or by building separately on each node).  See
+[Building](building.md) for the accepted `mode` values
 (`release` / `debug` / `sanitize` / `coverage` / `profile`) and how they
 interact with `build` and `build_engine`.
-
-Binaries are incrementally copied using `rsync`, so only changed files
-are transferred.  This step is required whenever the project is rebuilt.
 
 ## Running on the cluster
 
@@ -149,12 +140,6 @@ opp_run_simulations --hosts node1.local,node2.local \
 Binaries are automatically distributed to the workers before starting.
 An optional `--nix-shell` flag selects the Nix environment on remote
 nodes.
-
-## Stopping the cluster
-
-Exiting the interactive Python session automatically stops the SSH
-cluster.  The Dask scheduler and workers on remote nodes are shut down
-via SSH.
 
 ## Troubleshooting
 

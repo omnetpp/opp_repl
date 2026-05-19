@@ -18,8 +18,18 @@ Key command-line options:
   special token `@opp` for the bundled files.  Can be repeated.
 - `-p PROJECT` — set the default simulation project by name.
 - `--mcp-port PORT` — start an MCP server on the given TCP port for AI
-  assistant integration (0 to disable).
-- `-l LEVEL` — log level (`ERROR`, `WARN`, `INFO`, `DEBUG`).
+  assistant integration.  Default is **0**, which disables the MCP
+  server entirely.  Setting a non-zero port also requires
+  `--mcp-token-hash` (unless running inside `opp_sandbox`).
+- `--mcp-token-hash HEX` — SHA-256 hex hash of the bearer token that
+  MCP clients must present to authenticate.  Required when
+  `--mcp-port` is set, except inside `opp_sandbox`.
+- `--mcp-bypass-token-hash` — disable bearer-token authentication for
+  the MCP server.  Use only in trusted environments; normally
+  `--mcp-token-hash` is required outside `opp_sandbox`.
+- `-l LEVEL` — log level (`ERROR`, `WARN`, `INFO`, `DEBUG`).  Note
+  that `opp_repl` defaults to `INFO`, while the `opp_*` command-line
+  tools default to `WARN`.
 - `--external-command-log-level LEVEL` — log level for output from
   simulations and build tools.
 - `--no-handle-exception` — show full Python tracebacks instead of

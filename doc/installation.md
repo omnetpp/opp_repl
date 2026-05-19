@@ -6,7 +6,14 @@ opp_repl requires **Python 3.10** or later.  It runs on Linux and macOS.
 
 ## Basic install
 
-Clone the repository and install in editable mode:
+The released version is available from PyPI:
+
+```bash
+pip install opp_repl
+```
+
+For development or to track the latest changes, clone the repository
+and install in editable mode instead:
 
 ```bash
 git clone https://github.com/omnetpp/opp_repl.git
@@ -14,8 +21,8 @@ cd opp_repl
 pip install -e .
 ```
 
-This pulls in the two mandatory dependencies — **IPython** (for the
-interactive shell) and **pandas** (for data manipulation).
+Either form pulls in the only mandatory dependency — **IPython** (for
+the interactive shell).
 
 ## Optional extras
 
@@ -30,6 +37,7 @@ pip install -e ".[cluster]"   # just one group
 | Extra | Packages | Purpose |
 |---|---|---|
 | `mcp` | mcp | MCP server for AI assistant integration |
+| `data` | pandas | DataFrame-based inspection of simulation/test results |
 | `optimize` | scipy, optimparallel | Parameter optimization |
 | `chart` | matplotlib, numpy | Chart tests and image export |
 | `cluster` | dask, distributed | SSH cluster execution via Dask |

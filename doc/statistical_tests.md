@@ -74,12 +74,20 @@ Small floating-point differences can be ignored by setting a threshold:
 
 ```python
 # Tolerate relative errors smaller than 1e-6
-run_statistical_tests(relative_error_threshold=1e-6)
+run_statistical_tests(unbounded_relative_error_threshold=1e-6)
 ```
 
-When all differences fall below the threshold the result is `PASS` with a
-reason like `"All differences below relative error threshold 1e-06 (max
-relative error 3.2e-07)"`.
+When all differences fall below the threshold the result is `PASS`.
+The `reason` string is a comma-joined summary of the comparison
+counters, e.g.:
+
+```
+42 compared, 17 below threshold
+```
+
+The counters that may appear are: number of identical scalars
+(`compared`), `only_stored`, `only_current`, `filtered out`,
+`only filtered out`, `below threshold`, and `different`.
 
 ## Inspecting results
 
@@ -99,9 +107,16 @@ for tr in r.get_fail_results().results:
     print(tr.error_message)
 ```
 
-The `reason` string of a failing test shows the scalar with the largest
-relative error, including module path, scalar name, stored value, current
-value, and relative error.
+The `reason` string of a failing test uses the same comma-joined
+counter summary, and ends with `"largest difference: ..."` describing
+the scalar with the largest relative error.  Each row in the trailing
+detail is shown as `<field> = <value>` pairs separated by commas — the
+fields include module path, scalar name, stored/current values, and
+the relative-error columns:
+
+```
+40 compared, 2 different, largest difference: module = ..., name = ..., value_stored = ..., value_current = ..., unbounded_relative_error = ...
+```
 
 Each result stores the raw DataFrames used for comparison:
 

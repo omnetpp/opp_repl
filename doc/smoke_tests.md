@@ -34,7 +34,7 @@ r = run_smoke_tests(simulation_project=aloha_project,
 r = r.rerun()
 
 # Re-run only the failed tests
-r = r.get_failed_results().rerun()
+r = r.get_fail_results().rerun()
 ```
 
 ## Command Line

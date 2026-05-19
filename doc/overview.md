@@ -57,10 +57,22 @@ convenience variables, user modules, etc.).
 
 ## Command-line tools
 
-Many REPL functions have corresponding command-line tools:
+Many REPL functions have corresponding command-line tools, grouped here
+by purpose:
+
+**Interactive shell:**
 
 - `opp_repl` — interactive Python interpreter
+
+**Build / clean:**
+
+- `opp_build_omnetpp` — build the OMNeT++ kernel
 - `opp_build_project` — build a simulation project
+- `opp_clean_omnetpp` — clean the OMNeT++ build output
+- `opp_clean_project` — clean a simulation project's build output
+
+**Run simulations and tests:**
+
 - `opp_run_simulations` — run simulations matching a filter
 - `opp_run_all_tests` — run all tests
 - `opp_run_smoke_tests` — verify simulations start and terminate without crashing
@@ -71,9 +83,21 @@ Many REPL functions have corresponding command-line tools:
 - `opp_run_sanitizer_tests` — find memory errors and undefined behavior
 - `opp_run_feature_tests` — verify builds with different optional feature combinations
 - `opp_run_release_tests` — run a comprehensive validation suite
+
+**Update test baselines:**
+
 - `opp_update_fingerprint_test_results` — update the fingerprint baseline
 - `opp_update_speed_test_results` — update the speed test baseline
 - `opp_update_statistical_test_results` — update the statistical test baseline
 - `opp_update_chart_test_results` — update the chart test baseline images
+
+**Overlays:**
+
+- `opp_mount` — mount overlay file systems for `.opp` projects
+- `opp_unmount` — unmount previously-mounted overlay file systems
+
+**Misc:**
+
+- `opp_repl_self_test` — run the opp_repl self-test suite
 
 All tools print their options when run with `-h`.

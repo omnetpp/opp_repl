@@ -91,7 +91,14 @@ argument is given.
 ## The default OMNeT++ project
 
 The workspace also tracks a default `OmnetppProject`.  It is set
-automatically as a side effect of `set_default_simulation_project()`:
+automatically as a side effect of `set_default_simulation_project()`,
+**but only when the default OMNeT++ project is currently `None`** —
+i.e., the inference fires once at startup and is not overwritten by
+subsequent `set_default_simulation_project()` calls.  If you have
+already explicitly chosen a non-default OMNeT++ project, later calls
+to `set_default_simulation_project()` will not change it.
+
+When the inference does run, it goes:
 
 1. If the simulation project references a specific `OmnetppProject` (via
    `omnetpp_project`), that one becomes the default.

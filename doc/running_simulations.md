@@ -50,8 +50,8 @@ r = run_simulations(config_filter="PureAloha", sim_time_limit="1s")
 # Re-run the same simulations
 r = r.rerun()
 
-# Re-run only failed simulations
-r.get_fail_results().rerun()
+# Re-run only errored simulations
+r.get_error_results().rerun()
 ```
 
 ### Controlling execution

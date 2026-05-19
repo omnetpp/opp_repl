@@ -6,14 +6,17 @@ environment, and how to build OMNeT++ itself.
 
 ## How it is defined
 
-An OMNeT++ project is typically defined in a `.opp` file.  Using an
-environment variable:
+An OMNeT++ project is typically defined in a `.opp` file.  The
+simplest form relies on the `__omnetpp_root_dir` environment variable
+(exported by `omnetpp/setenv`):
 
 ```python
-OmnetppProject(
-    root_folder_environment_variable="__omnetpp_root_dir",
-)
+OmnetppProject()
 ```
+
+`OmnetppProject.root_folder_environment_variable` defaults to
+`"__omnetpp_root_dir"`, so no extra configuration is needed.  Override
+it only if your installation uses a different env var.
 
 Using a relative path — `root_folder="."` refers to the directory containing
 the `.opp` file:

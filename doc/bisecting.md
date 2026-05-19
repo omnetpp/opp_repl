@@ -44,6 +44,18 @@ All wrappers accept the same `simulation_project`, `good_hash`, and
 underlying test runner (e.g. `working_directory_filter`, `config_filter`,
 `sim_time_limit`).
 
+Every wrapper also accepts `update_good_results=True` (the default),
+which causes the corresponding `update_*_test_results()` function to be
+called on the good commit before bisection starts.  This refreshes the
+baseline data (fingerprints, statistics, speed measurements, chart
+images) so the comparison at each step uses an up-to-date reference.
+Set it to `False` to skip the refresh and use whatever baseline is
+checked in at the good commit.
+
+For `bisect_smoke_tests()` and `bisect_sanitizer_tests()` there is no
+baseline to refresh, so the flag is accepted for API symmetry but has
+no effect.
+
 ## Python API
 
 ### Basic usage

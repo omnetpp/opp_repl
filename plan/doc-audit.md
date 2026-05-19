@@ -64,12 +64,11 @@ what it should say.
     (`opp_repl/repl.py:30`), while CLI tools default to `WARN`
     (`opp_repl/main.py:51`) — flag the asymmetry.
 
-11. **doc/mcp_server.md:50-53 — sandbox sentinel** — Describes
-    `/.opp_sandbox` as bind-mounted read-only by `opp_sandbox`, but
-    `bin/opp_sandbox` contains no such `--ro-bind`. If `opp_sandbox`
-    does not actually create the sentinel, `is_running_in_sandbox()`
-    (`opp_repl/common/util.py:596-607`) always returns False and the
-    docs are misleading. Verify how the sentinel is established.
+11. **doc/mcp_server.md:50-53 — sandbox sentinel** — *Resolved: non-issue.*
+    `bin/opp_sandbox` does bind-mount the sentinel:
+    `--ro-bind "$OMNETPP_ROOT/bin/opp_sandbox" "/.opp_sandbox"`.
+    `is_running_in_sandbox()` correctly detects it (existence + writable
+    check). The audit was mistaken.
 
 ## Important
 
@@ -122,15 +121,17 @@ what it should say.
     `opp_repl/common/github.py:36-40` uses the `Authorization: token <token>`
     scheme. Fix the doc (or switch the code to Bearer).
 
-20. **doc/chart_tests.md:17-19 and doc/feature_tests.md:141** — Hedge
-    "if matplotlib is installed", but matplotlib is an unconditional
-    dependency (`pyproject.toml:18`). The caveat is only relevant if a
-    user manually uninstalls matplotlib.
+20. **doc/chart_tests.md:17-19 and doc/feature_tests.md:141** —
+    *Resolved: non-issue.*  The audit was written against an older
+    pyproject where matplotlib was mandatory.  Currently matplotlib is
+    in the optional `chart` extra (`pyproject.toml:53-56`), so the
+    "if matplotlib is installed" hedge is correct.
 
-21. **doc/comparing_simulations.md:176-179** — Asymmetric kwarg names:
-    include filter is `statistical_result_name_filter`, exclude is
-    `exclude_statistic_name_filter` (different stem). The source has
-    this asymmetry; either document it explicitly or normalize the names.
+21. **doc/comparing_simulations.md:176-179** — *Resolved: non-issue.*
+    The asymmetric kwarg names cited by the audit
+    (`statistical_result_name_filter` vs `exclude_statistic_name_filter`)
+    no longer exist in the source or docs.  The current code/doc uses
+    `result_name_filter` / `exclude_result_name_filter` consistently.
 
 22. **Fingerprint test code bugs surfaced by the audit** —
     `MultipleFingerprintTestTaskResults.__init__` is misspelled `__init`
@@ -138,10 +139,11 @@ what it should say.
     rather than the results object. These are real code bugs, not doc
     bugs, but they invalidate doc claims.
 
-23. **Speed / statistical update class names** — Test docs reference
-    classes that may differ from what is actually defined. Spot-check
-    `StatisticalResultsUpdateTask` vs `StatisticalUpdateTask`,
-    `SpeedUpdateTaskResult` etc.
+23. **Speed / statistical update class names** — *Resolved: non-issue.*
+    Verified: doc names match source.  `StatisticalResultsUpdateTask`
+    (statistical.py:282), `SpeedUpdateTask` (speed/task.py:93), and
+    `SpeedUpdateTaskResult` (speed/task.py:137) all exist with these
+    exact names.
 
 24. **doc/statistical_tests.md reason strings** — Example failure-reason
     strings don't match what the code emits on assertion failure.
