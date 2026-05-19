@@ -144,15 +144,11 @@ number, the build mode, and a set of optional overrides:
 
 ### Build modes
 
-The `mode` parameter selects which build of the simulation binary to use:
-
-| Mode | Suffix | Use case |
-|---|---|---|
-| `release` | `_release` | Optimized builds (default) |
-| `debug` | `_dbg` | Stepping through code |
-| `sanitize` | `_sanitize` | AddressSanitizer / UBSan |
-| `coverage` | `_coverage` | Code coverage |
-| `profile` | `_profile` | Performance profiling |
+The `mode` parameter selects which build of the simulation binary to use
+(`release`, `debug`, `sanitize`, `coverage`, `profile`). See the
+[Building](building.md) guide for the full table, the per-wrapper defaults,
+and how `mode` relates to the orthogonal `build` (on/off) and `build_mode`
+(makefile vs task engine) parameters.
 
 ### Simulation runners
 

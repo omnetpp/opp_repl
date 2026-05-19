@@ -15,7 +15,7 @@ Coverage reports require:
   profile data.
 - **OMNeT++ `coverage` build mode** — the project must be buildable in
   `coverage` mode, which compiles with `-fprofile-instr-generate
-  -fcoverage-mapping`.
+  -fcoverage-mapping`. See [Building](building.md) for how build modes work.
 
 On Debian/Ubuntu, install the LLVM tools with
 `sudo apt install llvm` (or the versioned package matching your Clang, e.g.

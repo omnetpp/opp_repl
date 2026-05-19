@@ -62,15 +62,11 @@ define_omnetpp_project("omnetpp-6.1", root_folder=worktree)
 
 ## Build modes
 
-The mode determines which binary suffix is used:
-
-| Mode | Suffix |
-|---|---|
-| `release` | `_release` |
-| `debug` | `_dbg` |
-| `sanitize` | `_sanitize` |
-| `coverage` | `_coverage` |
-| `profile` | `_profile` |
+`get_executable(mode=...)` and `build(mode=...)` accept `release`, `debug`,
+`sanitize`, `coverage`, and `profile`; each maps to the matching binary
+suffix (`_release`, `_dbg`, `_sanitize`, `_coverage`, `_profile`). See the
+[Building](building.md) guide for the full picture, including the orthogonal
+`build_mode` (makefile vs task engine) parameter.
 
 ## Overlay builds
 

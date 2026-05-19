@@ -21,6 +21,7 @@ Profiling requires:
   file and analyze it with other tools.
 - **OMNeT++ `profile` build mode** — the project is automatically built in
   `profile` mode, which compiles with debug symbols and optimization enabled.
+  See [Building](building.md) for how build modes work.
 
 No extra Python packages are required.
 

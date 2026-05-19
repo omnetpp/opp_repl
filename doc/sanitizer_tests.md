@@ -78,7 +78,7 @@ run_sanitizer_tests(simulation_project=inet_project,
 `get_sanitizer_test_tasks()` accepts the same filter parameters as
 `get_simulation_tasks()`, plus:
 
-- **`mode`** — build mode (default `"sanitize"`)
+- **`mode`** — build mode (default `"sanitize"`; see [Building](building.md))
 - **`cpu_time_limit`** — CPU time limit per run (default `"1s"`)
 - **`run_number`** — run number to test (default `0`)
 

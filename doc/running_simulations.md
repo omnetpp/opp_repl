@@ -92,21 +92,13 @@ opp_run_simulations -m debug -t 1s --filter PureAlohaExperiment --hosts node1.lo
 ## Building Projects
 
 Building is implicit: `run_simulations()` automatically builds the project
-before running any simulation, so there is no need to build manually.  Stale
-binaries are not used by default — the build step ensures the binary is
-up-to-date with the current sources.  Pass `build=False` to skip this step
-when you want to use the current binary regardless of whether it is up-to-date.
+before running any simulation, so there is no need to build manually.  Pass
+`build=False` to skip this step when you want to use the current binary
+regardless of whether it is up-to-date.
 
-If you need to trigger a build without running simulations, use
-`build_project()` directly:
-
-```python
-p = get_simulation_project("inet")
-build_project(simulation_project=p)
-build_project(simulation_project=p, mode="debug")
-```
-
-The `mode` parameter selects the build mode (see Concepts guide for available modes).
+See [Building](building.md) for the full story on the `build`, `mode`, and
+`build_mode` parameters, recursive builds, the per-wrapper defaults, and
+build artifacts on disk.
 
 ## Loading projects at runtime
 

@@ -91,6 +91,10 @@ build_project(simulation_project=p, mode="release")
 p.copy_binary_simulation_distribution_to_cluster(["node1.local", "node2.local"])
 ```
 
+See [Building](building.md) for the accepted `mode` values
+(`release` / `debug` / `sanitize` / `coverage` / `profile`) and how they
+interact with `build` and `build_mode`.
+
 Binaries are incrementally copied using `rsync`, so only changed files
 are transferred.  This step is required whenever the project is rebuilt.
 

@@ -38,6 +38,19 @@ The **outcome** of running one or more tasks — result codes, timing,
 error details, filtering, and re-running.
 See [Task results](task_results.md).
 
+## Building
+
+Three orthogonal parameters control building:
+
+- **`build`** — *whether* to build before running (default: on).
+- **`mode`** — *which artifact flavor* (`release`, `debug`, `sanitize`,
+  `coverage`, `profile`).
+- **`build_mode`** — *which build engine* (`makefile` vs `task`),
+  independent of `mode`.
+
+See [Building](building.md) for the full picture, including the per-wrapper
+defaults and the artifact layout on disk.
+
 ## How they fit together
 
 ```

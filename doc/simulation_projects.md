@@ -176,18 +176,21 @@ configs = p.get_simulation_configs(working_directory_filter="examples/ethernet")
 ## Building and cleaning
 
 Building compiles the project and all its dependencies (OMNeT++ and
-`used_projects`).  Cleaning removes all build artifacts.
+`used_projects`).  Cleaning removes the corresponding artifacts.
 
 ```python
 p.build(mode="release")       # build (recursively: omnetpp, deps, then self)
 p.build(mode="debug")
-p.clean(mode="release")       # clean all build artifacts
+p.clean(mode="release")       # clean release artifacts
 ```
 
 The `recursive=True` default means all `used_projects` are built first
 (and they in turn build their own dependencies, including OMNeT++).
 When a project has `used_projects`, the direct OMNeT++ build step is
 skipped because the dependency chain already handles it.
+
+See [Building](building.md) for the full `build` / `mode` / `build_mode`
+story, including the per-wrapper defaults and the artifact layout on disk.
 
 ## Overlay builds
 
