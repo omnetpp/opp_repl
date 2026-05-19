@@ -66,7 +66,7 @@ define_omnetpp_project("omnetpp-6.1", root_folder=worktree)
 `sanitize`, `coverage`, and `profile`; each maps to the matching binary
 suffix (`_release`, `_dbg`, `_sanitize`, `_coverage`, `_profile`). See the
 [Building](building.md) guide for the full picture, including the orthogonal
-`build_mode` (makefile vs task engine) parameter.
+`build_engine` (makefile vs task) parameter.
 
 ## Overlay builds
 

@@ -124,5 +124,5 @@ All tools accept `--help` for a full list of options.
 - [Concepts](concepts.md) — understand the core abstractions
 - [OPP files](opp_files.md) — learn how to write `.opp` project descriptors
 - [Running simulations](running_simulations.md) — advanced simulation options
-- [Building](building.md) — `build`/`mode`/`build_mode` parameters and recursive builds
+- [Building](building.md) — `build`/`mode`/`build_engine` parameters and recursive builds
 - [Fingerprint tests](fingerprint_tests.md) — regression testing

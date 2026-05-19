@@ -1,23 +1,20 @@
 # Building
 
 How opp_repl builds OMNeT++ and simulation projects. Three orthogonal
-parameters control building (`build`, `mode`, `build_mode`); the names
-are easy to confuse, so this guide starts with a side-by-side table.
+parameters control building (`build`, `mode`, `build_engine`); the
+names are similar, so this guide starts with a side-by-side table.
 
 ## Three orthogonal parameters
 
-| Parameter    | What it controls                                | Typical values                                                          |
-|--------------|-------------------------------------------------|-------------------------------------------------------------------------|
-| `build`      | *Whether* to build before running               | `True` / `False` (default: `get_default_build_argument()`)              |
-| `mode`       | *Which kind of binary* to build/run             | `release`, `debug`, `sanitize`, `coverage`, `profile`                   |
-| `build_mode` | *How* the build is driven                       | `makefile`, `task` (default: `get_default_build_mode()` → `makefile`)   |
-
-The collision is unfortunate — `build_mode` reads like "build/debug/release mode"
-but really means "build engine". `mode` is the artifact flavor.
+| Parameter      | What it controls                       | Typical values                                                            |
+|----------------|----------------------------------------|---------------------------------------------------------------------------|
+| `build`        | *Whether* to build before running      | `True` / `False` (default: `get_default_build_argument()`)                |
+| `mode`         | *Which kind of binary* to build/run    | `release`, `debug`, `sanitize`, `coverage`, `profile`                     |
+| `build_engine` | *How* the build is driven              | `makefile`, `task` (default: `get_default_build_engine()` → `makefile`)   |
 
 ```python
 # Build a debug binary using the makefile engine, then run it:
-build_project(simulation_project=p, mode="debug", build_mode="makefile")
+build_project(simulation_project=p, mode="debug", build_engine="makefile")
 run_simulations(simulation_project=p, mode="debug")
 
 # Skip the implicit build before running (use whatever binary is on disk):
@@ -96,7 +93,7 @@ The "test/update wrappers default to debug" choice is intentional: tests are
 more useful with assertions enabled, and crashes produce readable stack
 traces. An explicit `mode=...` argument always wins over the default.
 
-### Mode/build-mode invariant
+### Build invariant
 
 Per-task `mode` and wrapper-level `mode` are always equal. The entry points
 (`get_simulation_test_tasks`, `get_update_*_tasks`, …) set the `mode` default
@@ -106,21 +103,21 @@ disagree.
 
 ## Build engines
 
-The `build_mode` parameter selects how the build is driven. It is orthogonal
-to `mode` — any `mode` works with either engine.
+The `build_engine` parameter selects how the build is driven. It is
+orthogonal to `mode` — any `mode` works with either engine.
 
-| `build_mode` | Engine                                                                  |
-|--------------|-------------------------------------------------------------------------|
-| `makefile`   | Runs `make MODE=<mode>` against the Makefile that `opp_makemake` produces. |
-| `task`       | Drives the build through per-file `MsgCompileTask`, `CppCompileTask`, `LinkTask`, and `CopyBinaryTask`. |
+| `build_engine` | Engine                                                                  |
+|----------------|-------------------------------------------------------------------------|
+| `makefile`     | Runs `make MODE=<mode>` against the Makefile that `opp_makemake` produces. |
+| `task`         | Drives the build through per-file `MsgCompileTask`, `CppCompileTask`, `LinkTask`, and `CopyBinaryTask`. |
 
 `makefile` is the default and matches what you get on the command line.
 `task` is useful when you want finer-grained progress reporting or per-file
-result caching. Switch the global default with `set_default_build_mode`:
+result caching. Switch the global default with `set_default_build_engine`:
 
 ```python
-from opp_repl.simulation.build import set_default_build_mode
-set_default_build_mode("task")
+from opp_repl.simulation.build import set_default_build_engine
+set_default_build_engine("task")
 ```
 
 ## Recursive builds
@@ -145,7 +142,7 @@ p.build(recursive=False)   # just this project, assume deps are already built
 ## Cleaning
 
 `clean_project` and `SimulationProject.clean` mirror `build_project` and
-`SimulationProject.build` exactly — same `mode` and `build_mode` axes:
+`SimulationProject.build` exactly — same `mode` and `build_engine` axes:
 
 ```python
 clean_project(simulation_project=p, mode="debug")   # removes debug artifacts
@@ -154,8 +151,9 @@ p.clean(mode="debug")                                # recursive debug clean
 
 `mode="debug"` cleans only the `_dbg`-suffixed binaries and the
 `out/clang-debug/` (or `out/<config>/`) output folder for that mode — release
-binaries built earlier survive. Use `task` build_mode to clean via opp_repl's
-own clean tasks; `makefile` build_mode dispatches to `make clean MODE=<mode>`.
+binaries built earlier survive. Use `build_engine="task"` to clean via
+opp_repl's own clean tasks; `build_engine="makefile"` dispatches to
+`make clean MODE=<mode>`.
 
 ## Build artifacts on disk
 
@@ -186,7 +184,7 @@ read-only source tree. See [Overlay builds](overlay_builds.md).
 Setting `opp_env_workspace` and `opp_env_project` on a project reroutes
 `build` / `clean` / `run` through `opp_env`, so the build runs inside the
 opp_env-managed environment and the binary is invoked the same way. The same
-`mode` / `build_mode` rules apply.
+`mode` / `build_engine` rules apply.
 
 ## Config discovery and mode
 

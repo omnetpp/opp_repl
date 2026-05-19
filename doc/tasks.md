@@ -147,8 +147,8 @@ number, the build mode, and a set of optional overrides:
 The `mode` parameter selects which build of the simulation binary to use
 (`release`, `debug`, `sanitize`, `coverage`, `profile`). See the
 [Building](building.md) guide for the full table, the per-wrapper defaults,
-and how `mode` relates to the orthogonal `build` (on/off) and `build_mode`
-(makefile vs task engine) parameters.
+and how `mode` relates to the orthogonal `build` (on/off) and `build_engine`
+(makefile vs task) parameters.
 
 ### Simulation runners
 

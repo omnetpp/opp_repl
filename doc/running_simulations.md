@@ -97,7 +97,7 @@ before running any simulation, so there is no need to build manually.  Pass
 regardless of whether it is up-to-date.
 
 See [Building](building.md) for the full story on the `build`, `mode`, and
-`build_mode` parameters, recursive builds, the per-wrapper defaults, and
+`build_engine` parameters, recursive builds, the per-wrapper defaults, and
 build artifacts on disk.
 
 ## Loading projects at runtime

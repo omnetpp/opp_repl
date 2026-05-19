@@ -45,7 +45,7 @@ Three orthogonal parameters control building:
 - **`build`** — *whether* to build before running (default: on).
 - **`mode`** — *which artifact flavor* (`release`, `debug`, `sanitize`,
   `coverage`, `profile`).
-- **`build_mode`** — *which build engine* (`makefile` vs `task`),
+- **`build_engine`** — *which build engine* (`makefile` vs `task`),
   independent of `mode`.
 
 See [Building](building.md) for the full picture, including the per-wrapper

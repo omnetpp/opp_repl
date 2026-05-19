@@ -189,7 +189,7 @@ The `recursive=True` default means all `used_projects` are built first
 When a project has `used_projects`, the direct OMNeT++ build step is
 skipped because the dependency chain already handles it.
 
-See [Building](building.md) for the full `build` / `mode` / `build_mode`
+See [Building](building.md) for the full `build` / `mode` / `build_engine`
 story, including the per-wrapper defaults and the artifact layout on disk.
 
 ## Overlay builds
