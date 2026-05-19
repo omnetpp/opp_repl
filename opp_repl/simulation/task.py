@@ -273,7 +273,7 @@ class SimulationTask(Task):
     Please note that undocumented features are not supposed to be called by the user.
     """
 
-    def __init__(self, simulation_config=None, run_number=0, inifile_entries=[], itervars=None, mode="release", debug=None, remove_launch=True, break_at_event_number=None, break_at_matching_event=None, user_interface="Cmdenv", result_folder="results", sim_time_limit=None, cpu_time_limit=None, record_eventlog=None, record_pcap=None, stdout_file_path=None, eventlog_file_path=None, scalar_file_path=None, vector_file_path=None, wait=True, name="simulation", task_result_class=SimulationTaskResult, **kwargs):
+    def __init__(self, simulation_config=None, run_number=0, inifile_entries=[], itervars=None, mode="release", build=None, build_engine=None, debug=None, remove_launch=True, break_at_event_number=None, break_at_matching_event=None, user_interface="Cmdenv", result_folder="results", sim_time_limit=None, cpu_time_limit=None, record_eventlog=None, record_pcap=None, stdout_file_path=None, eventlog_file_path=None, scalar_file_path=None, vector_file_path=None, wait=True, name="simulation", task_result_class=SimulationTaskResult, **kwargs):
         """
         Parameters:
             simulation_config (:py:class:`SimulationConfig <opp_repl.simulation.config.SimulationConfig>`):
@@ -291,6 +291,17 @@ class SimulationTask(Task):
             mode (string):
                 The build mode that is used to run this simulation task. Valid values are
                 "release", "debug", "sanitize", "coverage", and "profile". See the
+                :doc:`Building </building>` guide for details.
+
+            build (bool):
+                Determines if the simulation project is built before running the task.
+                When the task runs as part of a :py:class:`MultipleSimulationTasks`
+                batch, the wrapper builds once up front and propagates ``build=False``
+                to every child to avoid a redundant per-task build.
+
+            build_engine (string):
+                Selects the build engine used by :py:meth:`build_before_run`.
+                Valid values are "makefile" and "task"; see the
                 :doc:`Building </building>` guide for details.
 
             debug (bool):
@@ -355,6 +366,8 @@ class SimulationTask(Task):
         self.run_number = run_number
         self.itervars = itervars
         self.mode = mode
+        self.build = build if build is not None else get_default_build_argument()
+        self.build_engine = build_engine
         self.debug = debug or (True if break_at_event_number is not None or break_at_matching_event is not None else False)
         self.remove_launch = remove_launch
         self.break_at_event_number = break_at_event_number
@@ -489,7 +502,12 @@ class SimulationTask(Task):
         """
         return super().run(**kwargs)
 
-    def run_protected(self, prepend_args=[], append_args=[],  simulation_runner=None, simulation_runner_class=None, **kwargs):
+    def build_before_run(self, **kwargs):
+        self.simulation_config.simulation_project.build(mode=self.mode, build_engine=self.build_engine)
+
+    def run_protected(self, prepend_args=[], append_args=[],  simulation_runner=None, simulation_runner_class=None, build=None, **kwargs):
+        if (build if build is not None else self.build):
+            self.build_before_run(**kwargs)
         simulation_project = self.simulation_config.simulation_project
         working_directory = self.simulation_config.working_directory
         ini_file = self.simulation_config.ini_file
