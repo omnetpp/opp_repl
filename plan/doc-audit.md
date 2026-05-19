@@ -154,11 +154,10 @@ what it should say.
     `root_folder_environment_variable="__omnetpp_root_dir"`, which is
     already the default — misleading.
 
-26. **doc/omnetpp_projects.md examples** — Pass `name=` to
-    `OmnetppProject(...)`. This works only when called from the `.opp`
-    loader, which pops `name` before construction
-    (`opp_repl/simulation/workspace.py:268`). Direct Python use will
-    fail with `TypeError`. Worth a note.
+26. **doc/omnetpp_projects.md examples** — *Resolved: code fix.*
+    `OmnetppProject.__init__` now accepts `name=`, matching
+    `SimulationProject` and the doc examples.  Direct Python use of
+    `OmnetppProject(name=..., ...)` no longer raises `TypeError`.
 
 27. **doc/overlay_builds.md:124-128** — `project.clean()` "unmounts and
     removes upper/work" only applies to overlay-backed projects;

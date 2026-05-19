@@ -92,8 +92,7 @@ class SimulationWorkspace:
         self._omnetpp_projects[(name, version)] = project
 
     def define_omnetpp_project(self, name, version=None, **kwargs):
-        project = OmnetppProject(version=version, **kwargs)
-        project.name = name
+        project = OmnetppProject(name=name, version=version, **kwargs)
         self.set_omnetpp_project(name, version, project)
         return project
 

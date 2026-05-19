@@ -46,12 +46,18 @@ class OmnetppProject:
     the overlay's merged directory instead of the original source tree.
     """
 
-    def __init__(self, version=None, root_folder_environment_variable="__omnetpp_root_dir", root_folder=None,
+    def __init__(self, name=None, version=None, root_folder_environment_variable="__omnetpp_root_dir", root_folder=None,
                  overlay_name=None, overlay_build_root=None, opp_env_workspace=None, opp_env_project=None):
         """
         Initializes a new OMNeT++ project.
 
         Parameters:
+            name (string or None):
+                The human-readable name of the OMNeT++ project.  When the
+                project is registered via :py:func:`define_omnetpp_project`
+                or loaded from a ``.opp`` file, the workspace overrides this
+                with the registration name.
+
             version (string or None):
                 The version string.
 
@@ -69,6 +75,7 @@ class OmnetppProject:
             overlay_build_root (str or None):
                 Override for the overlay build root directory.
         """
+        self.name = name
         self.version = version
         self.root_folder_environment_variable = root_folder_environment_variable
         self.root_folder = root_folder
