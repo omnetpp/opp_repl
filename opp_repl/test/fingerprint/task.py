@@ -305,14 +305,22 @@ def print_correct_fingerprints(**kwargs):
         print(test_task.simulation_task.get_parameters_string(**kwargs) + " " + COLOR_GREEN + str(test_task.fingerprint) + COLOR_RESET)
 print_correct_fingerprints.__signature__ = combine_signatures(print_correct_fingerprints, get_fingerprint_test_tasks)
 
-def print_missing_correct_fingerprints(simulation_project=None, ingredients="tplx", num_runs=1):
+def print_missing_correct_fingerprints(simulation_project=None, ingredients="tplx", num_runs=1, build=None, mode="release", build_engine=None):
     if simulation_project is None:
         simulation_project = get_default_simulation_project()
+    # is_interactive() runs the project executable to probe for interactive
+    # prompts, so the project must already be built. Build once up front and
+    # construct each SimulationTask with build=False so per-task probing
+    # doesn't trigger redundant make invocations.
+    if build is None:
+        build = get_default_build_argument()
+    if build:
+        simulation_project.build(mode=mode, build_engine=build_engine)
     correct_fingerprint_store = get_correct_fingerprint_store(simulation_project)
-    for simulation_config in get_all_simulation_configs(simulation_project):
+    for simulation_config in simulation_project.get_all_simulation_configs(build=False, mode=mode):
         if not simulation_config.abstract and not simulation_config.emulation:
             for run_number in range(0, num_runs or simulation_config.num_runs):
-                simulation_task = SimulationRun(simulation_config, run_number=run_number)
+                simulation_task = SimulationTask(simulation_config=simulation_config, run_number=run_number, mode=mode, build=False)
                 if not simulation_task.is_interactive():
                     stored_fingerprint_entries = correct_fingerprint_store.filter_entries(ingredients=ingredients, working_directory=simulation_config.working_directory, ini_file=simulation_config.ini_file, config=simulation_config.config, run_number=run_number)
                     if len(stored_fingerprint_entries) == 0:
