@@ -376,10 +376,10 @@ OMNETPP_COMPONENTS = [
         "extra_libraries": [
             {"basename": "oppmain", "source_files": ["main.cc"]},
         ],
-        "tools": [
-            {"basename": "opp_run", "source": "main.cc", "link_with": "oppmain",
-             "release_alias": "opp_run_release"},
-        ],
+        # NOTE: opp_run is *not* listed as a tool here — it must be built
+        # after cmdenv and qtenv exist, since the Makefile build links it
+        # against ALL_ENV_LIBS to pull in oppcmdenv/oppqtenv at runtime.
+        # See _build_opp_run_tasks().
         "generators": [
             {"kind": "perl", "script": "eventlogwriter.pl",
              "extra_inputs": ["../eventlog/eventlogentries.txt"],
@@ -1051,6 +1051,77 @@ def _build_component_tasks(omnetpp_project, component, mode, makefile_inc_config
     )
 
 
+def _build_opp_run_tasks(omnetpp_project, mode, cfg, concurrent):
+    """
+    Build the ``opp_run`` executable (and ``opp_run_release`` in release mode).
+
+    Runs after all per-component tasks, since the Makefile build links
+    ``opp_run`` against ``ALL_ENV_LIBS`` (oppcmdenv + oppqtenv) to force
+    the user interface libraries to be loaded at runtime via
+    ``-Wl,--no-as-needed``. Without these libs in the link line, the binary
+    starts up with "No user interface (Cmdenv, Qtenv, etc.) found".
+    """
+    omnetpp_root = omnetpp_project.get_root_path()
+    debug_suffix = cfg.debug_suffix if cfg else ""
+
+    envir_extra_cflags = _component_extra_cflags({"name": "envir"}, cfg)
+    envir_extra_defines = ["-DENVIR_EXPORT", *_component_extra_defines({"name": "envir"}, cfg)]
+
+    main_src_rel = os.path.relpath(
+        os.path.join(omnetpp_root, "src", "envir", "main.cc"), omnetpp_root)
+    compile_task = OmnetppProjectCppCompileTask(
+        omnetpp_project=omnetpp_project,
+        component="envir",
+        source_file=main_src_rel,
+        mode=mode,
+        makefile_inc_config=cfg,
+        extra_cflags=envir_extra_cflags,
+        extra_defines=envir_extra_defines,
+    )
+
+    # Link line mirrors src/envir/Makefile: $(ALL_ENV_LIBS) $(IMPLIBS) $(SYS_LIBS)
+    # ALL_ENV_LIBS already contains -loppcmdenv, -loppqtenv, the -Wl,--no-as-needed
+    # markers, and the QT/OSG libs as the configure step decided.
+    all_env_libs = _split(cfg.all_env_libs) if cfg else [
+        f"-loppcmdenv{debug_suffix}", f"-loppenvir{debug_suffix}"]
+    implibs = [f"-loppsim{debug_suffix}",
+               f"-loppnedxml{debug_suffix}",
+               f"-loppcommon{debug_suffix}"]
+    extra_libraries = [*all_env_libs, *implibs]
+
+    link_task = OmnetppProjectLinkTask(
+        omnetpp_project=omnetpp_project,
+        component="envir",
+        library_name="opp_run",
+        is_executable=True,
+        mode=mode,
+        makefile_inc_config=cfg,
+        compile_tasks=[compile_task],
+        extra_libraries=extra_libraries,
+    )
+
+    tasks = [compile_task, link_task]
+
+    if mode == "release":
+        exe_ext = cfg.exe_suffix if cfg else ""
+        bin_dir = (cfg.omnetpp_bin_dir if cfg and cfg.omnetpp_bin_dir
+                   else os.path.join(omnetpp_root, "bin"))
+        source_rel = os.path.relpath(link_task.output_file, omnetpp_root)
+        target_rel = os.path.relpath(os.path.join(bin_dir, "opp_run_release" + exe_ext), omnetpp_root)
+        tasks.append(OmnetppProjectCopyBinaryTask(
+            omnetpp_project=omnetpp_project,
+            source_file=source_rel,
+            target_file=target_rel,
+            name="envir: install opp_run_release",
+        ))
+
+    return _RecursiveBuildTasks(
+        tasks=tasks,
+        name="build opp_run",
+        concurrent=False,  # compile -> link -> copy
+    )
+
+
 def build_omnetpp(build_mode=None, **kwargs):
     """
     Builds OMNeT++ using either :py:func:`build_omnetpp_using_makefile` or
@@ -1066,6 +1137,7 @@ def build_omnetpp(build_mode=None, **kwargs):
             Additional parameters are forwarded to the selected builder.
     """
     if build_mode is None:
+        from opp_repl.simulation.build import get_default_build_mode
         build_mode = get_default_build_mode()
     if build_mode == "makefile":
         build_function = build_omnetpp_using_makefile
@@ -1264,17 +1336,21 @@ def _build_component_clean_tasks(omnetpp_project, component, cfg, mode):
     return tasks
 
 
-def clean_omnetpp(build_mode="makefile", **kwargs):
+def clean_omnetpp(build_mode=None, **kwargs):
     """
     Cleans OMNeT++ using either :py:func:`clean_omnetpp_using_makefile` or
     :py:func:`clean_omnetpp_using_tasks`.
 
     Parameters:
         build_mode (str):
-            ``"makefile"`` (default) runs ``make clean`` in the OMNeT++ tree.
+            ``"makefile"`` runs ``make clean`` in the OMNeT++ tree.
             ``"task"`` removes generated sources, built objects, libraries and
-            executables directly.
+            executables directly. If unspecified, the global default from
+            :py:func:`get_default_build_mode` is used.
     """
+    if build_mode is None:
+        from opp_repl.simulation.build import get_default_build_mode
+        build_mode = get_default_build_mode()
     if build_mode == "makefile":
         clean_function = clean_omnetpp_using_makefile
     elif build_mode == "task":
@@ -1335,6 +1411,29 @@ def clean_omnetpp_using_tasks(omnetpp_project=None, mode="release", concurrent=T
                 concurrent=concurrent,
             ))
 
+    # opp_run / opp_run_release are built in a post-pass (see
+    # _build_opp_run_tasks), so they're not covered by any per-component clean.
+    debug_suffix = cfg.debug_suffix if cfg else ""
+    exe_ext = cfg.exe_suffix if cfg else ""
+    bin_dir = (cfg.omnetpp_bin_dir if cfg and cfg.omnetpp_bin_dir
+               else os.path.join(omnetpp_root, "bin"))
+    opp_run_clean_tasks = [
+        _CleanFileTask(
+            working_dir=omnetpp_root,
+            file_path=os.path.join(bin_dir, "opp_run" + debug_suffix + exe_ext),
+        ),
+    ]
+    if mode == "release":
+        opp_run_clean_tasks.append(_CleanFileTask(
+            working_dir=omnetpp_root,
+            file_path=os.path.join(bin_dir, "opp_run_release" + exe_ext),
+        ))
+    component_tasks.append(_MultipleCleanTasks(
+        tasks=opp_run_clean_tasks,
+        name="clean opp_run",
+        concurrent=concurrent,
+    ))
+
     # Output directory (out/<configname>/, or all of out/ if no config)
     out_path = f"out/{cfg.configname}" if cfg else "out"
     component_tasks.append(_CleanDirectoryTask(
@@ -1378,6 +1477,11 @@ def build_omnetpp_using_tasks(omnetpp_project=None, mode="release", concurrent=T
         task = _build_component_tasks(omnetpp_project, component, mode, makefile_inc_config, concurrent)
         if task is not None:
             component_tasks.append(task)
+
+    # opp_run must be linked after cmdenv/qtenv are built — see _build_opp_run_tasks().
+    opp_run_task = _build_opp_run_tasks(omnetpp_project, mode, makefile_inc_config, concurrent)
+    if opp_run_task is not None:
+        component_tasks.append(opp_run_task)
 
     top_task = _RecursiveBuildTasks(
         tasks=component_tasks,
