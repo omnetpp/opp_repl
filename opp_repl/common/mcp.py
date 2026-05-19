@@ -26,7 +26,8 @@ import traceback
 from opp_repl.common.util import is_running_in_sandbox
 
 try:
-    from mcp.server.fastmcp import FastMCP
+    from mcp.server.fastmcp import FastMCP, Context
+    import anyio
     _mcp_available = True
 except ImportError:
     _mcp_available = False
@@ -55,6 +56,164 @@ def _sigint_handler(signum, frame):
 
 def _strip_ansi(text):
     return re.sub(r"\033\[[0-9;]*m", "", str(text))
+
+
+class _TeeStream:
+    """File-like that fans writes out to multiple streams. Writes never raise."""
+    def __init__(self, *streams):
+        self._streams = streams
+
+    def write(self, data):
+        for s in self._streams:
+            try:
+                s.write(data)
+            except Exception:
+                pass
+        return len(data) if isinstance(data, str) else 0
+
+    def flush(self):
+        for s in self._streams:
+            try:
+                s.flush()
+            except Exception:
+                pass
+
+    def isatty(self):
+        for s in self._streams:
+            try:
+                if s.isatty():
+                    return True
+            except Exception:
+                pass
+        return False
+
+    def writable(self):
+        return True
+
+    @property
+    def encoding(self):
+        for s in self._streams:
+            enc = getattr(s, "encoding", None)
+            if enc:
+                return enc
+        return "utf-8"
+
+
+class _CaptureSink:
+    """File-like that captures writes into a buffer with ANSI stripped, and
+    fires a callback for each completed line (used to stream chunks to the
+    MCP client)."""
+    def __init__(self, on_line=None):
+        self._buf = io.StringIO()
+        self._partial = ""
+        self._on_line = on_line
+
+    def write(self, data):
+        if not data:
+            return 0
+        clean = _strip_ansi(data)
+        self._buf.write(clean)
+        if self._on_line is not None:
+            self._partial += clean
+            while "\n" in self._partial:
+                line, self._partial = self._partial.split("\n", 1)
+                self._on_line(line)
+        return len(data)
+
+    def flush(self):
+        if self._on_line is not None and self._partial:
+            self._on_line(self._partial)
+            self._partial = ""
+
+    def getvalue(self):
+        return self._buf.getvalue()
+
+
+class _StreamingLogHandler(logging.Handler):
+    """Forwards formatted log records into a _CaptureSink so logging output is
+    captured alongside stdout/stderr (and streamed line-by-line to MCP)."""
+    def __init__(self, sink):
+        super().__init__()
+        self._sink = sink
+        self.setFormatter(logging.Formatter("%(name)s %(levelname)s: %(message)s"))
+
+    def emit(self, record):
+        try:
+            msg = self.format(record)
+        except Exception:
+            return
+        if not msg.endswith("\n"):
+            msg += "\n"
+        try:
+            self._sink.write(msg)
+        except Exception:
+            pass
+
+
+def _run_execute_python_sync(code, sink):
+    """Run a snippet with stdout/stderr/logging tee'd to the REPL console and
+    captured into ``sink``. Called from a worker thread via
+    ``anyio.to_thread.run_sync``.
+    """
+    import IPython
+    ip = IPython.get_ipython()
+
+    global _active_mcp_thread_id
+    _active_mcp_thread_id = threading.get_ident()
+
+    old_pager = pydoc.pager
+    pydoc.pager = pydoc.plainpager
+
+    old_stdout = sys.stdout
+    old_stderr = sys.stderr
+    sys.stdout = _TeeStream(old_stdout, sink)
+    sys.stderr = _TeeStream(old_stderr, sink)
+
+    log_handler = _StreamingLogHandler(sink)
+    log_handler.setLevel(logging.NOTSET)
+    root_logger = logging.getLogger()
+    root_logger.addHandler(log_handler)
+
+    info = {}
+    try:
+        if ip is not None:
+            try:
+                result = ip.run_cell(code, silent=False, store_history=False)
+                if result.result is not None:
+                    info["result_repr"] = _strip_ansi(repr(result.result))
+                if result.error_in_exec is not None:
+                    info["error_in_exec"] = _strip_ansi(str(result.error_in_exec))
+                if result.error_before_exec is not None:
+                    info["error_before_exec"] = _strip_ansi(str(result.error_before_exec))
+            except KeyboardInterrupt:
+                info["interrupted"] = True
+        else:
+            # Fallback: no IPython session (e.g. testing outside the REPL)
+            namespace = {"__builtins__": __builtins__}
+            exec("from opp_repl import *", namespace)
+            try:
+                try:
+                    result = eval(code, namespace)
+                    if result is not None:
+                        print(repr(result))
+                except SyntaxError:
+                    exec(code, namespace)
+            except KeyboardInterrupt:
+                info["interrupted"] = True
+            except Exception:
+                traceback.print_exc(file=sys.stderr)
+    finally:
+        try:
+            sink.flush()
+        except Exception:
+            pass
+        root_logger.removeHandler(log_handler)
+        sys.stdout = old_stdout
+        sys.stderr = old_stderr
+        pydoc.pager = old_pager
+        _active_mcp_thread_id = None
+    return info
+
 
 if _mcp_available:
     _mcp = FastMCP("opp_repl", host="127.0.0.1", port=9966, stateless_http=True,
@@ -331,7 +490,7 @@ def _register_mcp_handlers():
         return "\n".join(lines)
 
     @_mcp.tool()
-    def execute_python(code: str) -> str:
+    async def execute_python(code: str, ctx: Context | None = None) -> str:
         """Execute Python code in the live IPython session.
 
         The code runs in the same namespace as the interactive REPL user.
@@ -356,74 +515,46 @@ def _register_mcp_handlers():
 
         Returns:
             The repr of the last expression's value (if any), followed by any
-            captured stdout/stderr. There is no need to call print().
+            captured stdout/stderr/logging output. There is no need to call print().
+            Output is also streamed to the MCP client line-by-line as log
+            notifications while the code is running, and printed to the REPL
+            console in real time.
         """
-        import IPython
-        ip = IPython.get_ipython()
         _logger.info(f"execute_python:\n{code}")
         mcp_calls.append({"tool": "execute_python", "code": code})
 
-        if ip is not None:
-            # Run in the live IPython session — shared namespace with the user
-            global _active_mcp_thread_id
-            _active_mcp_thread_id = threading.get_ident()
-
-            # Disable interactive pager so help() prints text directly
-            old_pager = pydoc.pager
-            pydoc.pager = pydoc.plainpager
-
-            # Capture stdout so the AI sees printed output
-            captured = io.StringIO()
-            old_stdout = sys.stdout
-            sys.stdout = captured
+        def on_line(line):
+            if ctx is None:
+                return
             try:
-                result = ip.run_cell(code, silent=False, store_history=False)
-            except KeyboardInterrupt:
-                text = "Interrupted by user (Ctrl-C)"
-                _logger.info(text)
-                return text
-            finally:
-                sys.stdout = old_stdout
-                pydoc.pager = old_pager
-                _active_mcp_thread_id = None
-
-            # Capture the cell output
-            parts = []
-            output = captured.getvalue()
-            if output:
-                parts.append(_strip_ansi(output.rstrip()))
-            if result.result is not None:
-                parts.append(_strip_ansi(repr(result.result)))
-            if result.error_in_exec is not None:
-                parts.append(_strip_ansi(str(result.error_in_exec)))
-            if result.error_before_exec is not None:
-                parts.append(_strip_ansi(str(result.error_before_exec)))
-            text = "\n".join(parts) if parts else "(no output)"
-        else:
-            # Fallback: no IPython session (e.g. testing outside the REPL)
-            namespace = {"__builtins__": __builtins__}
-            exec("from opp_repl import *", namespace)
-            stdout = io.StringIO()
-            stderr = io.StringIO()
-            try:
-                import contextlib
-                with contextlib.redirect_stdout(stdout), contextlib.redirect_stderr(stderr):
-                    try:
-                        result = eval(code, namespace)
-                        if result is not None:
-                            print(repr(result))
-                    except SyntaxError:
-                        exec(code, namespace)
+                anyio.from_thread.run(ctx.info, line)
             except Exception:
-                stderr.write(traceback.format_exc())
-            output = stdout.getvalue()
-            errors = stderr.getvalue()
-            text = (output + ("\n--- STDERR ---\n" + errors if errors else "")).strip()
-            if not text:
-                text = "(no output)"
+                # No event-loop portal (writer thread not spawned by anyio),
+                # or stream closed — drop the streamed chunk; the line is
+                # still captured into the buffer for the final return value.
+                pass
 
+        sink = _CaptureSink(on_line=on_line if ctx is not None else None)
+        info = await anyio.to_thread.run_sync(_run_execute_python_sync, code, sink)
+
+        if info.get("interrupted"):
+            text = "Interrupted by user (Ctrl-C)"
+            _logger.info(text)
+            return text
+
+        parts = []
+        output = sink.getvalue()
+        if output:
+            parts.append(output.rstrip())
+        if info.get("result_repr") is not None:
+            parts.append(info["result_repr"])
+        if info.get("error_in_exec") is not None:
+            parts.append(info["error_in_exec"])
+        if info.get("error_before_exec") is not None:
+            parts.append(info["error_before_exec"])
+        text = "\n".join(parts) if parts else "(no output)"
         _logger.info(f"execute_python → {text}")
-        return _strip_ansi(text)
+        return text
 
 if _mcp_available:
     _register_mcp_handlers()
