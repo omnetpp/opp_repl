@@ -24,7 +24,7 @@ def enable_features(feature):
     run_command_with_logging(["opp_featuretool", "enable", "-f", feature])
 
 class FeatureTestTask(TestTask):
-    def __init__(self, simulation_project, feature, packages, type="enable", **kwargs):
+    def __init__(self, simulation_project, feature, packages, type="enable", mode="debug", build_mode=None, **kwargs):
         super().__init__(**kwargs)
         self.locals = locals()
         self.locals.pop("self")
@@ -32,6 +32,8 @@ class FeatureTestTask(TestTask):
         self.simulation_project = simulation_project
         self.feature = feature
         self.type = type
+        self.mode = mode
+        self.build_mode = build_mode
         self.packages = packages
         self.multiple_simulation_tasks = self.get_multiple_simulation_tasks()
 
@@ -43,11 +45,11 @@ class FeatureTestTask(TestTask):
                  folders.append(folder)
                  folders.append(folder + "/.*")
             working_directory_filter = "|".join(folders)
-            multiple_simulation_tasks = get_simulation_tasks(working_directory_filter=working_directory_filter, full_match=True, run_number=0)
+            multiple_simulation_tasks = get_simulation_tasks(working_directory_filter=working_directory_filter, full_match=True, run_number=0, mode=self.mode, build=False)
         else:
-            multiple_simulation_tasks = MultipleSimulationTasks()
+            multiple_simulation_tasks = MultipleSimulationTasks(mode=self.mode, build=False)
         if len(multiple_simulation_tasks.tasks) == 0:
-            multiple_simulation_tasks = get_simulation_tasks(working_directory_filter="examples/empty", full_match=True, run_number=0)
+            multiple_simulation_tasks = get_simulation_tasks(working_directory_filter="examples/empty", full_match=True, run_number=0, mode=self.mode, build=False)
         return multiple_simulation_tasks
 
     def get_parameters_string(self, **kwargs):
@@ -69,18 +71,22 @@ class FeatureTestTask(TestTask):
         else:
             raise Exception("Unknown test type")
         make_makefiles(simulation_project=self.simulation_project)
-        clean_project(simulation_project=self.simulation_project)
-        build_project(simulation_project=self.simulation_project)
+        clean_project(simulation_project=self.simulation_project, mode=self.mode, build_mode=self.build_mode)
+        build_project(simulation_project=self.simulation_project, mode=self.mode, build_mode=self.build_mode)
         multiple_simulation_tasks_result = self.multiple_simulation_tasks.run(**kwargs)
         result="PASS" if multiple_simulation_tasks_result.result == "DONE" else "FAIL" if multiple_simulation_tasks_result.result == "FAIL" else "ERROR"
         return self.task_result_class(self, result=result)
 
 class MultipleFeatureTestTasks(MultipleTestTasks):
-    def __init__(self, **kwargs):
+    def __init__(self, simulation_project=None, build=None, build_mode=None, mode="debug", **kwargs):
         super().__init__(**kwargs)
         self.locals = locals()
         self.locals.pop("self")
         self.kwargs = kwargs
+        self.simulation_project = simulation_project
+        self.build = build if build is not None else get_default_build_argument()
+        self.build_mode = build_mode
+        self.mode = mode
 
     def get_total_simulation_task_count(self):
         count = 0
@@ -88,7 +94,17 @@ class MultipleFeatureTestTasks(MultipleTestTasks):
             count += len(list(filter(lambda task: task.simulation_config.working_directory != "examples/empty", task.multiple_simulation_tasks.tasks)))
         return count
 
+    def build_before_run(self, **kwargs):
+        # Build once in the requested mode as a baseline. Per-iteration feature
+        # toggles in FeatureTestTask still rebuild as features change, but this
+        # ensures a consistent starting state and matches the convention used by
+        # MultipleSimulationTestTasks.
+        if self.simulation_project is not None:
+            self.simulation_project.build(mode=self.mode, build_mode=self.build_mode)
+
     def run_protected(self, **kwargs):
+        if self.build:
+            self.build_before_run(**kwargs)
         _logger.info("Collected " + str(self.get_total_simulation_task_count()) + " simulations in total")
         multiple_test_tasks_result = super().run_protected(**kwargs)
         _logger.info("Run " + str(self.get_total_simulation_task_count()) + " simulations in total")
