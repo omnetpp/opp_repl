@@ -10,7 +10,6 @@ of the simulation project.
 import glob
 import logging
 import math
-import pandas
 import re
 import shutil
 import subprocess
