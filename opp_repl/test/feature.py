@@ -113,6 +113,7 @@ class MultipleFeatureTestTasks(MultipleTestTasks):
 
 
 def get_feature_test_tasks(simulation_project=None, filter=".*", full_match=False, **kwargs):
+    kwargs.setdefault("mode", "debug")
     if simulation_project is None:
         simulation_project = get_default_simulation_project()
     oppfeatures = read_xml_file(simulation_project.get_full_path(".oppfeatures"))
@@ -127,7 +128,7 @@ def get_feature_test_tasks(simulation_project=None, filter=".*", full_match=Fals
         test_tasks = test_tasks + [FeatureTestTask(simulation_project, None, [], type="default", task_result_class=TestTaskResult, **kwargs),
                                    FeatureTestTask(simulation_project, None, [], type="enable all", task_result_class=TestTaskResult, **kwargs),
                                    FeatureTestTask(simulation_project, None, [], type="disable all", task_result_class=TestTaskResult, **kwargs)]
-    return MultipleFeatureTestTasks(tasks=test_tasks, multiple_task_results_class=MultipleTestTaskResults, **dict(kwargs, concurrent=False))
+    return MultipleFeatureTestTasks(tasks=test_tasks, simulation_project=simulation_project, multiple_task_results_class=MultipleTestTaskResults, **dict(kwargs, concurrent=False))
 get_feature_test_tasks.__signature__ = combine_signatures(get_feature_test_tasks, get_simulation_tasks)
 
 def run_feature_tests(**kwargs):
