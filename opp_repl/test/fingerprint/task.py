@@ -70,7 +70,7 @@ class FingerprintTestTaskResult(SimulationTestTaskResult):
 
 class MultipleFingerprintTestTaskResults(MultipleTestTaskResults):
     def __init__(self, **kwargs):
-        super().__init(**kwargs)
+        super().__init__(**kwargs)
         self.locals = locals()
         self.locals.pop("self")
         self.kwargs = kwargs

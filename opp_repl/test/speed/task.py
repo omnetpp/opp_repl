@@ -132,7 +132,7 @@ class MultipleSpeedUpdateTasks(MultipleSimulationUpdateTasks):
                                                      test_result="PASS", sim_time_limit=simulation_task.sim_time_limit,
                                                      working_directory=simulation_config.working_directory, ini_file=simulation_config.ini_file, config=simulation_config.config, run_number=simulation_task.run_number)
         speed_measurement_store.write()
-        return speed_measurement_store
+        return multiple_speed_update_results
 
 class SpeedUpdateTaskResult(SimulationUpdateTaskResult):
     def __init__(self, expected_num_cpu_instructions=None, num_cpu_instructions=None, reason=None, max_relative_error=0.1, **kwargs):
