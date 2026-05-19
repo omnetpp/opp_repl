@@ -895,8 +895,18 @@ from opp_repl.simulation.workspace import *  # noqa: F401,F403 — re-export wor
 
 # -- Git worktree helpers -------------------------------------------------
 
-def _get_git_root(path):
-    """Return the absolute path of the git repository root containing *path*."""
+def _get_git_root(path, optional=False):
+    """Return the absolute path of the git repository root containing *path*.
+
+    If *optional* is true, return ``None`` when *path* is not inside a git
+    repository (without logging git's stderr).
+    """
+    if optional:
+        probe = subprocess.run(
+            ["git", "rev-parse", "--show-toplevel"],
+            cwd=path, capture_output=True, text=True,
+        )
+        return os.path.abspath(probe.stdout.strip()) if probe.returncode == 0 else None
     result = run_command_with_logging(
         ["git", "rev-parse", "--show-toplevel"],
         cwd=path, error_message="Failed to determine git root",
@@ -951,7 +961,13 @@ def make_worktree_simulation_project(simulation_project, git_hash):
         raise RuntimeError("Source project has no root path")
     src_root = os.path.abspath(src_root)
 
-    git_root = _get_git_root(src_root)
+    git_root = _get_git_root(src_root, optional=True)
+    if git_root is None:
+        raise RuntimeError(
+            f"Cannot compare across commits: simulation project {simulation_project.name!r} "
+            f"at {src_root} is not in a git repository. This operation requires the project "
+            f"to be a git checkout."
+        )
     worktree_path = _make_git_worktree(git_root, git_hash)
 
     short_hash = git_hash[:10]
@@ -965,12 +981,14 @@ def make_worktree_simulation_project(simulation_project, git_hash):
 
     # If the OMNeT++ installation lives in the same git repo, redirect it
     # into the worktree so that builds use the matching OMNeT++ version.
+    # OMNeT++ may be installed outside of git (release tarball, package),
+    # in which case we skip the redirect.
     omnetpp_project = simulation_project.get_omnetpp_project()
     if omnetpp_project is not None:
         omnetpp_root = omnetpp_project.get_root_path()
         if omnetpp_root is not None:
             omnetpp_root = os.path.abspath(omnetpp_root)
-            omnetpp_git_root = _get_git_root(omnetpp_root)
+            omnetpp_git_root = _get_git_root(omnetpp_root, optional=True)
             if omnetpp_git_root == git_root:
                 omnetpp_project_copy = copy.copy(omnetpp_project)
                 omnetpp_rel = os.path.relpath(omnetpp_root, git_root)
