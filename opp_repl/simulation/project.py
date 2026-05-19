@@ -112,6 +112,9 @@ class OmnetppProject:
         return os.path.relpath(path, root) if root is not None else None
 
     def get_library_suffix(self, mode="release"):
+        """Return the binary suffix for *mode* (``"_release"``, ``"_dbg"``,
+        ``"_sanitize"``, ``"_coverage"``, ``"_profile"``). See the
+        :doc:`Building </building>` guide for what each mode produces."""
         if mode == "release":
             return "_release"
         elif mode == "debug":
@@ -178,11 +181,14 @@ class OmnetppProject:
         Build OMNeT++.
 
         Parameters:
-            mode (str): build mode (``release``, ``debug``, ``sanitize``, ...).
-            build_mode (str): ``"makefile"`` to run ``make``, or
-                ``"task"`` to drive the build via per-file
+            mode (str): build mode — one of ``"release"``, ``"debug"``,
+                ``"sanitize"``, ``"coverage"``, ``"profile"``. See the
+                :doc:`Building </building>` guide for details.
+            build_mode (str): build engine — ``"makefile"`` to run ``make``,
+                or ``"task"`` to drive the build via per-file
                 :py:mod:`opp_repl <opp_repl>` tasks. If unspecified, the global
                 default from :py:func:`get_default_build_mode` is used.
+                Orthogonal to ``mode``.
 
         See :py:func:`build_omnetpp <opp_repl.simulation.build_omnetpp.build_omnetpp>`.
         """
@@ -224,8 +230,10 @@ class OmnetppProject:
         Clean OMNeT++.
 
         Parameters:
-            mode (str): build mode to clean.
-            build_mode (str): ``"makefile"`` to run ``make clean``,
+            mode (str): build mode to clean — one of ``"release"``, ``"debug"``,
+                ``"sanitize"``, ``"coverage"``, ``"profile"``. See the
+                :doc:`Building </building>` guide for details.
+            build_mode (str): build engine — ``"makefile"`` to run ``make clean``,
                 or ``"task"`` to remove generated sources/build artifacts
                 directly. If unspecified, the global default from
                 :py:func:`get_default_build_mode` is used.

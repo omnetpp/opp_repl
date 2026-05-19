@@ -126,8 +126,10 @@ def build_project(build_mode=None, **kwargs):
 
     Parameters:
         build_mode (string):
-            Specifies the requested build mode. Valid values are "makefile" and "task".
+            Specifies the build engine. Valid values are "makefile" (drives ``make`` via an
+            ``opp_makemake``-generated Makefile) and "task" (drives the per-file task pipeline).
             If unspecified, the global default from :py:func:`get_default_build_mode` is used.
+            Orthogonal to ``mode`` — see the :doc:`Building </building>` guide.
 
         kwargs (dict):
             Additional parameters are inherited from :py:func:`build_project_using_makefile` and :py:func:`build_project_using_tasks` functions.
@@ -154,7 +156,8 @@ def is_build_up_to_date(simulation_project=None, mode="release", **kwargs):
             The simulation project to check. If unspecified, then the default simulation project is used.
 
         mode (string):
-            Specifies the build mode to check. Valid values are "debug" and "release".
+            Specifies the build mode to check. Valid values are "release", "debug", "sanitize",
+            "coverage", and "profile". See the :doc:`Building </building>` guide for details.
 
     Returns (bool):
         True if the project is up to date, False otherwise.
@@ -184,7 +187,9 @@ def build_project_using_makefile(simulation_project=None, mode="release", **kwar
             The simulation project to build. If unspecified, then the default simulation project is used.
 
         mode (string):
-            Specifies the build mode of the output binaries. Valid values are "debug" and "release".
+            Specifies the build mode of the output binaries. Valid values are "release", "debug",
+            "sanitize", "coverage", and "profile". See the :doc:`Building </building>` guide for
+            details.
 
     Returns (None):
         Nothing.

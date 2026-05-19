@@ -290,7 +290,9 @@ class SimulationTask(Task):
                 The list of iteration variables.
 
             mode (string):
-                The build mode that is used to run this simulation task. Valid values are "release", "debug", and "sanitize".
+                The build mode that is used to run this simulation task. Valid values are
+                "release", "debug", "sanitize", "coverage", and "profile". See the
+                :doc:`Building </building>` guide for details.
 
             debug (bool):
                 Specifies that the IDE debugger should be attached to the running simulation.
@@ -637,13 +639,17 @@ class MultipleSimulationTasks(MultipleTasks):
 
         Parameters:
             mode (string):
-                Specifies the build mode for running. Valid values are "debug", "release", and "sanitize".
+                Specifies the build mode for running. Valid values are "release", "debug",
+                "sanitize", "coverage", and "profile". See the
+                :doc:`Building </building>` guide for details.
 
             build (bool):
                 Determines if the simulation project is built before running any simulation.
 
             build_mode (string):
-                Specifies the build method. Valid values are "makefile" and "task".
+                Specifies the build engine. Valid values are "makefile" (drives ``make`` via
+                an ``opp_makemake``-generated Makefile) and "task" (drives the per-file task
+                pipeline). Orthogonal to ``mode``.
 
             kwargs (dict):
                 Additional arguments are inherited from :py:class:`MultipleTasks <opp_repl.common.task.MultipleTasks>` constructor.
@@ -698,7 +704,9 @@ def get_simulation_tasks(simulation_project=None, simulation_configs=None, mode=
 
         mode (string):
             Determines the build mode for the simulation project before running any of the returned simulation tasks.
-            Valid values are "debug" and "release".
+            Valid values are "release", "debug", "sanitize", "coverage", and "profile". See the
+            :doc:`Building </building>` guide for details. If ``None`` (the default), resolves to
+            "debug" when ``debug`` is truthy and to "release" otherwise.
 
         debug (bool):
             Specifies that the IDE debugger should be attached to the running simulation.
