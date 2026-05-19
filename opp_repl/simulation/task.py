@@ -413,7 +413,7 @@ class SimulationTask(Task):
         if self.interactive is None:
             simulation_config = self.simulation_config
             simulation_project = simulation_config.simulation_project
-            executable = simulation_project.get_executable()
+            executable = simulation_project.get_executable(mode=self.mode)
             default_args = simulation_project.get_default_args()
             args = [executable, *default_args, "-s", "-u", "Cmdenv", "-f", simulation_config.ini_file, "-c", simulation_config.config, "-r", "0", "--sim-time-limit", "0s"]
             if simulation_project.opp_env_workspace:
@@ -436,7 +436,7 @@ class SimulationTask(Task):
             return explicit_path
         simulation_config = self.simulation_config
         simulation_project = simulation_config.simulation_project
-        executable = simulation_project.get_executable()
+        executable = simulation_project.get_executable(mode=self.mode)
         default_args = simulation_project.get_default_args()
         inifile_entries_args = list(map(lambda inifile_entry: "--" + inifile_entry, self.inifile_entries))
         result_folder_args = ["--result-dir", self.result_folder] if self.result_folder != "results" else []
