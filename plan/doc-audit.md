@@ -164,11 +164,12 @@ what it should say.
     otherwise it falls through to `clean_omnetpp` / `clean_project`.
     Clarify.
 
-28. **doc/overlay_builds.md:133** —
-    `from opp_repl.simulation.overlay import *` pulls in deprecated
-    aliases (`OverlaySimulationProject`, `OverlayOmnetppProject`,
-    `_collect_overlays_from_opp_files`, …). Probably not what users
-    want; recommend explicit imports or add `__all__`.
+28. **doc/overlay_builds.md:133** — *Resolved: code fix.*
+    Removed the deprecated wrapper functions
+    (`make_overlay_simulation_project`, `make_overlay_omnetpp_project`)
+    and their `OverlaySimulationProject` / `OverlayOmnetppProject`
+    aliases entirely.  Users should pass `overlay_name=...` directly
+    to `SimulationProject` / `OmnetppProject`.
 
 29. **doc/task_results.md:40** — `SpeedUpdateTaskResult` row is
     duplicated under both Test and Update tables.

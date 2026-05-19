@@ -1,11 +1,11 @@
 """
 This module provides fuse-overlayfs support for out-of-tree builds.
 
-It contains:
-
-- :py:class:`OverlayMount`: manages a single fuse-overlayfs mount (lower/upper/work/merged dirs).
-- :py:class:`OverlaySimulationProject`: proxy wrapper that makes a :py:class:`SimulationProject` appear rooted at an overlay mount.
-- :py:class:`OverlayOmnetppProject`: proxy wrapper that makes an :py:class:`OmnetppProject` appear rooted at an overlay mount.
+The central abstraction is :py:class:`OverlayMount`, which manages a
+single fuse-overlayfs mount (lower/upper/work/merged dirs).  Overlay
+support on :py:class:`SimulationProject <opp_repl.simulation.project.SimulationProject>`
+and :py:class:`OmnetppProject <opp_repl.simulation.project.OmnetppProject>`
+is enabled by passing ``overlay_name`` to the project constructors.
 """
 
 import logging
@@ -137,61 +137,6 @@ def clear_build_root(build_root=None):
     if os.path.isdir(root):
         shutil.rmtree(root)
         _logger.info("Removed build root %s", root)
-
-
-def make_overlay_simulation_project(project, overlay_name=None, omnetpp_project=None, overlay_build_root=None):
-    """Create an overlay-backed copy of a SimulationProject.
-
-    .. deprecated::
-        Use ``SimulationProject(..., overlay_name=..., overlay_build_root=...)`` instead.
-    """
-    import copy
-    import warnings
-    warnings.warn(
-        "make_overlay_simulation_project is deprecated; pass overlay_name to SimulationProject() instead",
-        DeprecationWarning, stacklevel=2,
-    )
-    clone = copy.copy(project)
-    overlay = OverlayMount(
-        project.get_root_path(),
-        overlay_name or project.name,
-        overlay_build_root,
-    )
-    clone._overlay = overlay
-    clone.root_folder = overlay.merged_path
-    clone.simulation_configs = None
-    if omnetpp_project is not None:
-        clone.omnetpp_project = omnetpp_project
-    return clone
-
-
-def make_overlay_omnetpp_project(project, overlay_name=None, overlay_build_root=None):
-    """Create an overlay-backed copy of an OmnetppProject.
-
-    .. deprecated::
-        Use ``OmnetppProject(..., overlay_name=..., overlay_build_root=...)`` instead.
-    """
-    import copy
-    import warnings
-    warnings.warn(
-        "make_overlay_omnetpp_project is deprecated; pass overlay_name to OmnetppProject() instead",
-        DeprecationWarning, stacklevel=2,
-    )
-    root = project.get_root_path()
-    clone = copy.copy(project)
-    overlay = OverlayMount(
-        root,
-        overlay_name or os.path.basename(root),
-        overlay_build_root,
-    )
-    clone._overlay = overlay
-    clone.root_folder = overlay.merged_path
-    return clone
-
-
-# Keep old names as aliases for backward compatibility
-OverlaySimulationProject = make_overlay_simulation_project
-OverlayOmnetppProject = make_overlay_omnetpp_project
 
 
 # -- CLI entry points for pre-sandbox overlay mounting --------------------
