@@ -14,9 +14,6 @@ dynamic = ["version"]
 requires-python = ">=3.10"
 dependencies = [
     "ipython",
-    "pandas",
-    "matplotlib",
-    "numpy",
 ]
 classifiers = [
     "Development Status :: 4 - Beta",
@@ -50,6 +47,9 @@ cluster = [
     "dask",
     "distributed",
 ]
+data = [
+    "pandas",
+]
 chart = [
     "matplotlib",
     "numpy",
@@ -71,6 +71,7 @@ all = [
     "mcp",
     "numpy",
     "optimparallel",
+    "pandas",
     "py4j",
     "requests",
     "scipy",

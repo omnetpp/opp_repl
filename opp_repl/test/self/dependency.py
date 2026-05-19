@@ -19,7 +19,7 @@ import unittest
 
 PROJECT_DIR = os.path.dirname(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))
 
-OPTIONAL_GROUPS = ["mcp", "cluster", "chart", "optimize", "github", "ide"]
+OPTIONAL_GROUPS = ["mcp", "cluster", "data", "chart", "optimize", "github", "ide"]
 
 
 def _venv_python(venv_dir):
@@ -88,6 +88,9 @@ class TestOptionalImports(unittest.TestCase):
 
     def test_optional_cluster(self):
         self._run_scenario(extras="cluster")
+
+    def test_optional_data(self):
+        self._run_scenario(extras="data")
 
     def test_optional_chart(self):
         self._run_scenario(extras="chart")
