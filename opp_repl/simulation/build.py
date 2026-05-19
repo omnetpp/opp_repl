@@ -560,6 +560,39 @@ class SimulationProjectLinkTask(LinkTask):
         return os.path.basename(self.output_file)
 
 
+def _binary_filename_parts(build_type, mode, makefile_inc_config):
+    """Return ``(output_prefix, output_suffix, output_ext)`` for a built binary,
+    matching what the link/copy steps produce.
+    """
+    if makefile_inc_config:
+        output_prefix = "" if build_type == "executable" else makefile_inc_config.lib_prefix
+        output_suffix = makefile_inc_config.debug_suffix
+        if build_type == "executable":
+            output_ext = makefile_inc_config.exe_suffix
+        elif build_type == "dynamic library":
+            output_ext = makefile_inc_config.shared_lib_suffix
+        else:
+            output_ext = makefile_inc_config.a_lib_suffix
+    else:
+        output_prefix = "" if build_type == "executable" else "lib"
+        output_suffix = "_dbg" if mode == "debug" else ""
+        if build_type == "executable":
+            output_ext = ""
+        elif build_type == "dynamic library":
+            output_ext = ".so"
+        else:
+            output_ext = ".a"
+    return output_prefix, output_suffix, output_ext
+
+
+def _binary_target_relative_path(simulation_project, build_type, name, mode, makefile_inc_config):
+    """Return the project-relative path of the copied binary for the given mode."""
+    output_prefix, output_suffix, output_ext = _binary_filename_parts(build_type, mode, makefile_inc_config)
+    filename = output_prefix + name + output_suffix + output_ext
+    target_dir = simulation_project.bin_folder if build_type == "executable" else simulation_project.library_folder
+    return os.path.join(target_dir, filename)
+
+
 class SimulationProjectCopyBinaryTask(CopyBinaryTask):
     """
     Derived ``CopyBinaryTask`` that copies one of a simulation project's built
@@ -576,15 +609,7 @@ class SimulationProjectCopyBinaryTask(CopyBinaryTask):
         self.makefile_inc_config = makefile_inc_config
 
         output_folder = _simulation_project_output_folder(simulation_project, mode, makefile_inc_config)
-        if makefile_inc_config:
-            output_prefix = "" if build_type == "executable" else makefile_inc_config.lib_prefix
-            output_suffix = makefile_inc_config.debug_suffix
-            output_ext = makefile_inc_config.exe_suffix if build_type == "executable" else (makefile_inc_config.shared_lib_suffix if build_type == "dynamic library" else makefile_inc_config.a_lib_suffix)
-        else:
-            output_prefix = "" if build_type == "executable" else "lib"
-            output_suffix = "_dbg" if mode == "debug" else ""
-            output_ext = "" if build_type == "executable" else (".so" if build_type == "dynamic library" else ".a")
-
+        output_prefix, output_suffix, output_ext = _binary_filename_parts(build_type, mode, makefile_inc_config)
         filename = output_prefix + name + output_suffix + output_ext
         target_dir = simulation_project.bin_folder if build_type == "executable" else simulation_project.library_folder
 
@@ -786,6 +811,15 @@ class CleanSimulationProjectTask(MultipleCleanTasks):
         return self.simulation_project.get_name() + " " + super().get_description()
 
     def get_clean_tasks(self):
+        # Resolve makefile_inc_config so the binary suffix (_dbg, _sanitize, ...) matches
+        # what the build/copy steps actually produced.
+        makefile_inc_config = None
+        omnetpp_project = self.simulation_project.get_omnetpp_project()
+        if omnetpp_project:
+            try:
+                makefile_inc_config = omnetpp_project.get_makefile_inc_config(self.mode)
+            except Exception:
+                makefile_inc_config = None
         tasks = []
         # Generated MSG files (_m.cc, _m.h)
         msg_clean_tasks = []
@@ -795,15 +829,18 @@ class CleanSimulationProjectTask(MultipleCleanTasks):
                 msg_clean_tasks.append(CleanFileTask(simulation_project=self.simulation_project, file_path=generated_file))
         if msg_clean_tasks:
             tasks.append(MultipleCleanTasks(tasks=msg_clean_tasks, name="clean generated MSG file", concurrent=True))
-        # Copied binaries
+        # Copied binaries — apply the same prefix/suffix/extension as SimulationProjectCopyBinaryTask
         binary_clean_tasks = []
         for build_type in self.simulation_project.build_types:
             if build_type == "executable":
-                for executable in self.simulation_project.executables:
-                    binary_clean_tasks.append(CleanFileTask(simulation_project=self.simulation_project, file_path=os.path.join(self.simulation_project.bin_folder, executable)))
+                names = self.simulation_project.executables
             elif build_type == "dynamic library":
-                for library in self.simulation_project.dynamic_libraries:
-                    binary_clean_tasks.append(CleanFileTask(simulation_project=self.simulation_project, file_path=os.path.join(self.simulation_project.library_folder, "lib" + library + ".so")))
+                names = self.simulation_project.dynamic_libraries
+            else:
+                names = self.simulation_project.static_libraries
+            for binary_name in names:
+                file_path = _binary_target_relative_path(self.simulation_project, build_type, binary_name, self.mode, makefile_inc_config)
+                binary_clean_tasks.append(CleanFileTask(simulation_project=self.simulation_project, file_path=file_path))
         if binary_clean_tasks:
             tasks.append(MultipleCleanTasks(tasks=binary_clean_tasks, name="clean binary", concurrent=True))
         # Output directory
