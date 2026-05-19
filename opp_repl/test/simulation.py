@@ -116,9 +116,11 @@ class MultipleSimulationTestTasks(MultipleTestTasks):
         self.simulation_project.build(mode=self.mode, build_engine=self.build_engine)
 
     def run_protected(self, build=None, **kwargs):
-        if (build if build is not None else self.build):
+        will_build = build if build is not None else self.build
+        if will_build:
             self.build_before_run(**kwargs)
-        return super().run_protected(build=False, **kwargs)
+            kwargs["build"] = False
+        return super().run_protected(**kwargs)
 
 def get_simulation_test_tasks(simulation_test_task_class=SimulationTestTask, multiple_simulation_test_tasks_class=MultipleSimulationTestTasks, **kwargs):
     # Test wrappers default to debug (assertions on, better stack traces). Force the
@@ -204,6 +206,8 @@ class MultipleSimulationUpdateTasks(MultipleUpdateTasks):
         self.simulation_project.build(mode=self.mode, build_engine=self.build_engine)
 
     def run_protected(self, build=None, **kwargs):
-        if (build if build is not None else self.build):
+        will_build = build if build is not None else self.build
+        if will_build:
             self.build_before_run(**kwargs)
-        return super().run_protected(build=False, **kwargs)
+            kwargs["build"] = False
+        return super().run_protected(**kwargs)

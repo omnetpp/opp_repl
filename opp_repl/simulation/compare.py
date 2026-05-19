@@ -265,10 +265,16 @@ class CompareSimulationsTaskResult(TaskResult):
             task_1.debug = True
             task_1.mode = "debug"
             task_1.break_at_event_number = event_number_1
+            # The original compare built whatever mode it ran in (e.g. release);
+            # switching to debug here requires a debug build. Each task builds
+            # its own simulation_project so cross-commit compares still work
+            # — make is incremental so the same-project case is cheap.
+            task_1.build = True
             task_2 = copy.copy(self.multiple_tasks.tasks[1])
             task_2.debug = True
             task_2.mode = "debug"
             task_2.break_at_event_number = event_number_2
+            task_2.build = True
             multiple_tasks = copy.copy(self.multiple_tasks)
             multiple_tasks.tasks = [task_1, task_2]
             multiple_tasks.run(**kwargs)
@@ -281,10 +287,12 @@ class CompareSimulationsTaskResult(TaskResult):
             task_1.debug = True
             task_1.mode = "debug"
             task_1.break_at_event_number = event_number_1
+            task_1.build = True
             task_2 = copy.copy(self.multiple_tasks.tasks[1])
             task_2.debug = True
             task_2.mode = "debug"
             task_2.break_at_event_number = event_number_2
+            task_2.build = True
             multiple_tasks = copy.copy(self.multiple_tasks)
             multiple_tasks.tasks = [task_1, task_2]
             multiple_tasks.run(**kwargs)
@@ -297,10 +305,17 @@ class CompareSimulationsTaskResult(TaskResult):
             task_1 = copy.copy(self.multiple_tasks.tasks[0])
             task_1.user_interface = "Qtenv"
             task_1.wait = False
+            # Switching to Qtenv requires a build of the Qtenv-linked executable.
+            # The original compare built Cmdenv only, so force a build per task —
+            # make is incremental, so when both tasks share a project the second
+            # invocation is a near no-op; when they don't (cross-commit compare)
+            # each project does need its own build.
+            task_1.build = True
             task_1.run(append_args=append_args + [f"-Xev={event_number_1}"], **kwargs)
             task_2 = copy.copy(self.multiple_tasks.tasks[1])
             task_2.user_interface = "Qtenv"
             task_2.wait = False
+            task_2.build = True
             task_2.run(append_args=append_args + [f"-Xev={event_number_2}"], **kwargs)
 
     def run_until_fingerprint_divergence_position(self, num_cause_events=0, append_args=[], **kwargs):
@@ -311,10 +326,12 @@ class CompareSimulationsTaskResult(TaskResult):
             task_1 = copy.copy(self.multiple_tasks.tasks[0])
             task_1.user_interface = "Qtenv"
             task_1.wait = False
+            task_1.build = True
             task_1.run(append_args=append_args + [f"-Xev={event_number_1}"], **kwargs)
             task_2 = copy.copy(self.multiple_tasks.tasks[1])
             task_2.user_interface = "Qtenv"
             task_2.wait = False
+            task_2.build = True
             task_2.run(append_args=append_args + [f"-Xev={event_number_2}"], **kwargs)
 
     def show_divergence_position_in_sequence_chart(self):

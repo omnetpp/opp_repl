@@ -103,10 +103,12 @@ class MultipleFeatureTestTasks(MultipleTestTasks):
             self.simulation_project.build(mode=self.mode, build_engine=self.build_engine)
 
     def run_protected(self, build=None, **kwargs):
-        if (build if build is not None else self.build):
+        will_build = build if build is not None else self.build
+        if will_build:
             self.build_before_run(**kwargs)
+            kwargs["build"] = False
         _logger.info("Collected " + str(self.get_total_simulation_task_count()) + " simulations in total")
-        multiple_test_tasks_result = super().run_protected(build=False, **kwargs)
+        multiple_test_tasks_result = super().run_protected(**kwargs)
         _logger.info("Run " + str(self.get_total_simulation_task_count()) + " simulations in total")
         enable_features("all")
         return multiple_test_tasks_result

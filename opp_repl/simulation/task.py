@@ -703,11 +703,14 @@ class MultipleSimulationTasks(MultipleTasks):
     def run_protected(self, build=None, **kwargs):
         # A nested caller (e.g. another MultipleSimulationTasks wrapper that
         # already built) can pass build=False to override self.build.
-        if (build if build is not None else self.build):
+        will_build = build if build is not None else self.build
+        if will_build:
             self.build_before_run(**kwargs)
-        # The batch build above covers every child task, so suppress per-task
-        # builds by forcing build=False on the way down.
-        return super().run_protected(build=False, **kwargs)
+            # The batch build above covers every child task, so suppress
+            # per-task builds. When the batch *didn't* build, leave each
+            # child's build attribute to decide.
+            kwargs["build"] = False
+        return super().run_protected(**kwargs)
 
     def get_parameters_string(self, **kwargs):
         return ""
