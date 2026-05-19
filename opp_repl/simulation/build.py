@@ -18,6 +18,16 @@ from opp_repl.simulation.project import *
 
 _logger = logging.getLogger(__name__)
 
+_default_build_mode = "makefile"
+
+def get_default_build_mode():
+    global _default_build_mode
+    return _default_build_mode
+
+def set_default_build_mode(value):
+    global _default_build_mode
+    _default_build_mode = value
+
 
 def _generate_opp_defines(simulation_project, makefile_inc_config):
     """
@@ -106,7 +116,7 @@ def make_makefiles(simulation_project=None, **kwargs):
     else:
         run_command_with_logging(args, cwd=cwd, env=simulation_project.get_env(), error_message=f"Making {simulation_project.get_name()} makefiles failed")
 
-def build_project(build_mode="makefile", **kwargs):
+def build_project(build_mode=None, **kwargs):
     """
     Builds all output files of a simulation project using either :py:func:`build_project_using_makefile` or :py:func:`build_project_using_tasks`.
 
@@ -117,6 +127,7 @@ def build_project(build_mode="makefile", **kwargs):
     Parameters:
         build_mode (string):
             Specifies the requested build mode. Valid values are "makefile" and "task".
+            If unspecified, the global default from :py:func:`get_default_build_mode` is used.
 
         kwargs (dict):
             Additional parameters are inherited from :py:func:`build_project_using_makefile` and :py:func:`build_project_using_tasks` functions.
@@ -124,6 +135,8 @@ def build_project(build_mode="makefile", **kwargs):
     Returns (None):
         Nothing.
     """
+    if build_mode is None:
+        build_mode = get_default_build_mode()
     if build_mode == "makefile":
         build_function = build_project_using_makefile
     elif build_mode == "task":
@@ -691,9 +704,11 @@ def build_project_using_tasks(simulation_project, **kwargs):
     build_task.log_structure()
     return build_task.run(**kwargs)
 
-def clean_project(simulation_project=None, mode="release", build_mode="makefile", **kwargs):
+def clean_project(simulation_project=None, mode="release", build_mode=None, **kwargs):
     if simulation_project is None:
         simulation_project = get_default_simulation_project()
+    if build_mode is None:
+        build_mode = get_default_build_mode()
     if build_mode == "task":
         return clean_project_using_tasks(simulation_project, mode=mode, **kwargs)
     else:

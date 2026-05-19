@@ -631,7 +631,7 @@ class MultipleSimulationTasks(MultipleTasks):
     """
     Represents multiple simulation tasks that can be run together.
     """
-    def __init__(self, simulation_project=None, mode="release", build=None, build_mode="makefile", name="simulation", multiple_task_results_class=MultipleSimulationTaskResults, **kwargs):
+    def __init__(self, simulation_project=None, mode="release", build=None, build_mode=None, name="simulation", multiple_task_results_class=MultipleSimulationTaskResults, **kwargs):
         """
         Initializes a new multiple simulation tasks object.
 

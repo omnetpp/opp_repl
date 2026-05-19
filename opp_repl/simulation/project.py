@@ -193,15 +193,16 @@ class OmnetppProject:
             result = subprocess.run(args, cwd=root, env=env, capture_output=True)
         return result.returncode == 0
 
-    def build(self, mode="release", build_mode="makefile", **kwargs):
+    def build(self, mode="release", build_mode=None, **kwargs):
         """
         Build OMNeT++.
 
         Parameters:
             mode (str): build mode (``release``, ``debug``, ``sanitize``, ...).
-            build_mode (str): ``"makefile"`` to run ``make`` (the default), or
+            build_mode (str): ``"makefile"`` to run ``make``, or
                 ``"task"`` to drive the build via per-file
-                :py:mod:`opp_repl <opp_repl>` tasks.
+                :py:mod:`opp_repl <opp_repl>` tasks. If unspecified, the global
+                default from :py:func:`get_default_build_mode` is used.
 
         See :py:func:`build_omnetpp <opp_repl.simulation.build_omnetpp.build_omnetpp>`.
         """
@@ -238,15 +239,17 @@ class OmnetppProject:
             self._makefile_inc_configs[mode] = MakefileIncConfig(root, mode)
         return self._makefile_inc_configs[mode]
 
-    def clean(self, mode="release", build_mode="makefile", **kwargs):
+    def clean(self, mode="release", build_mode=None, **kwargs):
         """
         Clean OMNeT++.
 
         Parameters:
             mode (str): build mode to clean.
-            build_mode (str): ``"makefile"`` (default) to run ``make clean``,
+            build_mode (str): ``"makefile"`` to run ``make clean``,
                 or ``"task"`` to remove generated sources/build artifacts
-                directly. See :py:func:`clean_omnetpp <opp_repl.simulation.build_omnetpp.clean_omnetpp>`.
+                directly. If unspecified, the global default from
+                :py:func:`get_default_build_mode` is used.
+                See :py:func:`clean_omnetpp <opp_repl.simulation.build_omnetpp.clean_omnetpp>`.
         """
         if self._overlay is not None:
             self._overlay.clean()
@@ -683,7 +686,7 @@ class SimulationProject:
             msg_files = msg_files + list(map(lambda file_path: self.get_relative_path(file_path), file_paths))
         return msg_files
 
-    def build(self, mode="release", recursive=True, build_mode="makefile", **kwargs):
+    def build(self, mode="release", recursive=True, build_mode=None, **kwargs):
         self.ensure_mounted()
         if recursive:
             if self.used_projects:
@@ -712,7 +715,7 @@ class SimulationProject:
             return self._overlay.is_mounted()
         return False
 
-    def clean(self, mode="release", recursive=True, build_mode="makefile", **kwargs):
+    def clean(self, mode="release", recursive=True, build_mode=None, **kwargs):
         if recursive:
             if self.used_projects:
                 ws = getattr(self, '_workspace', None) or get_default_simulation_workspace()
@@ -839,7 +842,7 @@ class SimulationProject:
             simulation_configs.append(simulation_config)
         return simulation_configs
 
-    def collect_all_simulation_configs(self, ini_path_globs, concurrent=True, build=None, build_mode="makefile", **kwargs):
+    def collect_all_simulation_configs(self, ini_path_globs, concurrent=True, build=None, build_mode=None, **kwargs):
         def local_collect_ini_file_simulation_configs(ini_path, **kwargs):
             return self.collect_ini_file_simulation_configs(ini_path, **kwargs)
         _logger.info(f"Collecting {self.name} simulation configs started")
