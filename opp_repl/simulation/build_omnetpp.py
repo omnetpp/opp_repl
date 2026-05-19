@@ -1122,6 +1122,50 @@ def _build_opp_run_tasks(omnetpp_project, mode, cfg, concurrent):
     )
 
 
+class ConfigureOmnetppTask(Task):
+    """
+    Runs ``./configure`` in the OMNeT++ root directory if ``Makefile.inc``
+    does not yet exist. If ``configure.user`` is also missing, it is copied
+    from the original source tree (falling back to ``configure.user.dist``).
+    """
+
+    def __init__(self, omnetpp_project=None, name="configure OMNeT++", action="Configuring", **kwargs):
+        super().__init__(name=name, action=action, **kwargs)
+        self.omnetpp_project = omnetpp_project
+
+    def get_parameters_string(self, **kwargs):
+        root = self.omnetpp_project.get_root_path()
+        return root or ""
+
+    def is_up_to_date(self):
+        root = self.omnetpp_project.get_root_path()
+        if root is None:
+            return True
+        return os.path.isfile(os.path.join(root, "Makefile.inc"))
+
+    def run_protected(self, **kwargs):
+        import shutil
+        from opp_repl.simulation.project import _get_git_root
+        root = self.omnetpp_project.get_root_path()
+        configure_user = os.path.join(root, "configure.user")
+        if not os.path.isfile(configure_user):
+            git_root = _get_git_root(root)
+            source_configure_user = os.path.join(git_root, "configure.user")
+            if os.path.isfile(source_configure_user):
+                shutil.copy2(source_configure_user, configure_user)
+            else:
+                dist = os.path.join(root, "configure.user.dist")
+                if os.path.isfile(dist):
+                    shutil.copy2(dist, configure_user)
+        _logger.info("Running ./configure in %s", root)
+        env = os.environ.copy()
+        env["__omnetpp_root_dir"] = root
+        env["PATH"] = os.path.join(root, "bin") + os.pathsep + env.get("PATH", "")
+        env["PYTHONPATH"] = os.path.join(root, "python") + os.pathsep + env.get("PYTHONPATH", "")
+        run_command_with_logging(["./configure"], cwd=root, env=env, error_message="Configuring OMNeT++ failed")
+        return self.task_result_class(task=self, result="DONE")
+
+
 def build_omnetpp(build_mode=None, **kwargs):
     """
     Builds OMNeT++ using either :py:func:`build_omnetpp_using_makefile` or

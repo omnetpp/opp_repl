@@ -132,35 +132,15 @@ class OmnetppProject:
         suffix = self.get_library_suffix(mode=mode)
         return os.path.abspath(os.path.join(root, "bin/opp_run" + suffix))
 
-    def ensure_configured(self):
-        """Run ``./configure`` if ``Makefile.inc`` does not yet exist.
+    def ensure_configured(self, **kwargs):
+        """Run ``./configure`` as a task if ``Makefile.inc`` does not yet exist.
 
         A fresh git worktree will not contain the generated ``Makefile.inc``.
         If ``configure.user`` is also missing, it is copied from the original
         source tree (falling back to ``configure.user.dist``).
         """
-        root = self.get_root_path()
-        if root is None:
-            return
-        makefile_inc = os.path.join(root, "Makefile.inc")
-        if os.path.isfile(makefile_inc):
-            return
-        configure_user = os.path.join(root, "configure.user")
-        if not os.path.isfile(configure_user):
-            git_root = _get_git_root(root)
-            source_configure_user = os.path.join(git_root, "configure.user")
-            if os.path.isfile(source_configure_user):
-                shutil.copy2(source_configure_user, configure_user)
-            else:
-                dist = os.path.join(root, "configure.user.dist")
-                if os.path.isfile(dist):
-                    shutil.copy2(dist, configure_user)
-        _logger.info("Running ./configure in %s", root)
-        env = os.environ.copy()
-        env["__omnetpp_root_dir"] = root
-        env["PATH"] = os.path.join(root, "bin") + os.pathsep + env.get("PATH", "")
-        env["PYTHONPATH"] = os.path.join(root, "python") + os.pathsep + env.get("PYTHONPATH", "")
-        run_command_with_logging(["./configure"], cwd=root, env=env, error_message="Configuring OMNeT++ failed")
+        from opp_repl.simulation.build_omnetpp import ConfigureOmnetppTask
+        return ConfigureOmnetppTask(omnetpp_project=self).run(**kwargs)
 
     def get_env(self):
         env = os.environ.copy()
