@@ -20,7 +20,6 @@ try:
 except (ImportError, ModuleNotFoundError):
     pass
 
-import pandas as pd
 
 from opp_repl.common import *
 from opp_repl.simulation.build import *
@@ -603,6 +602,7 @@ class MultipleSimulationTaskResults(MultipleTaskResults):
         Returns (DataFrame):
             A pandas DataFrame with the merged scalar results.
         """
+        import pandas as pd
         return pd.concat([r.get_scalars(**kwargs) for r in self.results if r.result == "DONE"], ignore_index=True)
 
     def get_vectors(self, **kwargs):
@@ -615,6 +615,7 @@ class MultipleSimulationTaskResults(MultipleTaskResults):
         Returns (DataFrame):
             A pandas DataFrame with the merged vector results.
         """
+        import pandas as pd
         return pd.concat([r.get_vectors(**kwargs) for r in self.results if r.result == "DONE"], ignore_index=True)
 
     def get_histograms(self, **kwargs):
@@ -627,6 +628,7 @@ class MultipleSimulationTaskResults(MultipleTaskResults):
         Returns (DataFrame):
             A pandas DataFrame with the merged histogram results.
         """
+        import pandas as pd
         return pd.concat([r.get_histograms(**kwargs) for r in self.results if r.result == "DONE"], ignore_index=True)
 
 class MultipleSimulationTasks(MultipleTasks):
