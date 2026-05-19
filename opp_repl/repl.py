@@ -29,7 +29,7 @@ def parse_run_repl_arguments():
     parser.add_argument("--mcp-token-hash", default=None, help="SHA-256 hex hash of the bearer token required for MCP authentication (required when --mcp-port is set, unless running inside opp_sandbox)")
     parser.add_argument("--mcp-bypass-token-hash", action="store_true", help="bypass the bearer token authentication requirement for the MCP server (use only in trusted environments; normally --mcp-token-hash is required outside opp_sandbox)")
     parser.add_argument("-l", "--log-level", choices=["ERROR", "WARN", "INFO", "DEBUG"], default="INFO", help="controls the verbosity of log messages (default: INFO)")
-    parser.add_argument("--external-command-log-level", choices=["ERROR", "WARN", "INFO", "DEBUG"], default="WARN", help="controls the verbosity of log messages from external commands such as simulations and build tools (default: WARN)")
+    parser.add_argument("--external-command-log-level", choices=["ERROR", "WARN", "INFO", "DEBUG"], default="DEBUG", help="controls the verbosity of log messages from external commands such as simulations and build tools (default: DEBUG)")
     parser.add_argument("--handle-exception", default=True, action=argparse.BooleanOptionalAction, help="when enabled, errors are displayed as short messages; use --no-handle-exception to show full stack traces for debugging (default: enabled)")
     return parser.parse_args(sys.argv[1:])
 
