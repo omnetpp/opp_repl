@@ -161,6 +161,13 @@ def update_statistical_test_results_main():
 def update_speed_test_results_main():
     run_tasks_main(update_speed_test_results, "update speed test results")
 
+def run_self_test_main():
+    import unittest
+    loader = unittest.TestLoader()
+    suite = loader.loadTestsFromName("opp_repl.test.self.dependency")
+    result = unittest.TextTestRunner(verbosity=2).run(suite)
+    sys.exit(0 if result.wasSuccessful() else 1)
+
 def parse_build_project_arguments():
     description = "Builds the specified or enclosing simulation project."
     parser = argparse.ArgumentParser(description=description)
