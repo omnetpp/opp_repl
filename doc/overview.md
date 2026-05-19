@@ -4,6 +4,18 @@ This page lists the full feature set, the interactive workflow, and the
 available command-line tools.  See [Installation](installation.md) for setup
 and [Getting started](getting_started.md) for a hands-on walkthrough.
 
+## Relationship to existing OMNeT++ tools
+
+opp_repl is an umbrella around the standard OMNeT++ toolchain, not a
+replacement for it.  It still calls `opp_run`, `opp_makemake`,
+`opp_featuretool`, and `opp_scavetool` under the hood; what it adds is a
+Python API and command-line driver for *orchestrating* them — discovering
+configs, running them concurrently or on a cluster, comparing results
+across projects or commits, maintaining test baselines, bisecting
+regressions, and exposing all of this to an interactive REPL or to AI
+assistants over MCP.  It coexists with the OMNeT++ IDE and with hand-written
+test scripts, and does not modify the underlying simulation binaries.
+
 ## Features
 
 - **Build projects** — build simulation binaries from Python

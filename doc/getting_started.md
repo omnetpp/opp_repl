@@ -3,10 +3,30 @@
 This guide walks through the first steps with opp_repl — from launching
 the REPL to running your first simulation.
 
+## A note on `.opp` files
+
+opp_repl needs to know where each project lives on disk, what its source
+and INI directories are, and which OMNeT++ installation it builds against.
+That information is stored in a small Python descriptor called an **`.opp`
+file**.  Most projects ship one alongside their source tree, opp_repl
+bundles `.opp` files for the OMNeT++ sample projects (loadable as `@opp`),
+and you can write your own for new projects.  See [OPP files](opp_files.md)
+for the full format.
+
 ## Starting the REPL
 
-After [installation](installation.md), start the REPL and load one or more
-`.opp` project descriptor files:
+The simplest path: `cd` into a project directory that already contains a
+`.opp` file (or any of the OMNeT++ samples) and launch the REPL.  All
+`*.opp` files in the current directory are auto-loaded, and the OMNeT++
+installation is detected from the `__omnetpp_root_dir` environment variable
+that `omnetpp/setenv` exports:
+
+```bash
+cd ~/workspace/omnetpp/samples/fifo
+opp_repl
+```
+
+To load specific descriptors instead, pass them with `--load`:
 
 ```bash
 opp_repl --load ~/workspace/omnetpp/omnetpp.opp \

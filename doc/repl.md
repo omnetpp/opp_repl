@@ -24,9 +24,16 @@ Key command-line options:
 - `--mcp-token-hash HEX` — SHA-256 hex hash of the bearer token that
   MCP clients must present to authenticate.  Required when
   `--mcp-port` is set, except inside `opp_sandbox`.
-- `--mcp-bypass-token-hash` — disable bearer-token authentication for
+- `--mcp-bypass-token-hash-check` — disable bearer-token authentication for
   the MCP server.  Use only in trusted environments; normally
   `--mcp-token-hash` is required outside `opp_sandbox`.
+
+> **About `opp_sandbox`:** a bubblewrap-based sandbox wrapper shipped with
+> opp_repl (`bin/opp_sandbox`).  It runs opp_repl inside a restricted
+> namespace where the only writable paths are the working directory and
+> explicitly mounted ones.  Several features (MCP authentication,
+> overlay-build mounts) treat the sandbox as a trusted environment and
+> relax their requirements when they detect it.
 - `-l LEVEL` — log level (`ERROR`, `WARN`, `INFO`, `DEBUG`).  Note
   that `opp_repl` defaults to `INFO`, while the `opp_*` command-line
   tools default to `WARN`.

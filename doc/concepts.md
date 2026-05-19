@@ -20,6 +20,17 @@ Represents a **simulation model project** (e.g. INET, Simu5G) — knows
 where sources, NED files, and INI files live, what to build, and what it
 depends on.  See [Simulation projects](simulation_projects.md).
 
+### Why two project types?
+
+Every opp_repl session works with at least one `OmnetppProject` (the
+installation) plus at least one `SimulationProject` (the model code that
+runs on top of it).  The two are decoupled so you can build the same model
+code against different OMNeT++ versions — or run several simulation
+projects against the same installation — without changing either side.
+Most of the time the OMNeT++ project is auto-detected from
+`__omnetpp_root_dir`, so users only need to write `.opp` files for their
+simulation projects.
+
 ## SimulationConfig
 
 A single **`[Config …]` section** from an INI file — working directory,

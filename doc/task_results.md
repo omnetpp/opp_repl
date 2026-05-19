@@ -88,6 +88,19 @@ When the actual outcome differs from the expectation the result is flagged
 as **unexpected**, which makes it easy to spot regressions in large test
 runs.
 
+## Result codes at a glance
+
+Different task families use different vocabularies for their outcomes.
+The full set of codes you may see across the API:
+
+| Task family | Codes | Meaning |
+|---|---|---|
+| Simulation | `DONE`, `SKIP`, `CANCEL`, `ERROR` | Run completed / skipped / cancelled / failed |
+| Test | adds `PASS`, `FAIL` | Verification against a baseline succeeded or failed |
+| Update | `KEEP`, `INSERT`, `UPDATE`, `SKIP`, `CANCEL`, `ERROR` | Baseline unchanged / new entry / changed entry / etc. |
+| Build | `DONE`, `SKIP`, `CANCEL`, `ERROR` | Built / up-to-date / cancelled / failed |
+| Comparison | `IDENTICAL`, `DIVERGENT`, `DIFFERENT`, `SKIP`, `CANCEL`, `ERROR` | Two runs matched / diverged mid-run / produced different scalars |
+
 ## SimulationTaskResult in detail
 
 A `SimulationTaskResult` holds a reference back to the task that created it,
