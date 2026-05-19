@@ -365,19 +365,24 @@ class FingerprintUpdateTask(SimulationUpdateTask):
 
 class MultipleFingerprintUpdateTasks(MultipleSimulationUpdateTasks):
     def __init__(self, multiple_simulation_tasks=None, name="update fingerprint", **kwargs):
+        # Inherit simulation_project / mode / build_mode / concurrent from the inner
+        # MultipleSimulationTasks so build_before_run has what it needs.
+        if multiple_simulation_tasks is not None:
+            kwargs.setdefault("simulation_project", multiple_simulation_tasks.simulation_project)
+            kwargs.setdefault("mode", multiple_simulation_tasks.mode)
+            kwargs.setdefault("build_mode", multiple_simulation_tasks.build_mode)
+            kwargs.setdefault("concurrent", multiple_simulation_tasks.concurrent)
         super().__init__(name=name, **kwargs)
         self.locals = locals()
         self.locals.pop("self")
         self.kwargs = kwargs
         self.multiple_simulation_tasks = multiple_simulation_tasks
 
-    def run(self, simulation_project=None, concurrent=None, build=None, **kwargs):
-        if concurrent is None:
-            concurrent = self.multiple_simulation_tasks.concurrent
-        simulation_project = simulation_project or self.multiple_simulation_tasks.simulation_project
-        if build if build is not None else get_default_build_argument():
-            build_project(simulation_project=simulation_project, **kwargs)
+    def run(self, **kwargs):
+        # MultipleSimulationUpdateTasks.run_protected handles the optional build via
+        # self.build / self.mode / self.build_mode; no need to duplicate that here.
         multiple_fingerprint_update_results = super().run(**kwargs)
+        simulation_project = self.simulation_project or self.multiple_simulation_tasks.simulation_project
         correct_fingerprint_store = get_correct_fingerprint_store(simulation_project)
         for fingerprint_update_result in multiple_fingerprint_update_results.results:
             fingerprint_update_task = fingerprint_update_result.task
@@ -503,6 +508,7 @@ def get_update_correct_fingerprint_tasks(**kwargs):
         an object that contains a list of :py:class:`FingerprintUpdateTask` objects matching the provided filter criteria.
         The result can be run (and re-run) without providing additional parameters.
     """
+    kwargs.setdefault("mode", "debug")
     fingerprint_update_tasks = []
     multiple_simulation_tasks = get_simulation_tasks(**kwargs)
     for simulation_task in multiple_simulation_tasks.tasks:

@@ -121,6 +121,10 @@ class MultipleSimulationTestTasks(MultipleTestTasks):
         return super().run_protected(**kwargs)
 
 def get_simulation_test_tasks(simulation_test_task_class=SimulationTestTask, multiple_simulation_test_tasks_class=MultipleSimulationTestTasks, **kwargs):
+    # Test wrappers default to debug (assertions on, better stack traces). Force the
+    # same value down through get_simulation_tasks and the inner SimulationTask objects
+    # so the build step and the launched executable can't disagree.
+    kwargs.setdefault("mode", "debug")
     multiple_simulation_tasks = get_simulation_tasks(**kwargs)
     test_tasks = list(map(lambda simulation_task: simulation_test_task_class(simulation_task=simulation_task, **kwargs), multiple_simulation_tasks.tasks))
     return multiple_simulation_test_tasks_class(tasks=test_tasks, **dict(kwargs, simulation_project=multiple_simulation_tasks.simulation_project))
@@ -183,12 +187,23 @@ class SimulationUpdateTask(UpdateTask):
         return self.task_result_class(task=self, simulation_task_result=simulation_task_result, result=result, expected_result=expected_result, reason=simulation_task_result.reason)
 
 class MultipleSimulationUpdateTasks(MultipleUpdateTasks):
-    def __init__(self, simulation_project=None, **kwargs):
+    def __init__(self, build=None, build_mode=None, mode="debug", simulation_project=None, **kwargs):
         super().__init__(simulation_project=simulation_project, **kwargs)
         self.locals = locals()
         self.locals.pop("self")
         self.kwargs = kwargs
+        self.build = build if build is not None else get_default_build_argument()
+        self.build_mode = build_mode
+        self.mode = mode
         self.simulation_project = simulation_project
 
     def get_description(self):
         return ((self.simulation_project.get_name() + " ") if self.simulation_project else "") + super().get_description()
+
+    def build_before_run(self, **kwargs):
+        self.simulation_project.build(mode=self.mode, build_mode=self.build_mode)
+
+    def run_protected(self, **kwargs):
+        if self.build:
+            self.build_before_run(**kwargs)
+        return super().run_protected(**kwargs)

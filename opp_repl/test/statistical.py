@@ -261,6 +261,7 @@ def get_statistical_test_tasks(sim_time_limit=get_statistical_test_sim_time_limi
         an object that contains a list of :py:class:`StatisticalTestTask` objects matching the provided filter criteria.
         The result can be run (and re-run) without providing additional parameters.
     """
+    kwargs.setdefault("mode", "debug")
     return get_simulation_tasks(name="statistical test", run_number=run_number, sim_time_limit=sim_time_limit, simulation_task_class=StatisticalTestTask, multiple_simulation_tasks_class=MultipleSimulationTestTasks, multiple_task_results_class=MultipleStatisticalTestTaskResults, **kwargs)
 get_statistical_test_tasks.__signature__ = combine_signatures(get_statistical_test_tasks, get_simulation_tasks)
 
@@ -351,6 +352,7 @@ def get_update_statistical_result_tasks(run_number=0, **kwargs):
         an object that contains a list of :py:class:`StatisticalResultsUpdateTask` objects matching the provided filter criteria.
         The result can be run (and re-run) without providing additional parameters.
     """
+    kwargs.setdefault("mode", "debug")
     return get_simulation_tasks(run_number=run_number, multiple_simulation_tasks_class=MultipleSimulationUpdateTasks, simulation_task_class=StatisticalResultsUpdateTask, **kwargs)
 get_update_statistical_result_tasks.__signature__ = combine_signatures(get_update_statistical_result_tasks, get_simulation_tasks)
 

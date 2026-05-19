@@ -189,6 +189,7 @@ def get_chart_test_tasks(simulation_project=None, baseline_simulation_project=No
         an object that contains a list of :py:class:`ChartTestTask` objects matching the provided filter criteria.
         The result can be run (and re-run) without providing additional parameters.
     """
+    kwargs.setdefault("mode", "debug")
     if simulation_project is None:
         simulation_project = get_default_simulation_project()
     test_tasks = []
@@ -309,6 +310,7 @@ def get_update_chart_tasks(simulation_project=None, run_simulations=True, filter
         an object that contains a list of :py:class:`ChartUpdateTask` objects matching the provided filter criteria.
         The result can be run (and re-run) without providing additional parameters.
     """
+    kwargs.setdefault("mode", "debug")
     if simulation_project is None:
         simulation_project = get_default_simulation_project()
     update_tasks = []
