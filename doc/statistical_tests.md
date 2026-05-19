@@ -142,7 +142,7 @@ any simulations**.
 r = run_statistical_tests(sim_time_limit="1s")
 
 # Some tests fail — try excluding a noisy scalar
-r2 = r.recheck(exclude_result_name_filter="jitter")
+r2 = r.recheck(exclude_name_filter="jitter")
 
 # Or set an error threshold
 r3 = r.recheck(unbounded_relative_error_threshold=1e-6)
@@ -156,11 +156,45 @@ The original `r` is unchanged.
 
 ```python
 tr = r.results[3]
-tr2 = tr.recheck(exclude_result_name_filter="jitter",
-                 exclude_result_module_filter=".*scenarioManager.*")
+tr2 = tr.recheck(exclude_name_filter="jitter",
+                 exclude_module_filter=".*scenarioManager.*")
 print(tr2.result)   # "PASS" or "FAIL"
 print(tr2.reason)
 ```
+
+`recheck()` accepts the full set of
+:py:func:`~opp_repl.common.util.compare_scalar_dataframes` kwargs:
+
+- **Only-side filters** — drop rows present on only one side from the
+  failure tally without affecting *different* rows.  Useful for tolerating
+  a known statistic that has been added or removed between baseline and
+  current.
+
+  ```python
+  tr.recheck(only_module_filter=".*ignored.*")  # keep only the matching only-side rows
+  tr.recheck(exclude_only_name_filter="^obsolete_")  # drop matching only-side rows
+  ```
+
+- **Rename callables** — line up rows whose module path or scalar name
+  was changed between baseline and current so they end up in *different*
+  (or *identical*) instead of in the only-side frames.  Pass a callable
+  ``(module, name) -> (module, name)`` per side; ``rename_1`` is applied
+  to the stored baseline and ``rename_2`` to the current run.
+
+  ```python
+  tr.recheck(rename_1=lambda m, n: (m.replace("OldNet", "NewNet"), n))
+  ```
+
+  Renames are applied for the comparison only — the originals stored on
+  the result are unchanged, and the renames are not persisted across
+  subsequent ``recheck()`` calls.
+
+The only-side frames themselves are exposed on the underlying
+``ScalarComparisonResult`` as ``comparison.only_stored`` and
+``comparison.only_current`` (suffix-derived from the test's
+``suffixes=('_stored', '_current')``).  The positional aliases
+``comparison.only_1`` / ``comparison.only_2`` work for code that does not
+know the suffixes.
 
 ### Using the ScalarComparisonResult directly
 

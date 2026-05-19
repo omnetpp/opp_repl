@@ -85,7 +85,7 @@ class StatisticalTestTaskResult(SimulationTestTaskResult):
 
     def _compute_verdict(self, comparison):
         """Compute result and reason from a ScalarComparisonResult."""
-        has_differences = not comparison.different.empty or not comparison.added.empty or not comparison.removed.empty
+        has_differences = not comparison.different.empty or not comparison.only_stored.empty or not comparison.only_current.empty
         if has_differences:
             self.result = "FAIL"
         else:
@@ -93,12 +93,14 @@ class StatisticalTestTaskResult(SimulationTestTaskResult):
         parts = []
         if not comparison.identical.empty:
             parts.append(f"{len(comparison.identical)} compared")
-        if not comparison.added.empty:
-            parts.append(f"{len(comparison.added)} added")
-        if not comparison.removed.empty:
-            parts.append(f"{len(comparison.removed)} removed")
+        if not comparison.only_stored.empty:
+            parts.append(f"{len(comparison.only_stored)} only_stored")
+        if not comparison.only_current.empty:
+            parts.append(f"{len(comparison.only_current)} only_current")
         if comparison.num_filtered_out:
             parts.append(f"{comparison.num_filtered_out} filtered out")
+        if comparison.num_only_filtered_out:
+            parts.append(f"{comparison.num_only_filtered_out} only filtered out")
         if comparison.num_below_threshold:
             parts.append(f"{comparison.num_below_threshold} below threshold")
         if not comparison.different.empty:
@@ -121,7 +123,12 @@ class StatisticalTestTaskResult(SimulationTestTaskResult):
         Accepts the same filter keyword arguments as
         :py:func:`~opp_repl.common.util.compare_scalar_dataframes`:
         ``name_filter``, ``exclude_name_filter``, ``module_filter``,
-        ``exclude_module_filter``, ``full_match``,
+        ``exclude_module_filter`` (applied to *different* rows);
+        ``only_name_filter``, ``exclude_only_name_filter``,
+        ``only_module_filter``, ``exclude_only_module_filter`` (applied to
+        rows present on only one side); ``rename_1``/``rename_2`` (per-side
+        ``(module, name) -> (module, name)`` callables that rewrite keys
+        before the merge so renamed statistics line up); ``full_match``;
         ``unbounded_relative_error_threshold``.
 
         Returns:
@@ -148,7 +155,13 @@ class MultipleStatisticalTestTaskResults(MultipleSimulationTestTaskResults):
         """Re-run the statistical comparison on all results with new filter parameters.
 
         Accepts the same filter keyword arguments as
-        :py:func:`StatisticalTestTaskResult.recheck`.
+        :py:func:`StatisticalTestTaskResult.recheck`: ``name_filter`` /
+        ``exclude_name_filter`` / ``module_filter`` /
+        ``exclude_module_filter`` (on *different* rows),
+        ``only_name_filter`` / ``exclude_only_name_filter`` /
+        ``only_module_filter`` / ``exclude_only_module_filter`` (on
+        only-side rows), ``rename_1`` / ``rename_2``, ``full_match``, and
+        ``unbounded_relative_error_threshold``.
 
         Returns:
             MultipleStatisticalTestTaskResults: A new results object with updated verdicts.
@@ -167,7 +180,13 @@ class StatisticalTestTask(SimulationTestTask):
         simulation_config = self.simulation_task.simulation_config
         return f"{simulation_config.ini_file}-{simulation_config.config}-#{self.simulation_task.run_number}.{extension}"
 
-    def check_simulation_task_result(self, simulation_task_result, baseline_simulation_project=None, result_name_filter=None, exclude_result_name_filter=None, result_module_filter=None, exclude_result_module_filter=None, full_match=False, unbounded_relative_error_threshold=None, **kwargs):
+    def check_simulation_task_result(self, simulation_task_result, baseline_simulation_project=None,
+                                      result_name_filter=None, exclude_result_name_filter=None,
+                                      result_module_filter=None, exclude_result_module_filter=None,
+                                      only_result_name_filter=None, exclude_only_result_name_filter=None,
+                                      only_result_module_filter=None, exclude_only_result_module_filter=None,
+                                      rename_stored=None, rename_current=None,
+                                      full_match=False, unbounded_relative_error_threshold=None, **kwargs):
         simulation_config = self.simulation_task.simulation_config
         simulation_project = simulation_config.simulation_project
         baseline_project = baseline_simulation_project or simulation_project
@@ -205,6 +224,9 @@ class StatisticalTestTask(SimulationTestTask):
                     comparison = compare_scalar_dataframes(stored_df, current_df, suffixes=('_stored', '_current'),
                                                           name_filter=result_name_filter, exclude_name_filter=exclude_result_name_filter,
                                                           module_filter=result_module_filter, exclude_module_filter=exclude_result_module_filter,
+                                                          only_name_filter=only_result_name_filter, exclude_only_name_filter=exclude_only_result_name_filter,
+                                                          only_module_filter=only_result_module_filter, exclude_only_module_filter=exclude_only_result_module_filter,
+                                                          rename_1=rename_stored, rename_2=rename_current,
                                                           full_match=full_match, unbounded_relative_error_threshold=unbounded_relative_error_threshold)
                     task_result = self.task_result_class(task=self, simulation_task_result=simulation_task_result)
                     task_result._compute_verdict(comparison)

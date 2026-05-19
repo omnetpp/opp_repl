@@ -117,8 +117,8 @@ class CompareSimulationsTaskResult(TaskResult):
                 self._compute_statistical_verdict(**self.multiple_tasks.kwargs)
             else:
                 self.different_statistical_results = pd.DataFrame()
-                self.added_statistical_results = pd.DataFrame()
-                self.removed_statistical_results = pd.DataFrame()
+                self.only_1_statistical_results = pd.DataFrame()
+                self.only_2_statistical_results = pd.DataFrame()
                 self.statistical_comparison_result = None
                 self.statistical_comparison_color = None
 
@@ -131,8 +131,8 @@ class CompareSimulationsTaskResult(TaskResult):
             self.fingerprint_trajectory_comparison_result = None
             self.fingerprint_trajectory_comparison_color = None
             self.different_statistical_results = pd.DataFrame()
-            self.added_statistical_results = pd.DataFrame()
-            self.removed_statistical_results = pd.DataFrame()
+            self.only_1_statistical_results = pd.DataFrame()
+            self.only_2_statistical_results = pd.DataFrame()
             self.statistical_comparison_result = None
             self.statistical_comparison_color = None
             if multiple_task_results:
@@ -153,13 +153,13 @@ class CompareSimulationsTaskResult(TaskResult):
             fingerprint_trajectory_divergence_description = f"\nFingerprint trajectory comparison result: {self.fingerprint_trajectory_comparison_color}{self.fingerprint_trajectory_comparison_result}{COLOR_RESET}"
         else:
             fingerprint_trajectory_divergence_description = ""
-        if not self.different_statistical_results.empty or not self.added_statistical_results.empty or not self.removed_statistical_results.empty:
+        if not self.different_statistical_results.empty or not self.only_1_statistical_results.empty or not self.only_2_statistical_results.empty:
             max_num_different_statistics = 3
             summary_parts = [f"{COLOR_GREEN}{str(len(self.identical_statistical_results))} IDENTICAL{COLOR_RESET}"]
-            if not self.added_statistical_results.empty:
-                summary_parts.append(f"{COLOR_YELLOW}{str(len(self.added_statistical_results))} ADDED{COLOR_RESET}")
-            if not self.removed_statistical_results.empty:
-                summary_parts.append(f"{COLOR_YELLOW}{str(len(self.removed_statistical_results))} REMOVED{COLOR_RESET}")
+            if not self.only_1_statistical_results.empty:
+                summary_parts.append(f"{COLOR_YELLOW}{str(len(self.only_1_statistical_results))} ONLY_1{COLOR_RESET}")
+            if not self.only_2_statistical_results.empty:
+                summary_parts.append(f"{COLOR_YELLOW}{str(len(self.only_2_statistical_results))} ONLY_2{COLOR_RESET}")
             if not self.different_statistical_results.empty:
                 summary_parts.append(f"{COLOR_YELLOW}{str(len(self.different_statistical_results))} DIFFERENT{COLOR_RESET}")
             summary_str = ", ".join(summary_parts)
@@ -189,10 +189,18 @@ class CompareSimulationsTaskResult(TaskResult):
         Keyword Args:
             stdout_filter (str or None): Regex to include only matching stdout lines.
             exclude_stdout_filter (str or None): Regex to exclude matching stdout lines.
-            result_name_filter (str or None): Regex for scalar names.
-            exclude_result_name_filter (str or None): Regex to exclude scalar names.
-            result_module_filter (str or None): Regex for modules.
-            exclude_result_module_filter (str or None): Regex to exclude modules.
+            result_name_filter (str or None): Regex for scalar names (applied to *different* rows).
+            exclude_result_name_filter (str or None): Regex to exclude scalar names from *different*.
+            result_module_filter (str or None): Regex for modules (applied to *different* rows).
+            exclude_result_module_filter (str or None): Regex to exclude modules from *different*.
+            only_result_name_filter (str or None): Regex applied to only-side rows; non-matching
+                rows are dropped from ``only_1_statistical_results``/``only_2_statistical_results``.
+            exclude_only_result_name_filter (str or None): Exclude-side of ``only_result_name_filter``.
+            only_result_module_filter (str or None): Module regex for only-side rows.
+            exclude_only_result_module_filter (str or None): Exclude-side of ``only_result_module_filter``.
+            rename_1 (callable or None): ``(module, name) -> (module, name)`` rewriting df_1 keys
+                before the merge so renamed statistics line up.  Not persisted across calls.
+            rename_2 (callable or None): Same as ``rename_1`` but for df_2.
             full_match (bool): Use ``re.fullmatch`` instead of ``re.search``.
 
         Returns:
@@ -220,7 +228,7 @@ class CompareSimulationsTaskResult(TaskResult):
     def _compute_statistical_verdict(self, **kwargs):
         """Compute statistical comparison verdict."""
         self._compare_statistical_results(**kwargs)
-        if not self.different_statistical_results.empty or not self.added_statistical_results.empty or not self.removed_statistical_results.empty:
+        if not self.different_statistical_results.empty or not self.only_1_statistical_results.empty or not self.only_2_statistical_results.empty:
             self.statistical_comparison_result = "DIFFERENT"
             self.statistical_comparison_color = COLOR_YELLOW
         else:
@@ -354,18 +362,27 @@ class CompareSimulationsTaskResult(TaskResult):
         fingerprint_trajectory_2 = self.multiple_task_results.results[1].get_fingerprint_trajectory().get_unique()
         return find_fingerprint_trajectory_divergence_position(fingerprint_trajectory_1, fingerprint_trajectory_2)
 
-    def _compare_statistical_results(self, result_name_filter=None, exclude_result_name_filter=None, result_module_filter=None, exclude_result_module_filter=None, full_match=False, **kwargs):
+    def _compare_statistical_results(self,
+                                      result_name_filter=None, exclude_result_name_filter=None,
+                                      result_module_filter=None, exclude_result_module_filter=None,
+                                      only_result_name_filter=None, exclude_only_result_name_filter=None,
+                                      only_result_module_filter=None, exclude_only_result_module_filter=None,
+                                      rename_1=None, rename_2=None,
+                                      full_match=False, **kwargs):
         self.df_1 = self._get_result_data_frame(self.multiple_task_results.results[0])
         self.df_2 = self._get_result_data_frame(self.multiple_task_results.results[1])
         comparison = compare_scalar_dataframes(self.df_1, self.df_2,
                                                name_filter=result_name_filter, exclude_name_filter=exclude_result_name_filter,
                                                module_filter=result_module_filter, exclude_module_filter=exclude_result_module_filter,
+                                               only_name_filter=only_result_name_filter, exclude_only_name_filter=exclude_only_result_name_filter,
+                                               only_module_filter=only_result_module_filter, exclude_only_module_filter=exclude_only_result_module_filter,
+                                               rename_1=rename_1, rename_2=rename_2,
                                                full_match=full_match)
         self.statistical_comparison = comparison
         self.different_statistical_results = comparison.different
         self.identical_statistical_results = comparison.identical
-        self.added_statistical_results = comparison.added
-        self.removed_statistical_results = comparison.removed
+        self.only_1_statistical_results = comparison.only_1
+        self.only_2_statistical_results = comparison.only_2
 
     def _get_result_file_name(self, simulation_task, extension):
         simulation_config = simulation_task.simulation_config

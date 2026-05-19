@@ -94,4 +94,9 @@ convention is what keeps them apart.
   `error_message_filter`.
 - **Result-content filters** — select *which parts* of a result are
   inspected.  These are `stdout_filter`, `result_name_filter`, and
-  `result_module_filter` (each with an `exclude_*` variant).
+  `result_module_filter` for rows present on both sides (each with an
+  `exclude_*` variant), plus `only_result_name_filter` and
+  `only_result_module_filter` (and their `exclude_*` variants) for rows
+  present on only one side.  Result comparisons also accept `rename_1`
+  / `rename_2` callables that rewrite `(module, name)` keys before the
+  merge so renamed statistics still line up.

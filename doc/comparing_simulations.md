@@ -177,8 +177,11 @@ These are *result-content filters* — they apply within each compared pair's
 results — and are distinct from the task-level filters (`config_filter`,
 `working_directory_filter`, …) that select *which* pairs to compare.
 
-- **`result_name_filter`** / **`exclude_result_name_filter`** — filter scalar names
-- **`result_module_filter`** / **`exclude_result_module_filter`** — filter module paths
+- **`result_name_filter`** / **`exclude_result_name_filter`** — filter scalar names in the *different* result
+- **`result_module_filter`** / **`exclude_result_module_filter`** — filter module paths in the *different* result
+- **`only_result_name_filter`** / **`exclude_only_result_name_filter`** — filter scalar names among the rows present on only one side
+- **`only_result_module_filter`** / **`exclude_only_result_module_filter`** — filter modules among the rows present on only one side
+- **`rename_1`** / **`rename_2`** — per-side `(module, name) -> (module, name)` callable that rewrites keys before the merge, so renamed statistics line up
 - **`stdout_filter`** / **`exclude_stdout_filter`** — filter stdout lines before comparing
 
 ### Understanding the result
@@ -305,9 +308,15 @@ r2.result                                # overall verdict is recomputed
 `recompare()` accepts the following keyword arguments:
 
 - **Stdout filters**: `stdout_filter`, `exclude_stdout_filter`
-- **Statistics filters**: `result_name_filter`,
+- **Statistics filters (on *different* rows)**: `result_name_filter`,
   `exclude_result_name_filter`, `result_module_filter`,
   `exclude_result_module_filter`, `full_match`
+- **Statistics filters (on only-side rows)**: `only_result_name_filter`,
+  `exclude_only_result_name_filter`, `only_result_module_filter`,
+  `exclude_only_result_module_filter`
+- **Rename callables**: `rename_1`, `rename_2` — per-side
+  `(module, name) -> (module, name)` rewriters that line up renamed
+  statistics
 
 ### Interactive debugging and visualization
 

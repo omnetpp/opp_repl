@@ -614,40 +614,72 @@ class ScalarComparisonResult:
     Attributes:
         df_1 (pd.DataFrame): The first input DataFrame.
         df_2 (pd.DataFrame): The second input DataFrame.
+        suffixes (tuple): Column suffixes used for the merge; also drives the
+            ``only<suffix>`` attribute names below.
         is_equal (bool): ``True`` when the two DataFrames are equal.
         identical (pd.DataFrame): Rows present and equal in both DataFrames.
         different (pd.DataFrame): Rows that differ (present in both but with
             different values), sorted by descending
             ``|unbounded_relative_error|``.
-        added (pd.DataFrame): Rows only present in ``df_2`` (new statistics).
-        removed (pd.DataFrame): Rows only present in ``df_1`` (disappeared
-            statistics).
-        num_filtered_out (int): Number of differing rows excluded by
-            name/module filters.
+        only<suffixes[0]> (pd.DataFrame): Rows present only in ``df_1`` (e.g.
+            ``only_1`` for default suffixes, ``only_stored`` when
+            ``suffixes=('_stored', '_current')``).
+        only<suffixes[1]> (pd.DataFrame): Rows present only in ``df_2``.
+        only_1, only_2: Suffix-agnostic aliases returning the same DataFrames
+            positionally.
+        num_filtered_out (int): Number of differing rows excluded by the
+            ``name``/``module`` filters.
+        num_only_filtered_out (int): Number of only-side rows excluded by the
+            ``only_name``/``only_module`` filters.
         num_below_threshold (int): Number of differing rows excluded because
             their ``|unbounded_relative_error|`` was below the threshold.
     """
 
     def __init__(self, df_1, df_2, is_equal, identical, different,
-                 added=None, removed=None, num_filtered_out=0, num_below_threshold=0):
+                 only_a=None, only_b=None, suffixes=('_1', '_2'),
+                 num_filtered_out=0, num_only_filtered_out=0, num_below_threshold=0):
         self.df_1 = df_1
         self.df_2 = df_2
+        self.suffixes = suffixes
         self.is_equal = is_equal
         self.identical = identical
         self.different = different
-        self.added = added if added is not None else pandas.DataFrame()
-        self.removed = removed if removed is not None else pandas.DataFrame()
+        empty = pandas.DataFrame()
+        self._only_a = only_a if only_a is not None else empty
+        self._only_b = only_b if only_b is not None else empty
+        # Also expose the only-side frames under suffix-derived names. Skip
+        # when the derived name would collide with the only_1/only_2
+        # property aliases below.
+        name_a = f"only{suffixes[0]}"
+        name_b = f"only{suffixes[1]}"
+        if name_a not in ('only_1', 'only_2'):
+            self.__dict__[name_a] = self._only_a
+        if name_b not in ('only_1', 'only_2'):
+            self.__dict__[name_b] = self._only_b
         self.num_filtered_out = num_filtered_out
+        self.num_only_filtered_out = num_only_filtered_out
         self.num_below_threshold = num_below_threshold
+
+    @property
+    def only_1(self):
+        return self._only_a
+
+    @property
+    def only_2(self):
+        return self._only_b
 
     def __repr__(self):
         parts = [f"{len(self.identical)} IDENTICAL"]
-        if not self.added.empty:
-            parts.append(f"{len(self.added)} ADDED")
-        if not self.removed.empty:
-            parts.append(f"{len(self.removed)} REMOVED")
+        label_a = f"ONLY{self.suffixes[0].upper()}"
+        label_b = f"ONLY{self.suffixes[1].upper()}"
+        if not self.only_1.empty:
+            parts.append(f"{len(self.only_1)} {label_a}")
+        if not self.only_2.empty:
+            parts.append(f"{len(self.only_2)} {label_b}")
         if self.num_filtered_out:
             parts.append(f"{self.num_filtered_out} FILTERED OUT")
+        if self.num_only_filtered_out:
+            parts.append(f"{self.num_only_filtered_out} ONLY FILTERED OUT")
         if self.num_below_threshold:
             parts.append(f"{self.num_below_threshold} BELOW THRESHOLD")
         if not self.different.empty:
@@ -658,13 +690,22 @@ class ScalarComparisonResult:
         """Recompute the comparison with different filter parameters.
 
         Accepts the same filter keyword arguments as
-        :py:func:`compare_scalar_dataframes` (``name_filter``,
-        ``exclude_name_filter``, ``module_filter``, ``exclude_module_filter``,
-        ``full_match``, ``unbounded_relative_error_threshold``).
+        :py:func:`compare_scalar_dataframes`: ``name_filter``,
+        ``exclude_name_filter``, ``module_filter``, ``exclude_module_filter``
+        (applied to the ``different`` frame), ``only_name_filter``,
+        ``exclude_only_name_filter``, ``only_module_filter``,
+        ``exclude_only_module_filter`` (applied to the only-side frames),
+        ``rename_1``, ``rename_2``, ``full_match``, and
+        ``unbounded_relative_error_threshold``.  The ``suffixes`` of this
+        result are preserved unless overridden via ``kwargs``.
+
+        Rename callables are **not** persisted on the result; pass them again
+        each time you call ``refilter``.
 
         Returns:
             ScalarComparisonResult: A new comparison result with the updated filters applied.
         """
+        kwargs.setdefault('suffixes', self.suffixes)
         return compare_scalar_dataframes(self.df_1, self.df_2, **kwargs)
 
 def compare_scalar_dataframes(
@@ -675,6 +716,12 @@ def compare_scalar_dataframes(
     exclude_name_filter=None,
     module_filter=None,
     exclude_module_filter=None,
+    only_name_filter=None,
+    exclude_only_name_filter=None,
+    only_module_filter=None,
+    exclude_only_module_filter=None,
+    rename_1=None,
+    rename_2=None,
     full_match=False,
     unbounded_relative_error_threshold=None,
 ):
@@ -688,15 +735,41 @@ def compare_scalar_dataframes(
     (symmetric atanh-based metric).  Rows are sorted by descending
     ``|unbounded_relative_error|``.
 
+    The returned result is symmetric in naming: instead of ``added`` and
+    ``removed``, the only-side frames are exposed as ``only<suffixes[0]>``
+    and ``only<suffixes[1]>`` (e.g. ``only_1``/``only_2`` for default
+    suffixes, ``only_stored``/``only_current`` when
+    ``suffixes=('_stored', '_current')``).
+
     Parameters:
         df_1 (pd.DataFrame): First (or *stored*/*baseline*) DataFrame.
         df_2 (pd.DataFrame): Second (or *current*) DataFrame.
         suffixes (tuple): Column suffixes used when merging the ``value``
             column (default ``('_1', '_2')``).
-        name_filter (str or None): Regex to include only matching ``name`` rows.
-        exclude_name_filter (str or None): Regex to exclude matching ``name`` rows.
-        module_filter (str or None): Regex to include only matching ``module`` rows.
-        exclude_module_filter (str or None): Regex to exclude matching ``module`` rows.
+        name_filter (str or None): Regex to include only matching ``name``
+            rows from the *different* result.
+        exclude_name_filter (str or None): Regex to exclude matching ``name``
+            rows from the *different* result.
+        module_filter (str or None): Regex to include only matching ``module``
+            rows from the *different* result.
+        exclude_module_filter (str or None): Regex to exclude matching
+            ``module`` rows from the *different* result.
+        only_name_filter (str or None): Regex to include only matching
+            ``name`` rows in the only-side frames.  Rows that fail the filter
+            are dropped from ``only_1``/``only_2`` and counted in
+            ``num_only_filtered_out``.
+        exclude_only_name_filter (str or None): Regex to exclude matching
+            ``name`` rows from the only-side frames.
+        only_module_filter (str or None): Regex to include only matching
+            ``module`` rows in the only-side frames.
+        exclude_only_module_filter (str or None): Regex to exclude matching
+            ``module`` rows from the only-side frames.
+        rename_1 (callable or None): ``(module, name) -> (module, name)``
+            applied to each row of ``df_1`` before the merge.  Useful when a
+            statistic was renamed between the two sides so the rows still
+            line up.  The renames are applied for the comparison only — the
+            original ``df_1`` is what is stored on the result.
+        rename_2 (callable or None): Same as ``rename_1`` but for ``df_2``.
         full_match (bool): If ``True`` filters use ``re.fullmatch``; otherwise ``re.search``.
         unbounded_relative_error_threshold (float or None): If set, rows whose
             ``|unbounded_relative_error|`` is below this threshold are
@@ -704,25 +777,46 @@ def compare_scalar_dataframes(
 
     Returns:
         ScalarComparisonResult: Container with ``df_1``, ``df_2``,
-        ``is_equal``, ``identical``, and ``different`` attributes.
+        ``suffixes``, ``is_equal``, ``identical``, ``different``, and
+        suffix-named only-side frames.
     """
     value_col_1 = 'value' + suffixes[0]
     value_col_2 = 'value' + suffixes[1]
 
-    if df_1.equals(df_2):
+    df_1_eff = df_1
+    df_2_eff = df_2
+    if rename_1 is not None and not df_1.empty:
+        df_1_eff = df_1.copy()
+        renamed = df_1_eff.apply(
+            lambda row: pandas.Series(rename_1(row["module"], row["name"]),
+                                      index=["module", "name"]),
+            axis=1)
+        df_1_eff["module"] = renamed["module"]
+        df_1_eff["name"] = renamed["name"]
+    if rename_2 is not None and not df_2.empty:
+        df_2_eff = df_2.copy()
+        renamed = df_2_eff.apply(
+            lambda row: pandas.Series(rename_2(row["module"], row["name"]),
+                                      index=["module", "name"]),
+            axis=1)
+        df_2_eff["module"] = renamed["module"]
+        df_2_eff["name"] = renamed["name"]
+
+    if rename_1 is None and rename_2 is None and df_1.equals(df_2):
         return ScalarComparisonResult(
             df_1=df_1,
             df_2=df_2,
             is_equal=True,
             identical=pandas.merge(df_1, df_2, how="inner"),
             different=pandas.DataFrame(),
+            suffixes=suffixes,
         )
 
-    merged = df_1.merge(df_2, on=_KEY_COLUMNS, how='outer', suffixes=suffixes)
+    merged = df_1_eff.merge(df_2_eff, on=_KEY_COLUMNS, how='outer', suffixes=suffixes)
 
-    # --- separate added, removed, and changed -----------------------------
-    added = merged[merged[value_col_1].isna() & merged[value_col_2].notna()].copy()
-    removed = merged[merged[value_col_1].notna() & merged[value_col_2].isna()].copy()
+    # --- separate only-side and changed -----------------------------------
+    only_a = merged[merged[value_col_1].notna() & merged[value_col_2].isna()].copy()
+    only_b = merged[merged[value_col_1].isna() & merged[value_col_2].notna()].copy()
     df = merged[
         merged[value_col_1].notna() & merged[value_col_2].notna() &
         (merged[value_col_1] != merged[value_col_2])
@@ -736,26 +830,36 @@ def compare_scalar_dataframes(
     df["unbounded_relative_error"] = df.apply(
         lambda row: unbounded_relative_error(row[value_col_1], row[value_col_2]), axis=1)
 
-    # --- filtering --------------------------------------------------------
+    # --- filter `different` rows ------------------------------------------
     num_filtered_out = 0
     if name_filter is not None or exclude_name_filter is not None or \
        module_filter is not None or exclude_module_filter is not None:
-        filter_mask = df.apply(
-            lambda row: matches_filter(row["name"], name_filter, exclude_name_filter, full_match) and
-                        matches_filter(row["module"], module_filter, exclude_module_filter, full_match),
-            axis=1)
-        num_filtered_out = int((~filter_mask).sum())
-        df = df[filter_mask]
-        added_filter_mask = added.apply(
-            lambda row: matches_filter(row["name"], name_filter, exclude_name_filter, full_match) and
-                        matches_filter(row["module"], module_filter, exclude_module_filter, full_match),
-            axis=1) if not added.empty else pandas.Series(dtype=bool)
-        added = added[added_filter_mask] if not added.empty else added
-        removed_filter_mask = removed.apply(
-            lambda row: matches_filter(row["name"], name_filter, exclude_name_filter, full_match) and
-                        matches_filter(row["module"], module_filter, exclude_module_filter, full_match),
-            axis=1) if not removed.empty else pandas.Series(dtype=bool)
-        removed = removed[removed_filter_mask] if not removed.empty else removed
+        if not df.empty:
+            filter_mask = df.apply(
+                lambda row: matches_filter(row["name"], name_filter, exclude_name_filter, full_match) and
+                            matches_filter(row["module"], module_filter, exclude_module_filter, full_match),
+                axis=1)
+            num_filtered_out = int((~filter_mask).sum())
+            df = df[filter_mask]
+
+    # --- filter only-side rows --------------------------------------------
+    num_only_filtered_out = 0
+    if only_name_filter is not None or exclude_only_name_filter is not None or \
+       only_module_filter is not None or exclude_only_module_filter is not None:
+        if not only_a.empty:
+            mask_a = only_a.apply(
+                lambda row: matches_filter(row["name"], only_name_filter, exclude_only_name_filter, full_match) and
+                            matches_filter(row["module"], only_module_filter, exclude_only_module_filter, full_match),
+                axis=1)
+            num_only_filtered_out += int((~mask_a).sum())
+            only_a = only_a[mask_a]
+        if not only_b.empty:
+            mask_b = only_b.apply(
+                lambda row: matches_filter(row["name"], only_name_filter, exclude_only_name_filter, full_match) and
+                            matches_filter(row["module"], only_module_filter, exclude_only_module_filter, full_match),
+                axis=1)
+            num_only_filtered_out += int((~mask_b).sum())
+            only_b = only_b[mask_b]
 
     # --- threshold --------------------------------------------------------
     num_below_threshold = 0
@@ -772,10 +876,12 @@ def compare_scalar_dataframes(
         df_1=df_1,
         df_2=df_2,
         is_equal=False,
-        identical=pandas.merge(df_1, df_2, how="inner"),
+        identical=pandas.merge(df_1_eff, df_2_eff, how="inner"),
         different=df,
-        added=added,
-        removed=removed,
+        only_a=only_a,
+        only_b=only_b,
+        suffixes=suffixes,
         num_filtered_out=num_filtered_out,
+        num_only_filtered_out=num_only_filtered_out,
         num_below_threshold=num_below_threshold,
     )
