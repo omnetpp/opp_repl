@@ -172,10 +172,13 @@ results = compare_simulations_between_commits(
 The flags are stored on the `CompareSimulationsTask`, so they are honoured when
 the task is re-run.
 
-Additional keyword arguments can narrow the statistical and stdout comparison:
+Additional keyword arguments can narrow the statistical and stdout comparison.
+These are *result-content filters* — they apply within each compared pair's
+results — and are distinct from the task-level filters (`config_filter`,
+`working_directory_filter`, …) that select *which* pairs to compare.
 
-- **`statistical_result_name_filter`** / **`exclude_statistic_name_filter`** — filter scalar names
-- **`statistical_result_module_filter`** / **`exclude_statistic_module_filter`** — filter module paths
+- **`result_name_filter`** / **`exclude_result_name_filter`** — filter scalar names
+- **`result_module_filter`** / **`exclude_result_module_filter`** — filter module paths
 - **`stdout_filter`** / **`exclude_stdout_filter`** — filter stdout lines before comparing
 
 ### Understanding the result
@@ -291,8 +294,8 @@ filters and recompute the verdict without re-running anything.
 # Re-run with different stdout and statistics filters
 r2 = r.recompare(
     exclude_stdout_filter=".*DEBUG.*",
-    exclude_statistic_name_filter="jitter",
-    statistical_result_module_filter=".*router.*")
+    exclude_result_name_filter="jitter",
+    result_module_filter=".*router.*")
 
 r2.stdout_trajectory_comparison_result   # "IDENTICAL" or "DIVERGENT"
 r2.statistical_comparison_result         # "IDENTICAL" or "DIFFERENT"
@@ -302,9 +305,9 @@ r2.result                                # overall verdict is recomputed
 `recompare()` accepts the following keyword arguments:
 
 - **Stdout filters**: `stdout_filter`, `exclude_stdout_filter`
-- **Statistics filters**: `statistical_result_name_filter`,
-  `exclude_statistic_name_filter`, `statistical_result_module_filter`,
-  `exclude_statistic_module_filter`, `full_match`
+- **Statistics filters**: `result_name_filter`,
+  `exclude_result_name_filter`, `result_module_filter`,
+  `exclude_result_module_filter`, `full_match`
 
 ### Interactive debugging and visualization
 

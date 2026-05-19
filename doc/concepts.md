@@ -79,3 +79,19 @@ rather than just a substring.
 These filters are available on `run_simulations()`, `run_smoke_tests()`,
 `run_fingerprint_tests()`, `compare_simulations()`, and all other
 functions that call `get_simulation_tasks()` internally.
+
+### Two categories of filters
+
+Filters travel as flat `**kwargs` throughout the API; the naming
+convention is what keeps them apart.
+
+- **Task-level filters** — select *which* simulations/tasks are run or
+  iterated.  These include `filter`, `working_directory_filter`,
+  `ini_file_filter`, `config_filter`, `run_number_filter`,
+  `simulation_config_filter` (predicate), and `full_match`, plus the
+  test-module extensions `chart_filter`, `feature_id_filter`, and the
+  test-outcome filters `result_filter`, `expected_result_filter`, and
+  `error_message_filter`.
+- **Result-content filters** — select *which parts* of a result are
+  inspected.  These are `stdout_filter`, `result_name_filter`, and
+  `result_module_filter` (each with an `exclude_*` variant).

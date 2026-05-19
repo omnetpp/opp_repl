@@ -189,10 +189,10 @@ class CompareSimulationsTaskResult(TaskResult):
         Keyword Args:
             stdout_filter (str or None): Regex to include only matching stdout lines.
             exclude_stdout_filter (str or None): Regex to exclude matching stdout lines.
-            statistical_result_name_filter (str or None): Regex for scalar names.
-            exclude_statistic_name_filter (str or None): Regex to exclude scalar names.
-            statistical_result_module_filter (str or None): Regex for modules.
-            exclude_statistic_module_filter (str or None): Regex to exclude modules.
+            result_name_filter (str or None): Regex for scalar names.
+            exclude_result_name_filter (str or None): Regex to exclude scalar names.
+            result_module_filter (str or None): Regex for modules.
+            exclude_result_module_filter (str or None): Regex to exclude modules.
             full_match (bool): Use ``re.fullmatch`` instead of ``re.search``.
 
         Returns:
@@ -354,12 +354,12 @@ class CompareSimulationsTaskResult(TaskResult):
         fingerprint_trajectory_2 = self.multiple_task_results.results[1].get_fingerprint_trajectory().get_unique()
         return find_fingerprint_trajectory_divergence_position(fingerprint_trajectory_1, fingerprint_trajectory_2)
 
-    def _compare_statistical_results(self, statistical_result_name_filter=None, exclude_statistic_name_filter=None, statistical_result_module_filter=None, exclude_statistic_module_filter=None, full_match=False, **kwargs):
+    def _compare_statistical_results(self, result_name_filter=None, exclude_result_name_filter=None, result_module_filter=None, exclude_result_module_filter=None, full_match=False, **kwargs):
         self.df_1 = self._get_result_data_frame(self.multiple_task_results.results[0])
         self.df_2 = self._get_result_data_frame(self.multiple_task_results.results[1])
         comparison = compare_scalar_dataframes(self.df_1, self.df_2,
-                                               name_filter=statistical_result_name_filter, exclude_name_filter=exclude_statistic_name_filter,
-                                               module_filter=statistical_result_module_filter, exclude_module_filter=exclude_statistic_module_filter,
+                                               name_filter=result_name_filter, exclude_name_filter=exclude_result_name_filter,
+                                               module_filter=result_module_filter, exclude_module_filter=exclude_result_module_filter,
                                                full_match=full_match)
         self.statistical_comparison = comparison
         self.different_statistical_results = comparison.different

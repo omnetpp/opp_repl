@@ -142,7 +142,7 @@ any simulations**.
 r = run_statistical_tests(sim_time_limit="1s")
 
 # Some tests fail — try excluding a noisy scalar
-r2 = r.recheck(exclude_name_filter="jitter")
+r2 = r.recheck(exclude_result_name_filter="jitter")
 
 # Or set an error threshold
 r3 = r.recheck(unbounded_relative_error_threshold=1e-6)
@@ -156,8 +156,8 @@ The original `r` is unchanged.
 
 ```python
 tr = r.results[3]
-tr2 = tr.recheck(exclude_name_filter="jitter",
-                 exclude_module_filter=".*scenarioManager.*")
+tr2 = tr.recheck(exclude_result_name_filter="jitter",
+                 exclude_result_module_filter=".*scenarioManager.*")
 print(tr2.result)   # "PASS" or "FAIL"
 print(tr2.reason)
 ```
