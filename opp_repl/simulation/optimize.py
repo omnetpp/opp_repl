@@ -150,6 +150,13 @@ def optimize_simulation_parameters(simulation_task, expected_result_names, expec
         (multiple parameters).
     """
     start_time = time.time()
+    # Build once up front (honoring simulation_task.build) and disable per-iteration
+    # builds — scipy can call cost_function many times and each iteration would
+    # otherwise re-invoke make. The build kwarg propagated through cost_function
+    # overrides simulation_task.build at run time without mutating the task.
+    if simulation_task.build:
+        simulation_task.build_before_run()
+    kwargs.setdefault("build", False)
     best = {"cost": float('inf'), "parameter_values": None, "result_values": None}
     xs = np.array(initial_values, dtype=float)
     bounds = list(map(lambda min, max: (min, max), min_values, max_values))
