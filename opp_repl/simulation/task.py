@@ -774,7 +774,7 @@ def get_simulation_tasks(simulation_project=None, simulation_configs=None, mode=
     if simulation_project is None:
         simulation_project = get_default_simulation_project()
     if simulation_configs is None:
-        simulation_configs = simulation_project.get_simulation_configs(concurrent=concurrent, **kwargs)
+        simulation_configs = simulation_project.get_simulation_configs(concurrent=concurrent, mode=mode, **kwargs)
     if affected_by_modification_filter is not None:
         from opp_repl.simulation.dependency import get_simulation_task_dependency_store
         store = get_simulation_task_dependency_store(simulation_project)

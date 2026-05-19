@@ -721,7 +721,7 @@ class SimulationProject:
         import opp_repl.simulation.build
         return opp_repl.simulation.build.clean_project(simulation_project=self, mode=mode, build_mode=build_mode, **kwargs)
 
-    def get_num_runs_in_config(self, ini_path, config):
+    def get_num_runs_in_config(self, ini_path, config, mode="release"):
         num_runs_fast_regex = re.compile(r"(?m).*^\s*(include\s+.*\.ini|repeat\s*=\s*[0-9]+|.*\$\{.*\})")
         inifile_text = read_file(ini_path)
         if not num_runs_fast_regex.search(inifile_text):
@@ -738,14 +738,16 @@ class SimulationProject:
                 if self.opp_env_workspace:
                     _logger.warn("Cannot determine number of runs for opp_env project with configuration-class in " + working_directory)
                     return None
-                executable = self.get_executable(mode="release")
+                executable = self.get_executable(mode=mode)
                 default_args = self.get_default_args()
                 args = [executable, *default_args, "-s", "-f", ini_file, "-c", config, "-q", "numruns"]
             else:
                 if self.opp_env_workspace:
-                    executable = shutil.which("opp_run_release") or shutil.which("opp_run")
+                    omnetpp_project = self.get_omnetpp_project()
+                    suffix = omnetpp_project.get_library_suffix(mode=mode) if omnetpp_project else "_release"
+                    executable = shutil.which("opp_run" + suffix) or shutil.which("opp_run")
                 else:
-                    executable = self.get_omnetpp_project().get_executable(mode="release")
+                    executable = self.get_omnetpp_project().get_executable(mode=mode)
                 if executable is None or not os.path.exists(executable):
                     _logger.warn("Cannot determine number of runs: opp_run not found in " + working_directory)
                     return None
@@ -761,7 +763,7 @@ class SimulationProject:
                 return None
 
     # KLUDGE TODO replace this with a Python binding to the C++ configuration reader
-    def collect_ini_file_simulation_configs(self, ini_path):
+    def collect_ini_file_simulation_configs(self, ini_path, mode="release"):
         def get_sim_time_limit(config_dicts, config):
             config_dict = config_dicts[config]
             if "sim_time_limit" in config_dict:
@@ -816,7 +818,7 @@ class SimulationProject:
         general_config_dict = config_dicts["General"]
         for config, config_dict in config_dicts.items():
             config = config_dict["config"]
-            num_runs = self.get_num_runs_in_config(ini_path, config)
+            num_runs = self.get_num_runs_in_config(ini_path, config, mode=mode)
             if num_runs is None:
                 continue
             sim_time_limit = get_sim_time_limit(config_dicts, config)
@@ -830,15 +832,15 @@ class SimulationProject:
             simulation_configs.append(simulation_config)
         return simulation_configs
 
-    def collect_all_simulation_configs(self, ini_path_globs, concurrent=True, build=None, build_mode=None, **kwargs):
-        def local_collect_ini_file_simulation_configs(ini_path, **kwargs):
-            return self.collect_ini_file_simulation_configs(ini_path, **kwargs)
+    def collect_all_simulation_configs(self, ini_path_globs, concurrent=True, build=None, mode="release", build_mode=None, **kwargs):
+        def local_collect_ini_file_simulation_configs(ini_path):
+            return self.collect_ini_file_simulation_configs(ini_path, mode=mode)
         _logger.info(f"Collecting {self.name} simulation configs started")
         ini_paths = [f for f in itertools.chain.from_iterable(map(lambda g: glob.glob(g, recursive=True), ini_path_globs)) if os.path.isfile(f)]
         if build is None:
             build = get_default_build_argument()
         if build:
-            self.build(mode="release", build_mode=build_mode)
+            self.build(mode=mode, build_mode=build_mode)
         if concurrent:
             pool = multiprocessing.pool.ThreadPool(multiprocessing.cpu_count())
             result = list(itertools.chain.from_iterable(pool.map(local_collect_ini_file_simulation_configs, ini_paths)))

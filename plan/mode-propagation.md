@@ -192,23 +192,24 @@ edits honest.
   - `SimulationTask`-level helpers (`is_interactive`,
     `_resolve_output_file_path`, item 2) use `self.mode`, not
     `"release"`.
+  - Config discovery (`collect_all_simulation_configs`,
+    `get_num_runs_in_config`) inherits the caller's mode rather than
+    hardcoding release. See the note below.
 - **Explicit user override:** passing `mode=...` at any top-level
   entry point (`run_simulations`, `run_*_tests`,
   `update_*_test_results`, `compare_*`) propagates all the way down;
   no intermediate layer overwrites it.
-- **Out of scope:** config discovery (see below).
 
-## Out of scope
+## Note on config discovery
 
-Config discovery
-(`SimulationProject.collect_all_simulation_configs` at
-`opp_repl/simulation/project.py:825-833` and
-`SimulationProject.get_num_runs_in_config` at
-`opp_repl/simulation/project.py:716-749`) intentionally hardcodes
-`mode="release"`. Discovery only needs *some* working `opp_run` to
-query `-q numruns`; forcing a debug/sanitize build just to enumerate
-configs would be wasteful. Do not thread the caller's `mode` through
-this chain.
+`SimulationProject.collect_all_simulation_configs` and
+`SimulationProject.get_num_runs_in_config` now thread the caller's
+`mode` through (changed from the earlier always-release behavior). The
+implicit pre-discovery build and the `-q numruns` probe both use the
+mode requested by the caller (e.g. `run_simulations(mode="debug")` does
+discovery against the debug build, not release). Mode parameter
+defaults to `"release"` when called bare (e.g.
+`inet_project.get_simulation_configs()`).
 
 ## Documentation updates
 

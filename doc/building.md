@@ -188,17 +188,15 @@ Setting `opp_env_workspace` and `opp_env_project` on a project reroutes
 opp_env-managed environment and the binary is invoked the same way. The same
 `mode` / `build_mode` rules apply.
 
-## Config discovery and the release-mode requirement
+## Config discovery and mode
 
 `SimulationProject.get_simulation_configs` discovers configs by invoking
-`opp_run … -q numruns`. This discovery step always uses the **release**
-executable, regardless of the `mode` you ultimately pass to `run_simulations`
-or test wrappers. Config discovery only needs *some* working `opp_run` to
-probe `numruns`, so it would be wasteful to force a debug or sanitize build
-just to enumerate configs.
+`opp_run … -q numruns`. It uses the **same mode as the caller**: when
+invoked from `run_simulations(mode="debug")` or `run_smoke_tests(...)`,
+discovery runs against the debug build. Called bare
+(`inet_project.get_simulation_configs()`), the default is `"release"`.
 
-In practice this means a project must have at least a release binary
-available before `run_simulations` (or any wrapper that walks configs) can
-work. If you have only built debug, run `build_project(mode="release")` once
-first — or just call `run_simulations(...)`, which will build release as
-part of config discovery and then build the requested mode for the run.
+The implicit pre-discovery build also uses the inherited mode, so
+calling `run_simulations(mode="debug")` on a project that has never
+been built triggers a single debug build that covers both config
+discovery and the actual run.
