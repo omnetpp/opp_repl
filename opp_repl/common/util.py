@@ -9,7 +9,6 @@ import IPython
 import logging
 import math
 import os
-import pandas
 import platform
 import pickle
 import re
@@ -19,7 +18,11 @@ import sys
 import threading
 import time
 
-pandas.set_option('display.float_format', lambda x: '%g' % x)
+try:
+    import pandas
+    pandas.set_option('display.float_format', lambda x: '%g' % x)
+except ImportError:
+    pandas = None
 
 __sphinx_mock__ = True # ignore this module in documentation
 
