@@ -678,6 +678,17 @@ def _qtenv_extra_compile_sources(omnetpp_project):
 
 _STALE_CC_RE = re.compile(r"^lex\..*yy\.cc$")
 
+# Source files present in the OMNeT++ tree but deliberately excluded from the
+# upstream Makefile's OBJS list — mirror that exclusion here so globbing matches
+# what `make` actually builds. Keyed by (component, subdir, basename); subdir is
+# "" for files directly under src/<component>/.
+_EXCLUDED_CC_FILES = {
+    # Orphan in src/sim/parsim/: not in OBJS_PARSIM in src/sim/Makefile, and
+    # doesn't compile (uses removed GateIterator::operator(); references
+    # cDatarateChannel without including its header).
+    ("sim", "parsim", "cadvlinkdelaylookahead.cc"),
+}
+
 
 def _is_stale_generated_cc(basename, expected_generated):
     """
@@ -699,18 +710,25 @@ def _glob_component_cc_files(omnetpp_root, component, extra_subdirs=(), expected
 
     Skips leftover build artifacts from prior incompatible builds (e.g.
     ``lex.<prefix>yy.cc`` default flex output, stray ``*.tab.cc`` files
-    that aren't on the canonical generator output list).
+    that aren't on the canonical generator output list), and files in
+    ``_EXCLUDED_CC_FILES`` that the upstream Makefile excludes from OBJS.
     """
     base = os.path.join(omnetpp_root, "src", component)
     expected = set(expected_generated)
     files = []
     for f in sorted(glob.glob(os.path.join(base, "*.cc"))):
-        if _is_stale_generated_cc(os.path.basename(f), expected):
+        basename = os.path.basename(f)
+        if _is_stale_generated_cc(basename, expected):
+            continue
+        if (component, "", basename) in _EXCLUDED_CC_FILES:
             continue
         files.append(f)
     for sub in extra_subdirs:
         for f in sorted(glob.glob(os.path.join(base, sub, "*.cc"))):
-            if _is_stale_generated_cc(os.path.basename(f), expected):
+            basename = os.path.basename(f)
+            if _is_stale_generated_cc(basename, expected):
+                continue
+            if (component, sub, basename) in _EXCLUDED_CC_FILES:
                 continue
             files.append(f)
     return [os.path.relpath(f, omnetpp_root) for f in files]
