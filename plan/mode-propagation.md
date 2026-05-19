@@ -27,7 +27,7 @@ The general failure modes are:
    `build_before_run` (`opp_repl/test/simulation.py:115-116`) builds in
    `debug`, then each `SimulationTask` tries to launch `opp_run_release`.
    Fix: in `get_simulation_test_tasks`, forward
-   `mode=multiple_simulation_tasks.mode` (and `build`, `build_mode`) into
+   `mode=multiple_simulation_tasks.mode` (and `build`, `build_engine`) into
    the `MultipleSimulationTestTasks` constructor so the per-task mode
    and the wrapper mode always agree. Same default change should be
    considered for `MultipleSimulationTestTasks.__init__`.
@@ -42,7 +42,7 @@ The general failure modes are:
 
 3. **`opp_repl/test/simulation.py:185-194`** —
    `MultipleSimulationUpdateTasks` has no `mode` / `build` /
-   `build_mode` / `build_before_run`, unlike its test sibling
+   `build_engine` / `build_before_run`, unlike its test sibling
    (`opp_repl/test/simulation.py:101-121`). `update_statistical_test_results`
    (`opp_repl/test/statistical.py:354-369`) goes through this class and
    therefore never auto-builds.
@@ -50,7 +50,7 @@ The general failure modes are:
    `MultipleFingerprintUpdateTasks.run`
    (`opp_repl/test/fingerprint/task.py:374-380`), but only by forwarding
    the *current* `**kwargs` to `build_project`; the mode is not stored
-   on the object. Fix: lift the `mode`/`build`/`build_mode`/
+   on the object. Fix: lift the `mode`/`build`/`build_engine`/
    `build_before_run` machinery into a shared base
    (e.g. `MultipleSimulationTasks` already has it) or duplicate it on
    `MultipleSimulationUpdateTasks`, and rewrite
@@ -131,7 +131,7 @@ The general failure modes are:
 ## Post-fix rules and defaults
 
 After this plan is applied, the three orthogonal parameters behave as
-follows. They are **not** synonyms (see `build_mode` note); the audit
+follows. They are **not** synonyms (see `build_engine` note); the audit
 is only about `mode`, but recording the full picture here keeps future
 edits honest.
 
@@ -147,20 +147,20 @@ edits honest.
   `SimulationTask.run` calls never trigger their own build — only the
   multiple-tasks wrappers do.
 
-### `build_mode` (str) — *how* the build is driven
+### `build_engine` (str) — *how* the build is driven
 
 - **Values:** `"makefile"` (drives `make` via `opp_makemake`-generated
   Makefile), `"task"` (drives the per-file `MsgCompileTask` /
   `CppCompileTask` / `LinkTask` pipeline).
-- **Default:** `get_default_build_mode()`
+- **Default:** `get_default_build_engine()`
   (`opp_repl/simulation/build.py:21-29`); currently `"makefile"`.
-  Settable globally via `set_default_build_mode`.
+  Settable globally via `set_default_build_engine`.
 - **Stored on:** same wrappers that store `build`. Forwarded by
   `SimulationProject.build` / `clean` into `build_project` /
   `clean_project`, which dispatch on it
   (`opp_repl/simulation/build.py:119-146`).
 - **Rule:** orthogonal to `mode`. A `mode="debug"` simulation can be
-  built with either `build_mode="makefile"` or `build_mode="task"`;
+  built with either `build_engine="makefile"` or `build_engine="task"`;
   the resulting artifact is the same `_dbg` binary.
 
 ### `mode` (str) — *which artifact flavor* to build/run
@@ -225,7 +225,7 @@ simulation projects. Suggested sections (mirroring the structure of
 the existing `doc/running_simulations.md`):
 
 1. **Three orthogonal parameters** — short table identical to the
-   "Post-fix rules" section above (`build`, `mode`, `build_mode`),
+   "Post-fix rules" section above (`build`, `mode`, `build_engine`),
    with one example per axis. Pitch this as the first thing a reader
    sees because the names are confusable.
 2. **What gets built when** — when `build_before_run` fires, what
@@ -240,11 +240,11 @@ the existing `doc/running_simulations.md`):
    `"debug"`, simulation wrappers default to `"release"`, sanitizer
    defaults to `"sanitize"`, etc.) and the explanation of *why* the
    test side prefers debug.
-4. **Build engines** — the `build_mode` axis. Explain the difference
+4. **Build engines** — the `build_engine` axis. Explain the difference
    between `"makefile"` (drives `make` via opp_makemake-generated
    Makefile) and `"task"` (per-file `MsgCompileTask` / `CppCompileTask`
-   / `LinkTask`). Cover `get_default_build_mode` /
-   `set_default_build_mode` and when one engine is preferable
+   / `LinkTask`). Cover `get_default_build_engine` /
+   `set_default_build_engine` and when one engine is preferable
    (e.g. task engine for finer-grained progress, makefile engine for
    parity with command-line `make`).
 5. **Recursive builds** — `SimulationProject.build(recursive=True)`
@@ -253,7 +253,7 @@ the existing `doc/running_simulations.md`):
    `used_projects` short-circuits the direct OMNeT++ step
    (`:679-681`) — a subtlety that has caused confusion.
 6. **Cleaning** — `clean_project`, `SimulationProject.clean`. Same
-   `mode` / `build_mode` axes apply. After item 5, document that
+   `mode` / `build_engine` axes apply. After item 5, document that
    cleaning in non-release modes now removes the suffixed binaries.
 7. **Build artifacts on disk** — `out/clang-{mode}/` vs
    `out/{makefile_inc.configname}/`, `bin/`, `lib/`. Explain the
@@ -283,7 +283,7 @@ the existing `doc/running_simulations.md`):
   but defer the general mode explanation to `building.md`.
 - **`doc/simulation_projects.md:179-189`** ("Building" subsection) —
   same treatment.
-- **`doc/concepts.md`** — add `mode` / `build_mode` / `build` to the
+- **`doc/concepts.md`** — add `mode` / `build_engine` / `build` to the
   concept glossary, each as a one-line entry that links into
   `building.md`.
 - **`doc/sanitizer_tests.md`**, **`doc/coverage.md`**,
