@@ -38,6 +38,7 @@ See :py:func:`compare_simulations`, :py:func:`compare_simulations_between_commit
 """
 
 import copy
+import tempfile
 
 try:
     from omnetpp.scave.results import *
@@ -122,6 +123,15 @@ class CompareSimulationsTaskResult(TaskResult):
                 self.statistical_comparison_result = None
                 self.statistical_comparison_color = None
 
+            # Chart verdicts are computed by _finalize_chart_comparisons after
+            # all simulations finish — a single chart can aggregate over many
+            # runs, so rendering must wait until every sim has populated the
+            # result folder. Left as a no-op verdict here; the post-pass fills
+            # it in and re-runs _recompute_overall_result.
+            self.chart_comparison_result = None
+            self.chart_comparison_color = None
+            self.different_chart_files = []
+
             self._recompute_overall_result()
         else:
             self.stdout_trajectory_divergence_position = None
@@ -135,6 +145,9 @@ class CompareSimulationsTaskResult(TaskResult):
             self.only_2_statistical_results = pd.DataFrame()
             self.statistical_comparison_result = None
             self.statistical_comparison_color = None
+            self.chart_comparison_result = None
+            self.chart_comparison_color = None
+            self.different_chart_files = []
             if multiple_task_results:
                 self.result = multiple_task_results.result
                 self.color = multiple_task_results.color
@@ -175,7 +188,13 @@ class CompareSimulationsTaskResult(TaskResult):
             statistical_desription = f"\nStatistical comparison result: {self.statistical_comparison_color}{self.statistical_comparison_result}{COLOR_RESET}"
         else:
             statistical_desription = ""
-        return TaskResult.__repr__(self) + "\n" + stdout_trajectory_divergence_description + fingerprint_trajectory_divergence_description + statistical_desription
+        if self.different_chart_files:
+            chart_description = f"\nChart comparison result: {self.chart_comparison_color}{self.chart_comparison_result}{COLOR_RESET}, {len(self.different_chart_files)} differing chart(s)"
+        elif self.chart_comparison_result:
+            chart_description = f"\nChart comparison result: {self.chart_comparison_color}{self.chart_comparison_result}{COLOR_RESET}"
+        else:
+            chart_description = ""
+        return TaskResult.__repr__(self) + "\n" + stdout_trajectory_divergence_description + fingerprint_trajectory_divergence_description + statistical_desription + chart_description
 
     def recompare(self, **kwargs):
         """Re-run the comparison with new filter parameters.
@@ -212,6 +231,8 @@ class CompareSimulationsTaskResult(TaskResult):
             new_result._compute_stdout_verdict(**kwargs)
         if self.task.compare_statistics:
             new_result._compute_statistical_verdict(**kwargs)
+        if self.task.compare_charts:
+            new_result._compute_chart_verdict()
         new_result._recompute_overall_result()
         return new_result
 
@@ -235,6 +256,37 @@ class CompareSimulationsTaskResult(TaskResult):
             self.statistical_comparison_result = "IDENTICAL"
             self.statistical_comparison_color = COLOR_GREEN
 
+    def _compute_chart_verdict(self):
+        """Compute chart comparison verdict by scanning the task's staging subdir
+        for non-empty ``-diff.png`` files produced by ``_render_and_diff_charts``."""
+        self.different_chart_files = []
+        staging_dir = getattr(self.task, "staging_dir", None)
+        if not staging_dir:
+            self.chart_comparison_result = None
+            self.chart_comparison_color = None
+            return
+        working_directory = self.task.multiple_simulation_tasks.tasks[0].simulation_config.working_directory
+        scope = os.path.join(staging_dir, working_directory)
+        if os.path.isdir(scope):
+            for dirpath, _dirs, files in os.walk(scope):
+                for fname in files:
+                    if fname.endswith("-diff.png"):
+                        self.different_chart_files.append(os.path.join(dirpath, fname))
+        if self.different_chart_files:
+            self.chart_comparison_result = "DIFFERENT"
+            self.chart_comparison_color = COLOR_YELLOW
+        else:
+            self.chart_comparison_result = "IDENTICAL"
+            self.chart_comparison_color = COLOR_GREEN
+
+    def open_charts_in_gui(self):
+        """Open the chart staging directory for this task's working directory
+        in the :command:`opp_diff_charts` GUI (non-blocking)."""
+        staging_dir = getattr(self.task, "staging_dir", None)
+        if not staging_dir:
+            raise RuntimeError("No chart staging directory; re-run with compare_charts=True")
+        return _launch_diffcharts_gui(staging_dir)
+
     def _recompute_overall_result(self):
         self.reason = ""
         self.result = "IDENTICAL"
@@ -254,6 +306,11 @@ class CompareSimulationsTaskResult(TaskResult):
                 self.result = "DIFFERENT"
             self.color = COLOR_YELLOW
             self.reason = self.reason + ", different statistics"
+        if self.chart_comparison_result == "DIFFERENT":
+            if self.result == "IDENTICAL":
+                self.result = "DIFFERENT"
+            self.color = COLOR_YELLOW
+            self.reason = self.reason + ", different charts"
         self.reason = None if self.reason == "" else self.reason[2:]
         self.expected = self.result == "IDENTICAL"
 
@@ -428,10 +485,11 @@ class CompareSimulationsTaskResult(TaskResult):
 class CompareSimulationsTask(Task):
     """Task that runs two simulations and compares the results.
 
-    By default all three comparison axes are enabled.  Pass
-    ``compare_stdout=False``, ``compare_fingerprint=False``, or
-    ``compare_statistics=False`` to skip individual axes.  The flags
-    are stored on the task so they are honoured when the task is re-run.
+    By default the stdout, fingerprint, and statistics axes are enabled and
+    the (heavier) chart axis is disabled.  Pass ``compare_stdout=False``,
+    ``compare_fingerprint=False``, ``compare_statistics=False``, or
+    ``compare_charts=True`` to override.  The flags are stored on the task
+    so they are honoured when the task is re-run.
 
     Parameters:
         multiple_simulation_tasks:
@@ -442,13 +500,31 @@ class CompareSimulationsTask(Task):
             Compare fingerprint trajectories (default ``True``).
         compare_statistics (bool):
             Compare scalar statistical results (default ``True``).
+        compare_charts (bool):
+            Render every chart from every matching ``.anf`` file in each
+            side's working directory and compute pixel diffs (default
+            ``False``).  Requires *staging_dir*.
+        staging_dir (str | None):
+            Where the per-task chart PNGs are written.  Set by
+            :py:func:`get_compare_simulations_tasks` when
+            ``compare_charts=True``; ignored otherwise.
+        chart_filter / exclude_chart_filter (str | None):
+            Regex applied to chart names when ``compare_charts=True``.
     """
 
-    def __init__(self, multiple_simulation_tasks=None, task_result_class=CompareSimulationsTaskResult, compare_stdout=True, compare_fingerprint=True, compare_statistics=True, name="simulation comparison", **kwargs):
+    def __init__(self, multiple_simulation_tasks=None, task_result_class=CompareSimulationsTaskResult,
+                 compare_stdout=True, compare_fingerprint=True, compare_statistics=True,
+                 compare_charts=False, staging_dir=None,
+                 chart_filter=None, exclude_chart_filter=None,
+                 name="simulation comparison", **kwargs):
         super().__init__(name=name, task_result_class=task_result_class, **kwargs)
         self.compare_stdout = compare_stdout
         self.compare_fingerprint = compare_fingerprint
         self.compare_statistics = compare_statistics
+        self.compare_charts = compare_charts
+        self.staging_dir = staging_dir
+        self.chart_filter = chart_filter
+        self.exclude_chart_filter = exclude_chart_filter
         self.multiple_simulation_tasks = multiple_simulation_tasks
         num_tasks = len(multiple_simulation_tasks.tasks)
         if num_tasks != 2:
@@ -461,7 +537,7 @@ class CompareSimulationsTask(Task):
             task.eventlog_file_path = f"results/{task.simulation_config.config}-#{str(task.run_number)}-{index}.elog"
             task.scalar_file_path = f"results/{task.simulation_config.config}-#{str(task.run_number)}-{index}.sca"
             task.vector_file_path = f"results/{task.simulation_config.config}-#{str(task.run_number)}-{index}.vec"
-    
+
     def count_progress_steps(self):
         return 1 + self.multiple_simulation_tasks.count_progress_steps()
 
@@ -485,21 +561,48 @@ class MultipleCompareSimulationsTaskResults(MultipleTaskResults):
         self.locals.pop("self")
         self.kwargs = kwargs
 
-def get_compare_simulations_tasks(multiple_tasks_1, multiple_tasks_2, build=True, **kwargs):
+    @property
+    def staging_dir(self):
+        """The shared chart staging directory, or ``None`` if ``compare_charts``
+        was not enabled for this comparison."""
+        return getattr(self.multiple_tasks, "staging_dir", None) if self.multiple_tasks else None
+
+    def open_charts_in_gui(self):
+        """Open the chart staging directory in the :command:`opp_diff_charts` GUI.
+
+        Returns the spawned :class:`subprocess.Popen` handle (non-blocking).
+        Raises :class:`RuntimeError` if charts were not rendered (i.e. the
+        comparison was run with ``compare_charts=False``).
+        """
+        if not self.staging_dir:
+            raise RuntimeError("No chart staging directory available; "
+                               "re-run with compare_charts=True")
+        return _launch_diffcharts_gui(self.staging_dir)
+
+def get_compare_simulations_tasks(multiple_tasks_1, multiple_tasks_2, build=True,
+                                  compare_charts=False, staging_dir=None, **kwargs):
+    if compare_charts and staging_dir is None:
+        staging_dir = tempfile.mkdtemp(prefix="opp_diff_charts_")
     simulation_comparison_tasks = []
     for task_1, task_2 in zip(multiple_tasks_1.tasks, multiple_tasks_2.tasks):
-        simulation_comparison_task = CompareSimulationsTask(multiple_simulation_tasks=MultipleSimulationTasks(tasks=[task_1, task_2], build=False, **kwargs), **kwargs)
+        simulation_comparison_task = CompareSimulationsTask(
+            multiple_simulation_tasks=MultipleSimulationTasks(tasks=[task_1, task_2], build=False, **kwargs),
+            compare_charts=compare_charts, staging_dir=staging_dir, **kwargs)
         simulation_comparison_tasks.append(simulation_comparison_task)
     if build:
         multiple_tasks_1.build_before_run(**kwargs)
         if multiple_tasks_2.simulation_project is not multiple_tasks_1.simulation_project:
             multiple_tasks_2.build_before_run(**kwargs)
-    return MultipleSimulationTasks(tasks=simulation_comparison_tasks, build=False, name="simulation comparison", multiple_task_results_class=MultipleCompareSimulationsTaskResults, **kwargs)
+    aggregate = MultipleSimulationTasks(tasks=simulation_comparison_tasks, build=False, name="simulation comparison", multiple_task_results_class=MultipleCompareSimulationsTaskResults, **kwargs)
+    aggregate.staging_dir = staging_dir
+    return aggregate
 get_compare_simulations_tasks.__signature__ = combine_signatures(get_compare_simulations_tasks, CompareSimulationsTask.__init__, get_simulation_tasks)
 
 def compare_simulations_using_multiple_tasks(multiple_tasks_1, multiple_tasks_2, **kwargs):
     multiple_compare_simulations_tasks = get_compare_simulations_tasks(multiple_tasks_1, multiple_tasks_2, **kwargs)
-    return multiple_compare_simulations_tasks.run(**kwargs)
+    results = multiple_compare_simulations_tasks.run(**kwargs)
+    _finalize_chart_comparisons(multiple_compare_simulations_tasks.tasks, results)
+    return results
 
 def compare_simulations(**kwargs):
     """Compare simulation results between two projects.
@@ -526,7 +629,7 @@ def compare_simulations(**kwargs):
     multiple_simulation_tasks_1 = get_simulation_tasks(**kwargs_1, **kwargs)
     multiple_simulation_tasks_2 = get_simulation_tasks(**kwargs_2, **kwargs)
     return compare_simulations_using_multiple_tasks(multiple_simulation_tasks_1, multiple_simulation_tasks_2, **kwargs)
-compare_simulations.__signature__ = combine_signatures(compare_simulations, get_simulation_tasks)
+compare_simulations.__signature__ = combine_signatures(compare_simulations, get_simulation_tasks, CompareSimulationsTask.__init__)
 
 def compare_simulations_between_commits(simulation_project=None, git_hash_1=None, git_hash_2=None, delete_worktree=False, **kwargs):
     """Compare simulation results between two git versions of the same project.
@@ -752,7 +855,9 @@ def compare_simulations_across_commits(simulation_project=None, commits=None,
             tasks=all_compare_tasks, build=False,
             name=f"simulation comparison across {len(commits)} commits ({comparison_mode})",
             multiple_task_results_class=MultipleCompareSimulationsTaskResults, **kwargs)
-        return aggregate.run(**kwargs)
+        results = aggregate.run(**kwargs)
+        _finalize_chart_comparisons(all_compare_tasks, results)
+        return results
     finally:
         if delete_worktree:
             for project in project_cache.values():
@@ -790,19 +895,196 @@ def compare_fingerprints_across_commits(**kwargs):
 compare_fingerprints_across_commits.__signature__ = combine_signatures(
     compare_fingerprints_across_commits, compare_simulations_across_commits)
 
-def compare_charts(**kwargs):
-    """Compare chart images between two projects.
+def _render_charts_for_working_directory(simulation_project, working_directory, staging_dir, suffix,
+                                         chart_filter=None, exclude_chart_filter=None, dpi=150):
+    """Render every matching chart in every ``.anf`` file under *working_directory*
+    of *simulation_project* into ``<staging_dir>/<working_directory>/<image_export_filename><suffix>.png``.
 
-    Not yet implemented.
+    Returns the list of absolute paths that were rendered.
     """
-    raise NotImplementedError("compare_charts is not yet implemented")
+    import omnetpp.scave.analysis
+    workspace = omnetpp.scave.analysis.Workspace(get_workspace_path("."), [])
+    wd_abs = simulation_project.get_full_path(working_directory)
+    if not os.path.isdir(wd_abs):
+        return []
+    target_dir = os.path.join(staging_dir, working_directory)
+    os.makedirs(target_dir, exist_ok=True)
+    rendered = []
+    for entry in sorted(os.listdir(wd_abs)):
+        if not entry.endswith(".anf"):
+            continue
+        anf_abs = os.path.join(wd_abs, entry)
+        try:
+            analysis = omnetpp.scave.analysis.load_anf_file(anf_abs)
+        except Exception as e:
+            _logger.warning(f"Failed to load {anf_abs}: {e}")
+            continue
+        for chart in analysis.collect_charts():
+            if not matches_filter(chart.name, chart_filter, exclude_chart_filter, False):
+                continue
+            image_export_filename = chart.properties.get("image_export_filename")
+            if not image_export_filename:
+                continue
+            file_name = analysis.export_image(
+                chart, wd_abs, workspace,
+                format="png", dpi=dpi,
+                target_folder=target_dir,
+                filename=image_export_filename + suffix)
+            rendered.append(os.path.join(wd_abs, file_name))
+    return rendered
 
-def compare_charts_between_commits(simulation_project=None, git_hash_1=None, git_hash_2=None, **kwargs):
-    """Compare chart images between two git versions.
+def _compute_compare_diffs(scope_dir):
+    """Compute ``<stem>-diff.png`` for every ``<stem>-old.png`` / ``<stem>-new.png``
+    pair beneath *scope_dir*."""
+    from opp_repl.test.chart import compute_chart_image_diff
+    if not os.path.isdir(scope_dir):
+        return
+    for dirpath, _dirs, files in os.walk(scope_dir):
+        for fname in files:
+            if not fname.endswith("-old.png"):
+                continue
+            stem = fname[:-len("-old.png")]
+            old_file = os.path.join(dirpath, fname)
+            new_file = os.path.join(dirpath, stem + "-new.png")
+            diff_file = os.path.join(dirpath, stem + "-diff.png")
+            if os.path.exists(diff_file):
+                os.remove(diff_file)
+            if not os.path.exists(new_file):
+                continue
+            metric = compute_chart_image_diff(old_file, new_file, diff_file_name=diff_file)
+            if metric is None:
+                _logger.warning(f"Cannot diff {old_file} and {new_file}: image shapes differ")
 
-    Not yet implemented.
+def _finalize_chart_comparisons(compare_tasks, multiple_compare_results):
+    """Render charts and compute diffs in a single batch after every simulation
+    has finished, then refresh chart verdicts on each result and recompute the
+    aggregate verdict.
+
+    A chart may aggregate results across multiple runs in the same working
+    directory, so rendering must wait until every contributing run has
+    populated the result folder. Per ``(staging_dir, working_directory, side)``
+    we render exactly once even when many compare tasks share the same combo.
     """
-    raise NotImplementedError("compare_charts_between_commits is not yet implemented")
+    render_targets = {}  # (staging_dir, working_directory, suffix) -> (project, chart_filter, exclude_chart_filter)
+    staging_dirs = set()
+    for task in compare_tasks:
+        if not (task.compare_charts and task.staging_dir):
+            continue
+        sub_tasks = task.multiple_simulation_tasks.tasks
+        wd = sub_tasks[0].simulation_config.working_directory
+        staging_dirs.add(task.staging_dir)
+        render_targets.setdefault(
+            (task.staging_dir, wd, "-old"),
+            (sub_tasks[0].simulation_config.simulation_project, task.chart_filter, task.exclude_chart_filter))
+        render_targets.setdefault(
+            (task.staging_dir, wd, "-new"),
+            (sub_tasks[1].simulation_config.simulation_project, task.chart_filter, task.exclude_chart_filter))
+    if not render_targets:
+        return
+    for (staging_dir, wd, suffix), (project, cf, ecf) in render_targets.items():
+        _render_charts_for_working_directory(
+            project, wd, staging_dir, suffix=suffix,
+            chart_filter=cf, exclude_chart_filter=ecf)
+    for staging_dir in staging_dirs:
+        _compute_compare_diffs(staging_dir)
+    for result in multiple_compare_results.results:
+        if getattr(result.task, "compare_charts", False):
+            result._compute_chart_verdict()
+            result._recompute_overall_result()
+    _recompute_multiple_task_result(multiple_compare_results)
+
+def _recompute_multiple_task_result(multi_result):
+    """Recompute aggregate ``result``/``color`` after children's verdicts changed."""
+    multi_result.num_different_results = 0
+    multi_result.num_expected = {pr: multi_result.count_results(pr, True) for pr in multi_result.possible_results}
+    multi_result.num_unexpected = {pr: multi_result.count_results(pr, False) for pr in multi_result.possible_results}
+    multi_result.result = multi_result.expected_result if not multi_result.results else multi_result.possible_results[0]
+    for pr in multi_result.possible_results:
+        if multi_result.num_expected[pr] != 0:
+            multi_result.result = pr
+            break
+    for pr in multi_result.possible_results:
+        if multi_result.num_unexpected[pr] != 0:
+            multi_result.result = pr
+    multi_result.color = multi_result.possible_result_colors[multi_result.possible_results.index(multi_result.result)]
+    multi_result.expected = multi_result.expected_result == multi_result.result
+
+def _launch_diffcharts_gui(staging_dir):
+    """Open *staging_dir* in the :command:`opp_diff_charts` GUI without blocking
+    the caller.
+
+    Prefers the ``opp_diff_charts`` console script; falls back to running the
+    module via ``python -m opp_repl.diffcharts`` if the script is not on PATH.
+    """
+    try:
+        return subprocess.Popen(["opp_diff_charts", staging_dir])
+    except FileNotFoundError:
+        return subprocess.Popen([sys.executable, "-m", "opp_repl.diffcharts", staging_dir])
+
+def compare_charts(open_gui=True, **kwargs):
+    """Compare chart images between two simulation projects.
+
+    Thin wrapper around :py:func:`compare_simulations` with only the chart
+    axis enabled.  Runs each matching simulation pair, renders both sides'
+    charts into a shared staging folder, computes per-chart diffs, and (if
+    *open_gui* is true) opens the result in the :command:`opp_diff_charts` GUI.
+
+    Parameters:
+        open_gui (bool):
+            If ``True`` (default), launch the GUI on the staging folder once
+            all tasks complete.  Set to ``False`` to inspect results
+            programmatically (the path is on ``results.staging_dir``).
+        kwargs:
+            Forwarded to :py:func:`compare_simulations`.  Notable keys:
+            ``simulation_project_1`` / ``_2``, ``working_directory_filter``,
+            ``config_filter``, ``run_number``, ``chart_filter`` /
+            ``exclude_chart_filter``, ``staging_dir``.
+
+    Returns:
+        :py:class:`MultipleCompareSimulationsTaskResults`
+    """
+    results = compare_simulations(
+        compare_stdout=False, compare_fingerprint=False, compare_statistics=False,
+        compare_charts=True, **kwargs)
+    if open_gui and results.staging_dir:
+        results.open_charts_in_gui()
+    return results
+compare_charts.__signature__ = combine_signatures(compare_charts, compare_simulations)
+
+def compare_charts_between_commits(open_gui=True, **kwargs):
+    """Compare chart images between two git versions of the same project.
+
+    Thin wrapper around :py:func:`compare_simulations_between_commits` with
+    only the chart axis enabled.
+
+    Parameters:
+        open_gui (bool):
+            If ``True`` (default), launch the :command:`opp_diff_charts` GUI
+            on the staging folder once all tasks complete.
+        kwargs:
+            Forwarded to :py:func:`compare_simulations_between_commits`.
+            Notable keys: ``simulation_project``, ``git_hash_1``,
+            ``git_hash_2``, ``working_directory_filter``, ``chart_filter``,
+            ``staging_dir``, ``delete_worktree``.
+
+    Returns:
+        :py:class:`MultipleCompareSimulationsTaskResults`
+
+    Example::
+
+        compare_charts_between_commits(
+            simulation_project=inet_gm,
+            git_hash_1="master",
+            git_hash_2="topic/desync",
+            working_directory_filter="examples/ethernet/gm")
+    """
+    results = compare_simulations_between_commits(
+        compare_stdout=False, compare_fingerprint=False, compare_statistics=False,
+        compare_charts=True, **kwargs)
+    if open_gui and results.staging_dir:
+        results.open_charts_in_gui()
+    return results
+compare_charts_between_commits.__signature__ = combine_signatures(compare_charts_between_commits, compare_simulations_between_commits)
 
 def compare_speed(**kwargs):
     """Compare simulation speed (CPU instruction counts) between two projects.

@@ -64,6 +64,9 @@ github = [
 ide = [
     "py4j",
 ]
+diffcharts = [
+    "PyQt6",
+]
 all = [
     "dask",
     "distributed",
@@ -73,6 +76,7 @@ all = [
     "optimparallel",
     "pandas",
     "py4j",
+    "PyQt6",
     "requests",
     "scipy",
 ]
@@ -100,6 +104,7 @@ opp_update_chart_test_results = "opp_repl.main:update_chart_test_results_main"
 opp_update_fingerprint_test_results = "opp_repl.main:update_fingerprint_test_results_main"
 opp_update_speed_test_results = "opp_repl.main:update_speed_test_results_main"
 opp_update_statistical_test_results = "opp_repl.main:update_statistical_test_results_main"
+opp_diff_charts = "opp_repl.diffcharts:main"
 
 [tool.setuptools]
 script-files = ["bin/opp_sandbox"]
