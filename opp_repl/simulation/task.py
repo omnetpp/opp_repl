@@ -701,15 +701,14 @@ class MultipleSimulationTasks(MultipleTasks):
         self.simulation_project.build(mode=self.mode, build_engine=self.build_engine)
 
     def run_protected(self, build=None, **kwargs):
-        # A nested caller (e.g. another MultipleSimulationTasks wrapper that
-        # already built) can pass build=False to override self.build.
+        # The build decision is settled at this layer — either we build here
+        # (batch build covers every child), or the caller (or an outer wrapper)
+        # has already taken care of it. Either way, suppress per-task rebuilds
+        # downstream.
         will_build = build if build is not None else self.build
         if will_build:
             self.build_before_run(**kwargs)
-            # The batch build above covers every child task, so suppress
-            # per-task builds. When the batch *didn't* build, leave each
-            # child's build attribute to decide.
-            kwargs["build"] = False
+        kwargs["build"] = False
         return super().run_protected(**kwargs)
 
     def get_parameters_string(self, **kwargs):
