@@ -16,6 +16,7 @@ PyQt6 is an optional dependency: install with ``pip install opp_repl[diffcharts]
 from __future__ import annotations
 
 import argparse
+import filecmp
 import os
 import sys
 from dataclasses import dataclass
@@ -76,6 +77,10 @@ def find_diff_entries(root: str) -> List[DiffEntry]:
                 current_path = os.path.join(dirpath, current_name) if current_name in pngs else None
                 old_path = os.path.join(dirpath, old_name) if old_name in pngs else None
                 new_path = os.path.join(dirpath, new_name) if new_name in pngs else None
+
+                # Skip if old and new exist and are byte-identical - nothing to diff
+                if new_path and old_path and filecmp.cmp(new_path, old_path, shallow=False):
+                    continue
 
                 # Only add if at least one of NEW or OLD exists
                 if new_path or old_path:
