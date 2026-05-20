@@ -234,10 +234,11 @@ class DiffTable(QtWidgets.QTableWidget):
             font.setPointSize(12)  # Match the path label font size
             fm = QtGui.QFontMetrics(font)
 
+            anchor = getattr(self, '_root_dir', None) or os.getcwd()
             # Find the longest relative path text
             for entry in self._entries:
                 base_path = entry.diff_path or entry.current_path or entry.old_path or entry.new_path
-                relative_path = os.path.relpath(base_path, os.getcwd())
+                relative_path = os.path.relpath(base_path, anchor)
                 text_width = fm.horizontalAdvance(relative_path) + 16  # Reduced padding since paths are shorter
                 max_path_width = max(max_path_width, text_width)
 
@@ -255,9 +256,10 @@ class DiffTable(QtWidgets.QTableWidget):
             if w is not None:
                 self.setCellWidget(row, col, w)
 
-    def setEntries(self, entries: List[DiffEntry]) -> None:
+    def setEntries(self, entries: List[DiffEntry], root_dir: str | None = None) -> None:
         """Set the entries data for path width calculations."""
         self._entries = entries
+        self._root_dir = root_dir
 
 
 class ImageView(QtWidgets.QLabel):
@@ -363,7 +365,7 @@ class MainWindow(QtWidgets.QMainWindow):
 
         self._table.setRowCount(0)
         self._table.setRowCount(len(self._entries))
-        self._table.setEntries(self._entries)  # Pass entries data for width calculation
+        self._table.setEntries(self._entries, self._root_dir)  # Pass entries and anchor for width/path calculation
 
         for row, ent in enumerate(self._entries):
             # Row header text: show a short label so user knows which diff this is.
@@ -382,18 +384,19 @@ class MainWindow(QtWidgets.QMainWindow):
             old_w = ThumbLabel(ent.old_path, self._cache, self._table) if ent.old_path else None
             new_w = ThumbLabel(ent.new_path, self._cache, self._table) if ent.new_path else None
 
-            # Create path label - show current path relative to current working directory
-            if ent.current_path:
-                relative_path = os.path.relpath(ent.current_path, os.getcwd())
+            # Create path label - show path relative to the scanned root (the
+            # staging_dir when invoked from compare_charts), falling back to cwd
+            # if no root is set. Fall back across image kinds since -old.png and
+            # -new.png may be the only files present.
+            display_path = ent.current_path or ent.diff_path or ent.new_path or ent.old_path
+            if display_path:
+                relative_path = os.path.relpath(display_path, self._root_dir or os.getcwd())
                 path_w = QtWidgets.QLabel(relative_path, self._table)
-                path_w.setAlignment(QtCore.Qt.AlignmentFlag.AlignLeft | QtCore.Qt.AlignmentFlag.AlignVCenter)
-                path_w.setStyleSheet("font-size: 14px; padding: 2px;")
-                path_w.setToolTip(ent.current_path)  # Show full absolute path on hover
+                path_w.setToolTip(display_path)
             else:
-                # If current_path doesn't exist, show a placeholder or empty
                 path_w = QtWidgets.QLabel("", self._table)
-                path_w.setAlignment(QtCore.Qt.AlignmentFlag.AlignLeft | QtCore.Qt.AlignmentFlag.AlignVCenter)
-                path_w.setStyleSheet("font-size: 14px; padding: 2px;")
+            path_w.setAlignment(QtCore.Qt.AlignmentFlag.AlignLeft | QtCore.Qt.AlignmentFlag.AlignVCenter)
+            path_w.setStyleSheet("font-size: 14px; padding: 2px;")
 
             self._table.setRowWidgets(row, (index_w, diff_w, current_w, old_w, new_w, path_w))
 
