@@ -58,6 +58,36 @@ def pad_to_size_centered(img, height, width):
 
     return np.pad(img, pad_width, mode="constant", constant_values=0)
 
+def compute_chart_image_diff(old_file_name, new_file_name, diff_file_name=None):
+    """Compute the RMSE metric between two chart PNGs and optionally write a diff image.
+
+    The two images are padded to a common size (centered) before being compared.
+    If *diff_file_name* is given and the metric is non-zero, a per-pixel absolute
+    difference image is written to that path.
+
+    Parameters:
+        old_file_name (str): Path to the "old" / baseline PNG.
+        new_file_name (str): Path to the "new" / current PNG.
+        diff_file_name (str | None): Where to save the diff PNG. ``None`` skips writing.
+
+    Returns:
+        float | None: The RMSE metric, or ``None`` if the images have different
+        shapes after padding (which shouldn't happen, but is guarded for safety).
+    """
+    new_image = matplotlib.image.imread(new_file_name)
+    old_image = matplotlib.image.imread(old_file_name)
+    target_h = max(old_image.shape[0], new_image.shape[0])
+    target_w = max(old_image.shape[1], new_image.shape[1])
+    old_image = pad_to_size_centered(old_image, target_h, target_w)
+    new_image = pad_to_size_centered(new_image, target_h, target_w)
+    if old_image.shape != new_image.shape:
+        return None
+    metric = sewar_rmse(old_image, new_image)
+    if diff_file_name and metric > 0:
+        image_diff = numpy.abs(new_image - old_image)
+        matplotlib.image.imsave(diff_file_name, image_diff[:, :, :3])
+    return metric
+
 class ChartTestTaskResult(TestTaskResult):
     """Result of a chart test task.
 
@@ -129,22 +159,15 @@ class ChartTestTask(TestTask):
                 if os.path.exists(diff_file_name):
                     os.remove(diff_file_name)
                 if os.path.exists(old_file_name):
-                    new_image = matplotlib.image.imread(new_file_name)
-                    old_image = matplotlib.image.imread(old_file_name)
-                    target_h = max(old_image.shape[0], new_image.shape[0])
-                    target_w = max(old_image.shape[1], new_image.shape[1])
-                    old_image = pad_to_size_centered(old_image, target_h, target_w)
-                    new_image = pad_to_size_centered(new_image, target_h, target_w)
-                    if old_image.shape != new_image.shape:
+                    metric = compute_chart_image_diff(old_file_name, new_file_name, diff_file_name=diff_file_name)
+                    if metric is None:
+                        new_image = matplotlib.image.imread(new_file_name)
+                        old_image = matplotlib.image.imread(old_file_name)
                         task_result = self.task_result_class(self, result="FAIL", reason="Supplied images have different sizes" + str(old_image.shape) + " and " + str(new_image.shape))
                         task_result.metric = None
                         return task_result
-                    metric = sewar_rmse(old_image, new_image)
                     if metric == 0 or not keep_charts:
                         os.remove(new_file_name)
-                    else:
-                        image_diff = numpy.abs(new_image - old_image)
-                        matplotlib.image.imsave(diff_file_name, image_diff[:, :, :3])
                     task_result = self.task_result_class(self)
                     task_result.metric = metric
                     task_result._compute_verdict()
