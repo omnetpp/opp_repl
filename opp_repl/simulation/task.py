@@ -525,6 +525,7 @@ class SimulationTask(Task):
         executable = simulation_project.get_executable(mode=self.mode)
         default_args = simulation_project.get_default_args()
         args = [*prepend_args, executable, *default_args, "-s", "-u", self.user_interface, "-f", ini_file, "-c", config, "-r", str(self.run_number), *inifile_entries_args, *result_folder_args, *sim_time_limit_args, *cpu_time_limit_args, *record_eventlog_args, *file_args, *record_pcap_args, *append_args]
+        _logger.info("Running in %s: %s", simulation_project.get_full_path(working_directory), " ".join(args))
         expected_result = self.get_expected_result()
         if simulation_runner is None:
             if self.debug:

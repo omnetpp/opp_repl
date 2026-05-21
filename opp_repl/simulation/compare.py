@@ -532,7 +532,7 @@ class CompareSimulationsTask(Task):
         index = 0
         for task in self.multiple_simulation_tasks.tasks:
             index += 1
-            task.record_eventlog = True
+            task.record_eventlog = self.compare_stdout or self.compare_fingerprint
             task.stdout_file_path = f"results/{task.simulation_config.config}-#{str(task.run_number)}-{index}.out"
             task.eventlog_file_path = f"results/{task.simulation_config.config}-#{str(task.run_number)}-{index}.elog"
             task.scalar_file_path = f"results/{task.simulation_config.config}-#{str(task.run_number)}-{index}.sca"
@@ -550,7 +550,12 @@ class CompareSimulationsTask(Task):
             return "comparing " + task_parameters_string_1
 
     def run_protected(self, context=None, ingredients="tplx", index=None, append_args=[], **kwargs):
-        append_args = append_args + ["--cmdenv-express-mode=false", "--cmdenv-log-prefix=%l %C%<: ", "--cmdenv-redirect-output=true", "--eventlog-snapshot-frequency=100MiB", "--eventlog-index-frequency=10MiB", "--eventlog-options=module", "--fingerprint=0000-0000/" + ingredients] + get_ingredients_append_args(ingredients)
+        extra_args = ["--cmdenv-redirect-output=true"]
+        if self.compare_stdout or self.compare_fingerprint:
+            extra_args += ["--cmdenv-express-mode=false", "--cmdenv-log-prefix=%l %C%<: ",
+                           "--eventlog-snapshot-frequency=100MiB", "--eventlog-index-frequency=10MiB", "--eventlog-options=module",
+                           "--fingerprint=0000-0000/" + ingredients] + get_ingredients_append_args(ingredients)
+        append_args = append_args + extra_args
         multiple_task_results = self.multiple_simulation_tasks.run(context=context, append_args=append_args, **kwargs)
         return self.task_result_class(multiple_task_results=multiple_task_results, task=self, result=multiple_task_results.result, color=multiple_task_results.color)
 
