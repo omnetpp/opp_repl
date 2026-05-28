@@ -134,6 +134,14 @@ class CompareSimulationsTaskResult(TaskResult):
             self.chart_comparison_color = None
             self.different_chart_files = []
 
+            # Module-image verdicts are computed by
+            # _finalize_module_image_comparisons after all simulations finish —
+            # module-image capture requires a Qtenv MCP launch separate from
+            # the Cmdenv simulation runs, so it runs as a post-pass.
+            self.module_image_comparison_result = None
+            self.module_image_comparison_color = None
+            self.different_module_image_files = []
+
             self._recompute_overall_result()
         else:
             self.stdout_trajectory_divergence_position = None
@@ -150,6 +158,9 @@ class CompareSimulationsTaskResult(TaskResult):
             self.chart_comparison_result = None
             self.chart_comparison_color = None
             self.different_chart_files = []
+            self.module_image_comparison_result = None
+            self.module_image_comparison_color = None
+            self.different_module_image_files = []
             if multiple_task_results:
                 self.result = multiple_task_results.result
                 self.color = multiple_task_results.color
@@ -196,7 +207,13 @@ class CompareSimulationsTaskResult(TaskResult):
             chart_description = f"\nChart comparison result: {self.chart_comparison_color}{self.chart_comparison_result}{COLOR_RESET}"
         else:
             chart_description = ""
-        return TaskResult.__repr__(self) + "\n" + stdout_trajectory_divergence_description + fingerprint_trajectory_divergence_description + statistical_desription + chart_description
+        if self.different_module_image_files:
+            module_image_description = f"\nModule image comparison result: {self.module_image_comparison_color}{self.module_image_comparison_result}{COLOR_RESET}, {len(self.different_module_image_files)} differing image(s)"
+        elif self.module_image_comparison_result:
+            module_image_description = f"\nModule image comparison result: {self.module_image_comparison_color}{self.module_image_comparison_result}{COLOR_RESET}"
+        else:
+            module_image_description = ""
+        return TaskResult.__repr__(self) + "\n" + stdout_trajectory_divergence_description + fingerprint_trajectory_divergence_description + statistical_desription + chart_description + module_image_description
 
     def recompare(self, **kwargs):
         """Re-run the comparison with new filter parameters.
@@ -235,6 +252,8 @@ class CompareSimulationsTaskResult(TaskResult):
             new_result._compute_statistical_verdict(**kwargs)
         if self.task.compare_charts:
             new_result._compute_chart_verdict()
+        if self.task.compare_module_images:
+            new_result._compute_module_image_verdict()
         new_result._recompute_overall_result()
         return new_result
 
@@ -289,6 +308,43 @@ class CompareSimulationsTaskResult(TaskResult):
             raise RuntimeError("No chart staging directory; re-run with compare_charts=True")
         return _launch_diffcharts_gui(staging_dir)
 
+    def _compute_module_image_verdict(self):
+        """Compute module-image comparison verdict by scanning the task's
+        staging subdir for non-empty ``-diff.png`` files produced by
+        ``_finalize_module_image_comparisons``."""
+        self.different_module_image_files = []
+        staging_dir = getattr(self.task, "staging_dir", None)
+        if not staging_dir:
+            self.module_image_comparison_result = None
+            self.module_image_comparison_color = None
+            return
+        working_directory = self.task.multiple_simulation_tasks.tasks[0].simulation_config.working_directory
+        scope = os.path.join(staging_dir, working_directory, "module_images")
+        if os.path.isdir(scope):
+            for fname in sorted(os.listdir(scope)):
+                if fname.endswith("-diff.png"):
+                    self.different_module_image_files.append(os.path.join(scope, fname))
+        if self.different_module_image_files:
+            self.module_image_comparison_result = "DIFFERENT"
+            self.module_image_comparison_color = COLOR_YELLOW
+        else:
+            self.module_image_comparison_result = "IDENTICAL"
+            self.module_image_comparison_color = COLOR_GREEN
+
+    def open_module_images_in_gui(self):
+        """Open the module-image staging directory in the
+        :command:`opp_diff_charts` GUI (non-blocking).
+
+        Reuses the chart-diff GUI since the file layout (``-old.png`` /
+        ``-new.png`` / ``-diff.png`` triples) is identical.
+        """
+        staging_dir = getattr(self.task, "staging_dir", None)
+        if not staging_dir:
+            raise RuntimeError("No module-image staging directory; re-run with compare_module_images=True")
+        working_directory = self.task.multiple_simulation_tasks.tasks[0].simulation_config.working_directory
+        scope = os.path.join(staging_dir, working_directory, "module_images")
+        return _launch_diffcharts_gui(scope)
+
     def _recompute_overall_result(self):
         self.reason = ""
         self.result = "IDENTICAL"
@@ -313,6 +369,11 @@ class CompareSimulationsTaskResult(TaskResult):
                 self.result = "DIFFERENT"
             self.color = COLOR_YELLOW
             self.reason = self.reason + ", different charts"
+        if self.module_image_comparison_result == "DIFFERENT":
+            if self.result == "IDENTICAL":
+                self.result = "DIFFERENT"
+            self.color = COLOR_YELLOW
+            self.reason = self.reason + ", different module images"
         self.reason = None if self.reason == "" else self.reason[2:]
         self.expected = self.result == "IDENTICAL"
 
@@ -488,10 +549,11 @@ class CompareSimulationsTask(Task):
     """Task that runs two simulations and compares the results.
 
     By default the stdout, fingerprint, and statistics axes are enabled and
-    the (heavier) chart axis is disabled.  Pass ``compare_stdout=False``,
-    ``compare_fingerprint=False``, ``compare_statistics=False``, or
-    ``compare_charts=True`` to override.  The flags are stored on the task
-    so they are honoured when the task is re-run.
+    the (heavier) chart and module-image axes are disabled.  Pass
+    ``compare_stdout=False``, ``compare_fingerprint=False``,
+    ``compare_statistics=False``, ``compare_charts=True``, or
+    ``compare_module_images=True`` to override.  The flags are stored on the
+    task so they are honoured when the task is re-run.
 
     Parameters:
         multiple_simulation_tasks:
@@ -506,27 +568,61 @@ class CompareSimulationsTask(Task):
             Render every chart from every matching ``.anf`` file in each
             side's working directory and compute pixel diffs (default
             ``False``).  Requires *staging_dir*.
+        compare_module_images (bool):
+            Launch each side's simulation a second time in Qtenv with its
+            MCP server enabled, capture a PNG of every compound module that
+            matches the include/exclude filters, and compute pixel diffs
+            (default ``False``).  Requires *staging_dir*.
         staging_dir (str | None):
-            Where the per-task chart PNGs are written.  Set by
-            :py:func:`get_compare_simulations_tasks` when
-            ``compare_charts=True``; ignored otherwise.
+            Where the per-task chart and module-image PNGs are written.  Set
+            by :py:func:`get_compare_simulations_tasks` when
+            ``compare_charts=True`` or ``compare_module_images=True``.
         chart_filter / exclude_chart_filter (str | None):
             Regex applied to chart names when ``compare_charts=True``.
+        module_path_filter / exclude_module_path_filter (str | None):
+            Glob applied to module full paths when
+            ``compare_module_images=True``.
+        module_type_filter / exclude_module_type_filter (str | None):
+            Glob applied to module NED types when
+            ``compare_module_images=True``.
+        group_by (str):
+            ``"path"`` (default), ``"type"``, or ``"path_no_indices"``.
+            Forwarded to :py:func:`capture_module_images`.
+        area (str):
+            ``"all_elements"`` (default), ``"module_rectangle"``, or
+            ``"viewport"``.  Forwarded to ``get_canvas_image``.
+        margin (int):
+            Pixel margin around the captured area (default 5).
+        startup_timeout (float):
+            Seconds to wait for each module-image simulation's MCP endpoint
+            (default 30).
     """
 
     def __init__(self, multiple_simulation_tasks=None, task_result_class=CompareSimulationsTaskResult,
                  compare_stdout=True, compare_fingerprint=True, compare_statistics=True,
-                 compare_charts=False, staging_dir=None,
+                 compare_charts=False, compare_module_images=False, staging_dir=None,
                  chart_filter=None, exclude_chart_filter=None,
+                 module_path_filter=None, exclude_module_path_filter=None,
+                 module_type_filter=None, exclude_module_type_filter=None,
+                 group_by="path", area="all_elements", margin=5, startup_timeout=30.0,
                  name="simulation comparison", **kwargs):
         super().__init__(name=name, task_result_class=task_result_class, **kwargs)
         self.compare_stdout = compare_stdout
         self.compare_fingerprint = compare_fingerprint
         self.compare_statistics = compare_statistics
         self.compare_charts = compare_charts
+        self.compare_module_images = compare_module_images
         self.staging_dir = staging_dir
         self.chart_filter = chart_filter
         self.exclude_chart_filter = exclude_chart_filter
+        self.module_path_filter = module_path_filter
+        self.exclude_module_path_filter = exclude_module_path_filter
+        self.module_type_filter = module_type_filter
+        self.exclude_module_type_filter = exclude_module_type_filter
+        self.group_by = group_by
+        self.area = area
+        self.margin = margin
+        self.startup_timeout = startup_timeout
         self.multiple_simulation_tasks = multiple_simulation_tasks
         num_tasks = len(multiple_simulation_tasks.tasks)
         if num_tasks != 2:
@@ -582,14 +678,16 @@ class MultipleCompareSimulationsTaskResults(MultipleTaskResults):
         return _launch_diffcharts_gui(self.staging_dir)
 
 def get_compare_simulations_tasks(multiple_tasks_1, multiple_tasks_2, build=True,
-                                  compare_charts=False, staging_dir=None, **kwargs):
-    if compare_charts and staging_dir is None:
+                                  compare_charts=False, compare_module_images=False,
+                                  staging_dir=None, **kwargs):
+    if (compare_charts or compare_module_images) and staging_dir is None:
         staging_dir = tempfile.mkdtemp(prefix="opp_diff_charts_")
     simulation_comparison_tasks = []
     for task_1, task_2 in zip(multiple_tasks_1.tasks, multiple_tasks_2.tasks):
         simulation_comparison_task = CompareSimulationsTask(
             multiple_simulation_tasks=MultipleSimulationTasks(tasks=[task_1, task_2], build=False, **kwargs),
-            compare_charts=compare_charts, staging_dir=staging_dir, **kwargs)
+            compare_charts=compare_charts, compare_module_images=compare_module_images,
+            staging_dir=staging_dir, **kwargs)
         simulation_comparison_tasks.append(simulation_comparison_task)
     if build:
         multiple_tasks_1.build_before_run(**kwargs)
@@ -604,6 +702,7 @@ def compare_simulations_using_multiple_tasks(multiple_tasks_1, multiple_tasks_2,
     multiple_compare_simulations_tasks = get_compare_simulations_tasks(multiple_tasks_1, multiple_tasks_2, **kwargs)
     results = multiple_compare_simulations_tasks.run(**kwargs)
     _finalize_chart_comparisons(multiple_compare_simulations_tasks.tasks, results)
+    _finalize_module_image_comparisons(multiple_compare_simulations_tasks.tasks, results)
     return results
 
 def compare_simulations(**kwargs):
@@ -859,6 +958,7 @@ def compare_simulations_across_commits(simulation_project=None, commits=None,
             multiple_task_results_class=MultipleCompareSimulationsTaskResults, **kwargs)
         results = aggregate.run(**kwargs)
         _finalize_chart_comparisons(all_compare_tasks, results)
+        _finalize_module_image_comparisons(all_compare_tasks, results)
         return results
     finally:
         if delete_worktree:
@@ -1011,6 +1111,64 @@ def _recompute_multiple_task_result(multi_result):
     multi_result.color = multi_result.possible_result_colors[multi_result.possible_results.index(multi_result.result)]
     multi_result.expected = multi_result.expected_result == multi_result.result
 
+def _finalize_module_image_comparisons(compare_tasks, multiple_compare_results):
+    """Capture each side's module images and diff them, then refresh the
+    module-image verdict on each compare task.
+
+    Module-image capture is more expensive than chart rendering: each side's
+    simulation has to be launched a second time in Qtenv-with-MCP.  We bundle
+    every per-side capture from every compare task into a single
+    :class:`MultipleModuleImageCaptureTasks` so the port preassignment and
+    process pool can be shared.
+    """
+    eligible = [t for t in compare_tasks if t.compare_module_images and t.staging_dir]
+    if not eligible:
+        return
+
+    from opp_repl.test.module_image import (
+        ModuleImageCaptureTask, MultipleModuleImageCaptureTasks)
+
+    capture_tasks = []
+    staging_dirs = set()
+    for task in eligible:
+        sub_tasks = task.multiple_simulation_tasks.tasks
+        wd = sub_tasks[0].simulation_config.working_directory
+        out_dir = os.path.join(task.staging_dir, wd, "module_images")
+        staging_dirs.add(os.path.join(task.staging_dir, wd, "module_images"))
+        common_kwargs = dict(
+            output_dir=out_dir,
+            module_path_filter=task.module_path_filter,
+            exclude_module_path_filter=task.exclude_module_path_filter,
+            module_type_filter=task.module_type_filter,
+            exclude_module_type_filter=task.exclude_module_type_filter,
+            group_by=task.group_by, area=task.area, margin=task.margin,
+            startup_timeout=task.startup_timeout,
+        )
+        for side_index, sub_task, suffix in [(0, sub_tasks[0], "-old"),
+                                              (1, sub_tasks[1], "-new")]:
+            capture_tasks.append(ModuleImageCaptureTask(
+                simulation_config=sub_task.simulation_config,
+                run_number=sub_task.run_number,
+                mode=sub_task.mode,
+                filename_suffix=suffix,
+                **common_kwargs))
+    # Build skipped: both projects were built when the compare ran.
+    multiple = MultipleModuleImageCaptureTasks(
+        tasks=capture_tasks,
+        simulation_project=eligible[0].multiple_simulation_tasks.tasks[0].simulation_config.simulation_project,
+        build=False, name="module image capture (compare)")
+    multiple.run()
+    # Diff every -old / -new pair.
+    for scope in staging_dirs:
+        _compute_compare_diffs(scope)
+    # Refresh per-task and aggregate verdicts.
+    for result in multiple_compare_results.results:
+        if getattr(result.task, "compare_module_images", False):
+            result._compute_module_image_verdict()
+            result._recompute_overall_result()
+    _recompute_multiple_task_result(multiple_compare_results)
+
+
 def _launch_diffcharts_gui(staging_dir):
     """Open *staging_dir* in the :command:`opp_diff_charts` GUI without blocking
     the caller.
@@ -1087,6 +1245,90 @@ def compare_charts_between_commits(open_gui=True, **kwargs):
         results.open_charts_in_gui()
     return results
 compare_charts_between_commits.__signature__ = combine_signatures(compare_charts_between_commits, compare_simulations_between_commits)
+
+def compare_module_images(open_gui=True, **kwargs):
+    """Compare module images between two simulation projects.
+
+    Thin wrapper around :py:func:`compare_simulations` with only the
+    module-image axis enabled.  Runs each matching simulation pair, then
+    launches each side's simulation a second time in Qtenv with its MCP
+    server enabled to capture per-compound-module PNGs into a shared staging
+    folder; the captures get ``-old`` / ``-new`` suffixes and per-image
+    diffs are computed.  If *open_gui* is true, the staging folder is
+    opened in the :command:`opp_diff_charts` GUI.
+
+    Parameters:
+        open_gui (bool):
+            If ``True`` (default), launch the GUI on the staging folder once
+            all tasks complete.  Set to ``False`` to inspect results
+            programmatically (the path is on ``results.staging_dir``).
+        kwargs:
+            Forwarded to :py:func:`compare_simulations`.  Notable keys:
+            ``simulation_project_1`` / ``_2``, ``working_directory_filter``,
+            ``config_filter``, ``run_number``, ``module_path_filter`` /
+            ``exclude_module_path_filter``, ``module_type_filter`` /
+            ``exclude_module_type_filter``, ``group_by``, ``area``,
+            ``margin``, ``startup_timeout``, ``staging_dir``.
+
+    Returns:
+        :py:class:`MultipleCompareSimulationsTaskResults`
+    """
+    results = compare_simulations(
+        compare_stdout=False, compare_fingerprint=False, compare_statistics=False,
+        compare_module_images=True, **kwargs)
+    if open_gui and results.staging_dir:
+        # Reuse the chart-diff GUI on the module-image subdir of any task's
+        # working directory.  Pick the first eligible task to choose the dir.
+        for r in results.results:
+            staging = getattr(r.task, "staging_dir", None)
+            if not staging:
+                continue
+            wd = r.task.multiple_simulation_tasks.tasks[0].simulation_config.working_directory
+            scope = os.path.join(staging, wd, "module_images")
+            if os.path.isdir(scope):
+                _launch_diffcharts_gui(scope)
+                break
+    return results
+compare_module_images.__signature__ = combine_signatures(compare_module_images, compare_simulations)
+
+
+def compare_module_images_between_commits(open_gui=True, **kwargs):
+    """Compare module images between two git versions of the same project.
+
+    Thin wrapper around :py:func:`compare_simulations_between_commits` with
+    only the module-image axis enabled.
+
+    Parameters:
+        open_gui (bool):
+            If ``True`` (default), launch the :command:`opp_diff_charts` GUI
+            on the staging folder once all tasks complete.
+        kwargs:
+            Forwarded to :py:func:`compare_simulations_between_commits`.
+            Notable keys: ``simulation_project``, ``git_hash_1``,
+            ``git_hash_2``, ``working_directory_filter``,
+            ``module_type_filter``, ``group_by``, ``staging_dir``,
+            ``delete_worktree``.
+
+    Returns:
+        :py:class:`MultipleCompareSimulationsTaskResults`
+    """
+    results = compare_simulations_between_commits(
+        compare_stdout=False, compare_fingerprint=False, compare_statistics=False,
+        compare_module_images=True, **kwargs)
+    if open_gui and results.staging_dir:
+        for r in results.results:
+            staging = getattr(r.task, "staging_dir", None)
+            if not staging:
+                continue
+            wd = r.task.multiple_simulation_tasks.tasks[0].simulation_config.working_directory
+            scope = os.path.join(staging, wd, "module_images")
+            if os.path.isdir(scope):
+                _launch_diffcharts_gui(scope)
+                break
+    return results
+compare_module_images_between_commits.__signature__ = combine_signatures(
+    compare_module_images_between_commits, compare_simulations_between_commits)
+
 
 def compare_speed(**kwargs):
     """Compare simulation speed (CPU instruction counts) between two projects.

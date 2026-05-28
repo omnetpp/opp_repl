@@ -68,15 +68,20 @@ def _compute_group_key(full_path, ned_type, group_by):
         raise ValueError(f"Unknown group_by: {group_by!r} (expected 'path', 'type', or 'path_no_indices')")
 
 
-def _compose_image_filename(working_directory, config, run_number, group_key):
-    """Build the unique per-image filename (without extension)."""
+def _compose_image_filename(working_directory, config, run_number, group_key, suffix=""):
+    """Build the unique per-image filename.
+
+    ``suffix`` is inserted before the ``.png`` extension (e.g. ``"-old"`` or
+    ``"-new"``).  Used by :py:mod:`opp_repl.simulation.compare` to write
+    side-1 and side-2 captures into a shared staging directory.
+    """
     parts = [
         _sanitize_field(working_directory),
         _sanitize_field(config),
         f"r{run_number}",
         _sanitize_field(group_key),
     ]
-    return _FILENAME_SEP.join(parts) + ".png"
+    return _FILENAME_SEP.join(parts) + suffix + ".png"
 
 
 def _walk_compound_modules(topology_node, results=None):
@@ -481,7 +486,7 @@ class ModuleImageTaskBase(Task):
 # ---------------------------------------------------------------------------
 
 class ModuleImageCaptureTask(ModuleImageTaskBase):
-    def __init__(self, output_dir=None,
+    def __init__(self, output_dir=None, filename_suffix="",
                  name="module image capture",
                  task_result_class=ModuleImageCaptureTaskResult, **kwargs):
         super().__init__(name=name, task_result_class=task_result_class, **kwargs)
@@ -491,6 +496,7 @@ class ModuleImageCaptureTask(ModuleImageTaskBase):
         if output_dir is None:
             raise ValueError("ModuleImageCaptureTask requires an output_dir")
         self.output_dir = output_dir
+        self.filename_suffix = filename_suffix
 
     def run_protected(self, **kwargs):
         sc = self.simulation_config
@@ -499,7 +505,8 @@ class ModuleImageCaptureTask(ModuleImageTaskBase):
         image_results = []
         for group_key, module_path, ned_type, payload in captured:
             filename = _compose_image_filename(sc.working_directory, sc.config,
-                                               self.run_number, group_key)
+                                               self.run_number, group_key,
+                                               suffix=self.filename_suffix)
             full = os.path.join(self.output_dir, filename)
             if isinstance(payload, Exception):
                 image_results.append(ModuleImageResult(
