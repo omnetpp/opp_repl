@@ -40,6 +40,8 @@ See :py:func:`compare_simulations`, :py:func:`compare_simulations_between_commit
 import copy
 import tempfile
 
+import pandas as pd
+
 try:
     from omnetpp.scave.results import *
 except (ImportError, ModuleNotFoundError):
