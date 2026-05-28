@@ -20,7 +20,7 @@ import filecmp
 import os
 import sys
 from dataclasses import dataclass
-from typing import List, Tuple
+from typing import List, Optional, Tuple
 
 try:
     from PyQt6 import QtCore, QtGui, QtWidgets
@@ -40,6 +40,28 @@ class DiffEntry:
     current_path: str  # {stem}.png (may be None if missing)
     old_path: str      # {stem}-old.png (may be None if missing)
     new_path: str      # {stem}-new.png (may be None if missing)
+    metric: Optional[float] = None  # RMSE between -old and -new; None when both files don't exist or matplotlib is unavailable
+
+
+def _compute_metric(old_path: Optional[str], new_path: Optional[str]) -> Optional[float]:
+    """Return the RMSE between two PNGs, or ``None`` if it cannot be computed.
+
+    Uses the same metric as the chart-test pipeline (so the value here
+    matches what ``run_chart_tests`` / module-image tests report).  Lazy-
+    imports matplotlib so the GUI itself stays usable without the
+    ``chart`` extras installed — in that case the column shows ``None``.
+    """
+    if not old_path or not new_path:
+        return None
+    try:
+        from opp_repl.test.chart import compute_chart_image_diff
+    except ImportError:
+        return None
+    try:
+        # diff_file_name=None: compute the metric without writing a diff image.
+        return compute_chart_image_diff(old_path, new_path, diff_file_name=None)
+    except Exception:
+        return None
 
 
 def find_diff_entries(root: str) -> List[DiffEntry]:
@@ -96,6 +118,7 @@ def find_diff_entries(root: str) -> List[DiffEntry]:
                             current_path=current_path,
                             old_path=old_path,
                             new_path=new_path,
+                            metric=_compute_metric(old_path, new_path),
                         )
                     )
 
@@ -169,8 +192,8 @@ class DiffTable(QtWidgets.QTableWidget):
 
     def __init__(self, parent=None) -> None:
         super().__init__(parent)
-        self.setColumnCount(6)
-        self.setHorizontalHeaderLabels(["Index", "DIFF", "CURRENT", "OLD", "NEW", "Path"])
+        self.setColumnCount(7)
+        self.setHorizontalHeaderLabels(["Index", "DIFF", "CURRENT", "OLD", "NEW", "Metric", "Path"])
         self.setSelectionBehavior(QtWidgets.QAbstractItemView.SelectionBehavior.SelectRows)
         self.setEditTriggers(QtWidgets.QAbstractItemView.EditTrigger.NoEditTriggers)
         self.verticalHeader().setVisible(False)
@@ -242,11 +265,19 @@ class DiffTable(QtWidgets.QTableWidget):
                 text_width = fm.horizontalAdvance(relative_path) + 16  # Reduced padding since paths are shorter
                 max_path_width = max(max_path_width, text_width)
 
+        # Metric column width: enough for "0.123456" + a bit
+        font = QtGui.QFont()
+        font.setPointSize(12)
+        fm = QtGui.QFontMetrics(font)
+        metric_width = fm.horizontalAdvance("0.123456") + 16
+
         # Column width: add minimum padding between columns
         for c in range(self.columnCount()):
             if c == 0:  # Index column
                 self.setColumnWidth(c, max(60, int(side * 0.3) + 8))  # Add padding
-            elif c == 5:  # Path column
+            elif c == 5:  # Metric column
+                self.setColumnWidth(c, metric_width)
+            elif c == 6:  # Path column
                 self.setColumnWidth(c, max_path_width + 8)  # Add padding
             else:  # Image columns (DIFF, CURRENT, OLD, NEW)
                 self.setColumnWidth(c, side + 8)  # Add padding between columns
@@ -384,6 +415,19 @@ class MainWindow(QtWidgets.QMainWindow):
             old_w = ThumbLabel(ent.old_path, self._cache, self._table) if ent.old_path else None
             new_w = ThumbLabel(ent.new_path, self._cache, self._table) if ent.new_path else None
 
+            # Metric label (RMSE between old and new)
+            if ent.metric is None:
+                metric_text = "—"
+            elif ent.metric == 0:
+                metric_text = "0"
+            else:
+                metric_text = f"{ent.metric:.6f}"
+            metric_w = QtWidgets.QLabel(metric_text, self._table)
+            metric_w.setAlignment(QtCore.Qt.AlignmentFlag.AlignCenter)
+            metric_w.setStyleSheet("font-family: monospace; font-size: 12px; padding: 2px;")
+            if ent.metric is not None and ent.metric > 0:
+                metric_w.setToolTip(f"RMSE = {ent.metric}")
+
             # Create path label - show path relative to the scanned root (the
             # staging_dir when invoked from compare_charts), falling back to cwd
             # if no root is set. Fall back across image kinds since -old.png and
@@ -398,7 +442,7 @@ class MainWindow(QtWidgets.QMainWindow):
             path_w.setAlignment(QtCore.Qt.AlignmentFlag.AlignLeft | QtCore.Qt.AlignmentFlag.AlignVCenter)
             path_w.setStyleSheet("font-size: 14px; padding: 2px;")
 
-            self._table.setRowWidgets(row, (index_w, diff_w, current_w, old_w, new_w, path_w))
+            self._table.setRowWidgets(row, (index_w, diff_w, current_w, old_w, new_w, metric_w, path_w))
 
         # If we were in viewer mode, try to keep position (clamped)
         if not initial and self._stack.currentIndex() == 1 and self._entries:
