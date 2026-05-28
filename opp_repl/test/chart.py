@@ -10,6 +10,7 @@ import filecmp
 import io
 import logging
 import matplotlib
+import matplotlib.image
 import numpy
 
 try:
@@ -56,7 +57,7 @@ def pad_to_size_centered(img, height, width):
         (0, 0),
     )
 
-    return np.pad(img, pad_width, mode="constant", constant_values=0)
+    return numpy.pad(img, pad_width, mode="constant", constant_values=0)
 
 def compute_chart_image_diff(old_file_name, new_file_name, diff_file_name=None):
     """Compute the RMSE metric between two chart PNGs and optionally write a diff image.
