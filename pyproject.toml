@@ -41,7 +41,7 @@ Changelog = "https://github.com/omnetpp/opp_repl/commits/main"
 
 [project.optional-dependencies]
 mcp = [
-    "mcp",
+    "httpx",
 ]
 cluster = [
     "dask",
@@ -70,8 +70,8 @@ diffcharts = [
 all = [
     "dask",
     "distributed",
+    "httpx",
     "matplotlib",
-    "mcp",
     "numpy",
     "optimparallel",
     "pandas",
