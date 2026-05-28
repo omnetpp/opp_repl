@@ -18,7 +18,7 @@ __sphinx_mock__ = True # ignore this module in documentation
 
 _logger = logging.getLogger(__name__)
 
-def parse_run_tasks_arguments(task_name):
+def parse_run_tasks_arguments(task_name, extra_args_fn=None):
     description = "Runs all " + task_name + " concurrently in the enclosing project, recursively from the current working directory, as separate processes on localhost."
     parser = argparse.ArgumentParser(description=description)
     parser.add_argument("--load", action="append", default=[], metavar="OPP_FILE", help="load one or more .opp configuration files or directories at startup, can be specified multiple times and supports glob patterns (e.g. --load '*.opp'); when a directory is given, all *.opp files in it are loaded; use --load @opp to load the bundled .opp files shipped with opp_repl; if not specified, all *.opp files in the current working directory are loaded automatically")
@@ -55,6 +55,8 @@ def parse_run_tasks_arguments(task_name):
     parser.add_argument("--no-handle-exception", dest="handle_exception", action="store_false")
     parser.add_argument("--result-file", default=None, help="write JSON result to this file; use '-' for stdout (after the text output)")
     parser.set_defaults(concurrent=True, build=True, dry_run=False, handle_exception=True)
+    if extra_args_fn is not None:
+        extra_args_fn(parser)
     return parser.parse_args(sys.argv[1:])
 
 def process_run_tasks_arguments(args):
@@ -154,6 +156,77 @@ def update_fingerprint_test_results_main():
 
 def update_chart_test_results_main():
     run_tasks_main(update_chart_test_results, "update chart test results")
+
+def _module_image_extra_args(parser):
+    parser.add_argument("--output-dir", default=None, help="directory the module-image PNGs are written into (required for capture)")
+    parser.add_argument("--module-path-filter", default=None, help="glob pattern matched against each module's full path (e.g. '**.host[*]')")
+    parser.add_argument("--exclude-module-path-filter", default=None)
+    parser.add_argument("--module-type-filter", default=None, help="glob pattern matched against each module's NED type")
+    parser.add_argument("--exclude-module-type-filter", default=None)
+    parser.add_argument("--group-by", choices=["path", "type", "path_no_indices"], default="path", help="how to group module instances into images (default: path = one per instance)")
+    parser.add_argument("--area", choices=["all_elements", "module_rectangle", "viewport"], default="all_elements", help="get_canvas_image area parameter")
+    parser.add_argument("--margin", type=int, default=5, help="margin in pixels around the captured area (default: 5)")
+    parser.add_argument("--startup-timeout", type=float, default=30.0, help="seconds to wait for each simulation's MCP endpoint (default: 30)")
+    parser.add_argument("--metric-threshold", type=float, default=0.0, help="maximum RMSE for a test to pass (default: 0 = pixel-perfect)")
+
+def _module_image_main(main_function, task_name, output_dir_required):
+    """Run a module-image task with the standard filter args plus the
+    module-image-specific args (which appear in ``--help`` thanks to the
+    ``extra_args_fn`` hook in :func:`parse_run_tasks_arguments`)."""
+    def add_extra_args(parser):
+        _module_image_extra_args(parser)
+        parser.add_argument("--baseline-simulation-project", default=None,
+                            help="name of the simulation project providing the baseline images (run_module_image_tests only)")
+    try:
+        args = parse_run_tasks_arguments(task_name, extra_args_fn=add_extra_args)
+        initialize_logging(args.log_level, args.external_command_log_level, args.log_file)
+        kwargs = process_run_tasks_arguments(args)
+        # Translate the module-image-specific args into kwargs.
+        for k in ("output_dir", "module_path_filter", "exclude_module_path_filter",
+                  "module_type_filter", "exclude_module_type_filter",
+                  "group_by", "area", "margin", "startup_timeout",
+                  "metric_threshold"):
+            v = getattr(args, k, None)
+            if v is not None:
+                kwargs[k] = v
+        if args.baseline_simulation_project:
+            ws = get_default_simulation_workspace()
+            kwargs["baseline_simulation_project"] = ws.get_simulation_project(
+                args.baseline_simulation_project, None)
+        # Strip args that don't apply to this main_function.
+        if main_function is not run_module_image_tests:
+            kwargs.pop("metric_threshold", None)
+            kwargs.pop("baseline_simulation_project", None)
+        if main_function is not capture_module_images:
+            kwargs.pop("output_dir", None)
+        if output_dir_required and kwargs.get("output_dir") is None:
+            raise Exception("--output-dir is required for this command")
+        result = main_function(**kwargs)
+        print(result)
+        if args.result_file:
+            if args.result_file == "-":
+                print(json.dumps(result.to_dict(), default=str))
+            else:
+                with open(args.result_file, "w") as f:
+                    json.dump(result.to_dict(), f, default=str)
+        sys.exit(0 if (result is None or result.is_all_results_expected()) else 1)
+    except KeyboardInterrupt:
+        _logger.warn("Program interrupted by user")
+    except Exception as e:
+        if args.handle_exception:
+            _logger.error(str(e))
+            sys.exit(1)
+        else:
+            raise e
+
+def capture_module_images_main():
+    _module_image_main(capture_module_images, "module image capture", output_dir_required=True)
+
+def update_module_image_test_results_main():
+    _module_image_main(update_module_image_test_results, "update module image baselines", output_dir_required=False)
+
+def run_module_image_tests_main():
+    _module_image_main(run_module_image_tests, "module image tests", output_dir_required=False)
 
 def update_statistical_test_results_main():
     run_tasks_main(update_statistical_test_results, "update statistical test results")

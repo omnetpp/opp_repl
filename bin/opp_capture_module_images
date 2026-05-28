@@ -1,0 +1,5 @@
+#!/usr/bin/env python3
+
+from opp_repl.main import *
+
+capture_module_images_main()

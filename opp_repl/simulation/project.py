@@ -264,7 +264,7 @@ class SimulationProject:
                  bin_folder=".", library_folder=".", executables=None, dynamic_libraries=None, static_libraries=None, build_types=["dynamic library"],
                  ned_folders=["."], ned_exclusions=[], ini_file_folders=["."], python_folders=["python"], image_folders=["."],
                  include_folders=["."], cpp_folders=["."], cpp_defines=[], msg_folders=["."],
-                 media_folder=".", statistics_folder=".", fingerprint_store="fingerprint.json", speed_store="speed.json", dependency_store="dependency.json",
+                 media_folder=".", module_image_baseline_folder="media/module_images", statistics_folder=".", fingerprint_store="fingerprint.json", speed_store="speed.json", dependency_store="dependency.json",
                  used_projects=[], external_bin_folders=[], external_library_folders=[], external_libraries=[], external_include_folders=[],
                  dll_symbol=None, feature_libraries=None, pkg_config_libraries=None, opp_defines_file=None, precompiled_header=None, extra_cflags=[], extra_ldflags=[],
                  simulation_configs=None, overlay_name=None, overlay_build_root=None, opp_env_workspace=None, opp_env_project=None,
@@ -346,6 +346,11 @@ class SimulationProject:
 
             media_folder (String):
                 The relative path of chart image files for chart tests.
+
+            module_image_baseline_folder (String):
+                The relative path of the baseline module-image folder
+                for module-image tests (default ``"media/module_images"``).
+                See :doc:`Module-image tests </module_image_tests>`.
 
             statistics_folder (String):
                 The relative path of scalar statistic result files for statistical tests.
@@ -479,6 +484,7 @@ class SimulationProject:
         self.cpp_defines = cpp_defines
         self.msg_folders = msg_folders
         self.media_folder = media_folder
+        self.module_image_baseline_folder = module_image_baseline_folder
         self.statistics_folder = statistics_folder
         self.fingerprint_store = fingerprint_store
         self.speed_store = speed_store
