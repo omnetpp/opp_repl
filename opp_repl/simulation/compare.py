@@ -643,7 +643,7 @@ class CompareSimulationsTask(Task):
                  module_path_filter=None, exclude_module_path_filter=None,
                  module_type_filter=None, exclude_module_type_filter=None,
                  group_by="path", area="all_elements", margin=5, startup_timeout=30.0,
-                 eventlog_options="module",
+                 eventlog_options=None,
                  name="simulation comparison", **kwargs):
         super().__init__(name=name, task_result_class=task_result_class, **kwargs)
         self.compare_stdout = compare_stdout
@@ -663,7 +663,10 @@ class CompareSimulationsTask(Task):
         self.area = area
         self.margin = margin
         self.startup_timeout = startup_timeout
-        self.eventlog_options = eventlog_options
+        if eventlog_options is None:
+            self.eventlog_options = "module" if not compare_eventlog else ""
+        else:
+            self.eventlog_options = eventlog_options
         self.multiple_simulation_tasks = multiple_simulation_tasks
         num_tasks = len(multiple_simulation_tasks.tasks)
         if num_tasks != 2:
@@ -689,7 +692,8 @@ class CompareSimulationsTask(Task):
             return "comparing " + task_parameters_string_1
 
     def run_protected(self, context=None, ingredients="tplx", index=None, append_args=[], **kwargs):
-        append_args = append_args + ["--cmdenv-express-mode=false", "--cmdenv-log-prefix=%l %C%<: ", "--cmdenv-redirect-output=true", "--eventlog-snapshot-frequency=100MiB", "--eventlog-index-frequency=10MiB", "--eventlog-options=" + self.eventlog_options, "--fingerprint=0000-0000/" + ingredients] + get_ingredients_append_args(ingredients)
+        eventlog_options_args = ["--eventlog-options=" + self.eventlog_options] if self.eventlog_options else []
+        append_args = append_args + ["--cmdenv-express-mode=false", "--cmdenv-log-prefix=%l %C%<: ", "--cmdenv-redirect-output=true", "--eventlog-snapshot-frequency=100MiB", "--eventlog-index-frequency=10MiB"] + eventlog_options_args + ["--fingerprint=0000-0000/" + ingredients] + get_ingredients_append_args(ingredients)
         multiple_task_results = self.multiple_simulation_tasks.run(context=context, append_args=append_args, **kwargs)
         return self.task_result_class(multiple_task_results=multiple_task_results, task=self, result=multiple_task_results.result, color=multiple_task_results.color)
 
