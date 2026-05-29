@@ -17,7 +17,8 @@ class IdeSimulationRunner:
         name = simulation_task.get_parameters_string()
         if simulation_task.debug:
             if simulation_task.break_at_matching_event:
-                debugger_init_commands = [f"breakpoint set -G true -n cSimulation::setupNetwork -C \"expression (void) omnetpp::cmdenv::Cmdenv::setMatchEventCondition([] (omnetpp::cEvent *event) -> bool {{ return {simulation_task.break_at_matching_event.replace('\"', '\\\"')}; }})\"",
+                escaped_condition = simulation_task.break_at_matching_event.replace('"', '\\"')
+                debugger_init_commands = [f"breakpoint set -G true -n cSimulation::setupNetwork -C \"expression (void) omnetpp::cmdenv::Cmdenv::setMatchEventCondition([] (omnetpp::cEvent *event) -> bool {{ return {escaped_condition}; }})\"",
                                           f"breakpoint set -G true -n omnetpp::cmdenv::Cmdenv::handleMatchingEvent -C \"break set -o true -r '.*::handleMessage'\""]
             elif simulation_task.break_at_event_number:
                 debugger_init_commands = [f"breakpoint set -G true -n cSimulation::setupNetwork -C \"expression (void) omnetpp::cmdenv::Cmdenv::setMatchEventCondition([] (omnetpp::cEvent *event) -> bool {{ return omnetpp::cSimulation::getActiveSimulation()->getEventNumber() == {simulation_task.break_at_event_number - 1}; }})\"",
