@@ -75,6 +75,8 @@ def read_eventlog_lines(simulation_result, filter=None, exclude_filter=None, ful
                 in_events = True
             if not in_events:
                 continue
+            if line.startswith("SB "):
+                continue
             if _matches_filter(line, filter, exclude_filter, full_match):
                 event_numbers.append(event_number)
                 lines.append(line)
