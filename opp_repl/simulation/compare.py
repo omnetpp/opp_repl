@@ -116,6 +116,13 @@ class CompareSimulationsTaskResult(TaskResult):
                 self.fingerprint_trajectory_comparison_result = None
                 self.fingerprint_trajectory_comparison_color = None
 
+            if self.task.compare_eventlog:
+                self._compute_eventlog_verdict(**self.multiple_tasks.kwargs)
+            else:
+                self.eventlog_divergence_position = None
+                self.eventlog_comparison_result = None
+                self.eventlog_comparison_color = None
+
             if self.task.compare_statistics:
                 self._compute_statistical_verdict(**self.multiple_tasks.kwargs)
             else:
@@ -150,6 +157,9 @@ class CompareSimulationsTaskResult(TaskResult):
             self.fingerprint_trajectory_divergence_position = None
             self.fingerprint_trajectory_comparison_result = None
             self.fingerprint_trajectory_comparison_color = None
+            self.eventlog_divergence_position = None
+            self.eventlog_comparison_result = None
+            self.eventlog_comparison_color = None
             self.different_statistical_results = pd.DataFrame()
             self.only_1_statistical_results = pd.DataFrame()
             self.only_2_statistical_results = pd.DataFrame()
@@ -179,6 +189,12 @@ class CompareSimulationsTaskResult(TaskResult):
             fingerprint_trajectory_divergence_description = f"\nFingerprint trajectory comparison result: {self.fingerprint_trajectory_comparison_color}{self.fingerprint_trajectory_comparison_result}{COLOR_RESET}"
         else:
             fingerprint_trajectory_divergence_description = ""
+        if self.eventlog_divergence_position:
+            eventlog_divergence_description = f"\nEventlog comparison result: {self.eventlog_comparison_color}{self.eventlog_comparison_result}{COLOR_RESET}\n{self.eventlog_divergence_position.get_description()}"
+        elif self.eventlog_comparison_result:
+            eventlog_divergence_description = f"\nEventlog comparison result: {self.eventlog_comparison_color}{self.eventlog_comparison_result}{COLOR_RESET}"
+        else:
+            eventlog_divergence_description = ""
         if not self.different_statistical_results.empty or not self.only_1_statistical_results.empty or not self.only_2_statistical_results.empty:
             max_num_different_statistics = 3
             summary_parts = [f"{COLOR_GREEN}{str(len(self.identical_statistical_results))} IDENTICAL{COLOR_RESET}"]
@@ -213,7 +229,7 @@ class CompareSimulationsTaskResult(TaskResult):
             module_image_description = f"\nModule image comparison result: {self.module_image_comparison_color}{self.module_image_comparison_result}{COLOR_RESET}"
         else:
             module_image_description = ""
-        return TaskResult.__repr__(self) + "\n" + stdout_trajectory_divergence_description + fingerprint_trajectory_divergence_description + statistical_desription + chart_description + module_image_description
+        return TaskResult.__repr__(self) + "\n" + stdout_trajectory_divergence_description + fingerprint_trajectory_divergence_description + eventlog_divergence_description + statistical_desription + chart_description + module_image_description
 
     def recompare(self, **kwargs):
         """Re-run the comparison with new filter parameters.
@@ -248,6 +264,8 @@ class CompareSimulationsTaskResult(TaskResult):
         new_result = copy.copy(self)
         if self.task.compare_stdout:
             new_result._compute_stdout_verdict(**kwargs)
+        if self.task.compare_eventlog:
+            new_result._compute_eventlog_verdict(**kwargs)
         if self.task.compare_statistics:
             new_result._compute_statistical_verdict(**kwargs)
         if self.task.compare_charts:
@@ -266,6 +284,20 @@ class CompareSimulationsTaskResult(TaskResult):
         else:
             self.stdout_trajectory_comparison_result = "IDENTICAL"
             self.stdout_trajectory_comparison_color = COLOR_GREEN
+
+    def _compute_eventlog_verdict(self, **kwargs):
+        """Compute eventlog comparison verdict."""
+        event_numbers_1, lines_1 = self.multiple_task_results.results[0].get_eventlog_lines()
+        event_numbers_2, lines_2 = self.multiple_task_results.results[1].get_eventlog_lines()
+        self.eventlog_divergence_position = find_eventlog_divergence_position(
+            event_numbers_1, lines_1, event_numbers_2, lines_2,
+            self.multiple_task_results.results[0], self.multiple_task_results.results[1])
+        if self.eventlog_divergence_position:
+            self.eventlog_comparison_result = "DIVERGENT"
+            self.eventlog_comparison_color = COLOR_YELLOW
+        else:
+            self.eventlog_comparison_result = "IDENTICAL"
+            self.eventlog_comparison_color = COLOR_GREEN
 
     def _compute_statistical_verdict(self, **kwargs):
         """Compute statistical comparison verdict."""
@@ -359,6 +391,11 @@ class CompareSimulationsTaskResult(TaskResult):
                 self.result = "DIVERGENT"
             self.color = COLOR_YELLOW
             self.reason = self.reason + ", different fingerprint trajectories"
+        if self.eventlog_comparison_result == "DIVERGENT":
+            if self.result == "IDENTICAL":
+                self.result = "DIVERGENT"
+            self.color = COLOR_YELLOW
+            self.reason = self.reason + ", different eventlogs"
         if self.statistical_comparison_result == "DIFFERENT":
             if self.result == "IDENTICAL":
                 self.result = "DIFFERENT"
@@ -600,6 +637,7 @@ class CompareSimulationsTask(Task):
 
     def __init__(self, multiple_simulation_tasks=None, task_result_class=CompareSimulationsTaskResult,
                  compare_stdout=True, compare_fingerprint=True, compare_statistics=True,
+                 compare_eventlog=False,
                  compare_charts=False, compare_module_images=False, staging_dir=None,
                  chart_filter=None, exclude_chart_filter=None,
                  module_path_filter=None, exclude_module_path_filter=None,
@@ -611,6 +649,7 @@ class CompareSimulationsTask(Task):
         self.compare_stdout = compare_stdout
         self.compare_fingerprint = compare_fingerprint
         self.compare_statistics = compare_statistics
+        self.compare_eventlog = compare_eventlog
         self.compare_charts = compare_charts
         self.compare_module_images = compare_module_images
         self.staging_dir = staging_dir

@@ -26,6 +26,7 @@ from opp_repl.simulation.build import *
 from opp_repl.simulation.config import *
 from opp_repl.simulation.fingerprint import *
 from opp_repl.simulation.project import *
+from opp_repl.simulation.displaystring import *
 from opp_repl.simulation.stdout import *
 from opp_repl.simulation.subprocess import *
 from opp_repl.simulation.opp_env_runner import *
@@ -265,6 +266,9 @@ class SimulationTaskResult(TaskResult):
                     lines.append(line)
         stdout_file.close()
         return StdoutTrajectory(self, event_numbers, lines)
+
+    def get_eventlog_lines(self):
+        return read_eventlog_lines(self)
 
 class SimulationTask(Task):
     """
