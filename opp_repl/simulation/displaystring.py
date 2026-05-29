@@ -46,13 +46,17 @@ class EventlogSimulationEvent(SimulationEvent):
         super().__init__(event_number, eventlog)
 
 
-def read_eventlog_lines(simulation_result):
+def read_eventlog_lines(simulation_result, filter=None, exclude_filter=None, full_match=False):
     """Read eventlog lines and return (event_numbers, lines) lists.
 
     Each line is associated with the event number of the most recent
     preceding E (event) line.  Header lines before the first event are
     skipped (they contain run-specific metadata like run IDs and timestamps).
+
+    Lines can be filtered using ``filter`` (include regex) and
+    ``exclude_filter`` (exclude regex), analogous to stdout filtering.
     """
+    from opp_repl.common.util import matches_filter as _matches_filter
     simulation_config = simulation_result.task.simulation_config
     simulation_project = simulation_config.simulation_project
     file_path = simulation_project.get_full_path(
@@ -71,8 +75,9 @@ def read_eventlog_lines(simulation_result):
                 in_events = True
             if not in_events:
                 continue
-            event_numbers.append(event_number)
-            lines.append(line)
+            if _matches_filter(line, filter, exclude_filter, full_match):
+                event_numbers.append(event_number)
+                lines.append(line)
     return event_numbers, lines
 
 

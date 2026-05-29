@@ -286,11 +286,11 @@ class CompareSimulationsTaskResult(TaskResult):
             self.stdout_trajectory_comparison_result = "IDENTICAL"
             self.stdout_trajectory_comparison_color = COLOR_GREEN
 
-    def _compute_eventlog_verdict(self, **kwargs):
+    def _compute_eventlog_verdict(self, eventlog_filter=None, exclude_eventlog_filter=None, **kwargs):
         """Compute eventlog comparison verdict."""
         from opp_repl.simulation.displaystring import read_eventlog_lines, find_eventlog_divergence_position
-        event_numbers_1, lines_1 = read_eventlog_lines(self.multiple_task_results.results[0])
-        event_numbers_2, lines_2 = read_eventlog_lines(self.multiple_task_results.results[1])
+        event_numbers_1, lines_1 = read_eventlog_lines(self.multiple_task_results.results[0], filter=eventlog_filter, exclude_filter=exclude_eventlog_filter)
+        event_numbers_2, lines_2 = read_eventlog_lines(self.multiple_task_results.results[1], filter=eventlog_filter, exclude_filter=exclude_eventlog_filter)
         self.eventlog_divergence_position = find_eventlog_divergence_position(
             event_numbers_1, lines_1, event_numbers_2, lines_2,
             self.multiple_task_results.results[0], self.multiple_task_results.results[1])
