@@ -268,6 +268,7 @@ class SimulationTaskResult(TaskResult):
         return StdoutTrajectory(self, event_numbers, lines)
 
     def get_eventlog_lines(self):
+        from opp_repl.simulation.displaystring import read_eventlog_lines
         return read_eventlog_lines(self)
 
 class SimulationTask(Task):

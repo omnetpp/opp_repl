@@ -50,7 +50,8 @@ def read_eventlog_lines(simulation_result):
     """Read eventlog lines and return (event_numbers, lines) lists.
 
     Each line is associated with the event number of the most recent
-    preceding E (event) line.
+    preceding E (event) line.  Header lines before the first event are
+    skipped (they contain run-specific metadata like run IDs and timestamps).
     """
     simulation_config = simulation_result.task.simulation_config
     simulation_project = simulation_config.simulation_project
@@ -59,6 +60,7 @@ def read_eventlog_lines(simulation_result):
     event_numbers = []
     lines = []
     event_number = -1
+    in_events = False
     event_pattern = re.compile(r'^E # (\d+) ')
     with open(file_path) as f:
         for line in f:
@@ -66,6 +68,9 @@ def read_eventlog_lines(simulation_result):
             m = event_pattern.match(line)
             if m:
                 event_number = int(m.group(1))
+                in_events = True
+            if not in_events:
+                continue
             event_numbers.append(event_number)
             lines.append(line)
     return event_numbers, lines
