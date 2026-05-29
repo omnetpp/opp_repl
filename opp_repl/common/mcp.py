@@ -7,6 +7,7 @@ same namespace as the interactive user, so all opp_repl functions (run_simulatio
 compare_simulations, run_fingerprint_tests, etc.) are available directly.
 """
 
+import atexit
 import ctypes
 import glob
 import hashlib
@@ -576,66 +577,224 @@ class _HashTokenVerifier:
             return AccessToken(token=token, client_id="opp_repl", scopes=[])
         return None
 
-def start_mcp_server(port=9966, token_hash=None, bypass_token_hash_check=False):
-    """Start the MCP server on a background thread using Streamable HTTP transport.
+def _default_socket_path():
+    """Return the stable per-user default Unix domain socket path.
 
-    The server uses stateless HTTP mode so each tool call is an independent
-    HTTP POST request. This makes server restarts transparent to clients —
-    no persistent connection needs to be re-established.
+    Uses ``$XDG_RUNTIME_DIR/opp_repl/mcp.sock`` when available, falling back
+    to ``/tmp/opp_repl-<uid>/mcp.sock``.  Parent directory is created with
+    mode ``0700`` (owner-only).
+    """
+    xdg = os.environ.get("XDG_RUNTIME_DIR", "")
+    if xdg and os.path.isdir(xdg):
+        base = os.path.join(xdg, "opp_repl")
+    else:
+        base = os.path.join("/tmp", f"opp_repl-{os.getuid()}")
+    os.makedirs(base, mode=0o700, exist_ok=True)
+    # mode= in makedirs is ignored when the dir pre-exists; chmod unconditionally
+    # so the parent is always 0700 regardless of prior umask or stale dirs.
+    try:
+        os.chmod(base, 0o700)
+    except OSError:
+        pass
+    return os.path.join(base, "mcp.sock")
 
-    Endpoint: http://127.0.0.1:{port}/mcp
+
+_cleanup_socket_path = None
+
+
+def _remove_socket_file():
+    """atexit handler: remove the UDS socket file on clean exit."""
+    path = _cleanup_socket_path
+    if path and os.path.exists(path):
+        try:
+            os.unlink(path)
+        except OSError:
+            pass
+
+
+atexit.register(_remove_socket_file)
+
+
+_SOCKET_PATH_NOT_SET = object()  # sentinel: socket_path was not passed → TCP mode
+
+
+def start_mcp_server(port=9966, socket_path=_SOCKET_PATH_NOT_SET, token_hash=None, bypass_token_hash_check=False):
+    """Start the MCP server on a background thread.
+
+    When ``socket_path`` is given (or ``None`` to use the default per-user
+    path), the server listens on a Unix domain socket.  The socket is created
+    with mode ``0600`` so only the owning user can connect — no bearer token
+    is required.  Run ``opp_repl_mcp --help`` to see the resolved path and
+    ready-to-paste client configuration snippets.
+
+    When ``socket_path`` is not used the server listens on a TCP port using
+    Streamable HTTP (stateless mode).  Each tool call is an independent HTTP
+    POST request — no persistent connection is required.
+
+    Endpoint (TCP mode): http://127.0.0.1:{port}/mcp
 
     Args:
-        port: The port to listen on (default 9966).
+        port: TCP port to listen on (default 9966).  Ignored when
+            ``socket_path`` is supplied.
+        socket_path: Unix domain socket path.  Pass ``None`` to use the
+            stable per-user default path.  When supplied the server runs in
+            UDS mode and bearer-token authentication is skipped.
         token_hash: Hex-encoded SHA-256 hash of the bearer token that
-            clients must present.  Required unless the server is running
-            inside ``opp_sandbox``, where the bubblewrap sandbox already
-            provides filesystem-level isolation and authentication is
-            skipped.
-        bypass_token_hash_check: When True, start the server without bearer
-            token authentication even outside ``opp_sandbox``.  Intended for
-            trusted environments only.
+            clients must present (TCP mode only).  Required unless the server
+            is running inside ``opp_sandbox``.
+        bypass_token_hash_check: When True, start the TCP server without
+            bearer token authentication even outside ``opp_sandbox``.
+            Intended for trusted environments only.
     """
     if not _mcp_available:
         raise ImportError("MCP server requires the 'mcp' package. Install it with: pip install opp_repl[mcp]")
-    if not token_hash and not bypass_token_hash_check and not is_running_in_sandbox():
-        raise ValueError("Cannot start MCP server: no authentication configured. "
-                         "Outside opp_sandbox the MCP server requires either "
-                         "--mcp-token-hash (bearer token authentication) or "
-                         "--mcp-bypass-token-hash-check (disable authentication; trusted environments only). "
-                         "To generate a token hash, run: echo -n your_passphrase | sha256sum | cut -d' ' -f1 "
-                         "then pass the resulting hex hash via --mcp-token-hash, and configure the same "
-                         "passphrase as the bearer token in your MCP client (e.g. Windsurf). "
-                         "Alternatively, pass --mcp-bypass-token-hash-check to disable authentication entirely "
-                         "(only safe in trusted local environments), or run opp_repl inside opp_sandbox where "
-                         "the bubblewrap sandbox provides filesystem-level isolation and authentication is skipped.")
-    if bypass_token_hash_check and token_hash:
-        _logger.warning("--mcp-bypass-token-hash-check overrides --mcp-token-hash; starting MCP server without authentication")
-        token_hash = None
 
-    if token_hash:
-        _mcp._token_verifier = _HashTokenVerifier(token_hash)
-        from mcp.server.auth.settings import AuthSettings
-        _mcp.settings.auth = AuthSettings(
-            issuer_url="http://127.0.0.1",
-            resource_server_url=f"http://127.0.0.1:{port}",
-        )
-
-    global _original_sigint_handler
+    global _original_sigint_handler, _cleanup_socket_path
     _original_sigint_handler = signal.getsignal(signal.SIGINT)
     signal.signal(signal.SIGINT, _sigint_handler)
 
-    _mcp.settings.port = port
-    _mcp.settings.log_level = "WARNING"
     logging.getLogger("mcp").setLevel(logging.WARNING)
 
-    def _run():
-        try:
-            _mcp.run(transport="streamable-http")
-        except Exception as e:
-            _logger.error(f"MCP server failed: {e}")
+    uds_mode = socket_path is not _SOCKET_PATH_NOT_SET
 
-    thread = threading.Thread(target=_run, daemon=True, name="opp-repl-mcp-server")
-    thread.start()
-    _logger.info(f"MCP server started on port {port}")
-    return thread
+    if uds_mode:
+        # --- Unix domain socket mode ---
+        if socket_path is None:
+            socket_path = _default_socket_path()
+
+        # Stale-socket reclaim: only act on actual sockets, never regular files
+        # or symlinks. Refuse to start if the path exists but isn't a socket.
+        if os.path.lexists(socket_path):
+            import stat as _stat
+            try:
+                st = os.lstat(socket_path)
+            except OSError as e:
+                raise RuntimeError(f"Cannot stat {socket_path}: {e}") from e
+            if not _stat.S_ISSOCK(st.st_mode):
+                raise RuntimeError(
+                    f"{socket_path} exists and is not a Unix socket "
+                    f"(mode={oct(st.st_mode)}); refusing to remove."
+                )
+            import socket as _sock
+            _probe = _sock.socket(_sock.AF_UNIX, _sock.SOCK_STREAM)
+            try:
+                _probe.connect(socket_path)
+                _probe.close()
+                raise RuntimeError(
+                    f"Another opp_repl MCP server is already running at {socket_path}. "
+                    f"Stop it first, or delete the socket file manually."
+                )
+            except OSError:
+                _logger.warning(f"Removing stale MCP socket: {socket_path}")
+                try:
+                    os.unlink(socket_path)
+                except OSError:
+                    pass
+            finally:
+                try:
+                    _probe.close()
+                except Exception:
+                    pass
+
+        # Disable DNS rebinding protection for UDS: the socket's 0600 filesystem
+        # permissions already prevent any external access; the Host header check
+        # is meaningless over a Unix socket and would reject all clients.
+        from mcp.server.transport_security import TransportSecuritySettings
+        _mcp.settings.transport_security = TransportSecuritySettings(
+            enable_dns_rebinding_protection=False
+        )
+
+        startup_event = threading.Event()
+        startup_error = []
+
+        def _run_uds():
+            try:
+                import uvicorn
+
+                class _ChmodServer(uvicorn.Server):
+                    async def startup(self, sockets=None):
+                        # Restrict umask so the socket is created at 0600 from the
+                        # start, closing the TOCTOU window between bind() and chmod.
+                        old_umask = os.umask(0o077)
+                        try:
+                            await super().startup(sockets=sockets)
+                        finally:
+                            os.umask(old_umask)
+                        # Belt-and-suspenders: enforce 0600 even if umask was bypassed.
+                        if os.path.exists(socket_path):
+                            os.chmod(socket_path, 0o600)
+                        startup_event.set()
+
+                async def _serve():
+                    app = _mcp.streamable_http_app()
+                    config = uvicorn.Config(app, uds=socket_path, log_level="warning")
+                    server = _ChmodServer(config)
+                    await server.serve()
+
+                anyio.run(_serve)
+            except Exception as e:
+                startup_error.append(e)
+                _logger.error(f"MCP server (UDS) failed: {e}")
+            finally:
+                # Wake start_mcp_server even if startup() never reached set()
+                startup_event.set()
+
+        thread = threading.Thread(target=_run_uds, daemon=True, name="opp-repl-mcp-server")
+        thread.start()
+        if not startup_event.wait(timeout=10.0):
+            raise RuntimeError(
+                f"MCP server (UDS) did not finish startup within 10 seconds at {socket_path}"
+            )
+        if startup_error:
+            raise startup_error[0]
+        # Only arm cleanup once we know bind succeeded; otherwise atexit could
+        # unlink a socket owned by a later, unrelated process on the same path.
+        _cleanup_socket_path = socket_path
+        _logger.info(
+            f"MCP server listening on Unix socket {socket_path}"
+        )
+        _logger.info(
+            f"Run 'opp_repl_mcp --help' for client configuration examples."
+        )
+        return thread
+
+    else:
+        # --- TCP / Streamable-HTTP mode ---
+        if not token_hash and not bypass_token_hash_check and not is_running_in_sandbox():
+            raise ValueError(
+                "Cannot start MCP server: no authentication configured. "
+                "Outside opp_sandbox the MCP server requires either "
+                "--mcp-token-hash (bearer token authentication) or "
+                "--mcp-bypass-token-hash-check (disable authentication; trusted environments only). "
+                "To generate a token hash, run: echo -n your_passphrase | sha256sum | cut -d' ' -f1 "
+                "then pass the resulting hex hash via --mcp-token-hash, and configure the same "
+                "passphrase as the bearer token in your MCP client (e.g. Windsurf). "
+                "Alternatively, pass --mcp-bypass-token-hash-check to disable authentication entirely "
+                "(only safe in trusted local environments), or run opp_repl inside opp_sandbox where "
+                "the bubblewrap sandbox provides filesystem-level isolation and authentication is skipped."
+            )
+        if bypass_token_hash_check and token_hash:
+            _logger.warning("--mcp-bypass-token-hash-check overrides --mcp-token-hash; starting MCP server without authentication")
+            token_hash = None
+
+        if token_hash:
+            _mcp._token_verifier = _HashTokenVerifier(token_hash)
+            from mcp.server.auth.settings import AuthSettings
+            _mcp.settings.auth = AuthSettings(
+                issuer_url="http://127.0.0.1",
+                resource_server_url=f"http://127.0.0.1:{port}",
+            )
+
+        _mcp.settings.port = port
+        _mcp.settings.log_level = "WARNING"
+
+        def _run_tcp():
+            try:
+                _mcp.run(transport="streamable-http")
+            except Exception as e:
+                _logger.error(f"MCP server failed: {e}")
+
+        thread = threading.Thread(target=_run_tcp, daemon=True, name="opp-repl-mcp-server")
+        thread.start()
+        _logger.info(f"MCP server started on port {port}")
+        return thread

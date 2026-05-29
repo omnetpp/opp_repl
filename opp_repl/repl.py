@@ -26,6 +26,7 @@ def parse_run_repl_arguments():
     parser.add_argument("--load", action="append", default=[], metavar="OPP_FILE", help="load one or more .opp configuration files or directories at startup, can be specified multiple times and supports glob patterns (e.g. --load '*.opp'); when a directory is given, all *.opp files in it are loaded; use --load @opp to load the bundled .opp files shipped with opp_repl")
     parser.add_argument("-p", "--simulation-project", default=None, help="name of the default simulation project to use (auto-detected from the working directory if not specified)")
     parser.add_argument("--mcp-port", type=int, default=0, help="TCP port for the Model Context Protocol server that allows AI assistants to interact with the REPL (0 to disable, default: 0)")
+    parser.add_argument("--mcp-socket", nargs="?", const="<auto>", default=None, metavar="PATH", help="start the MCP server on a Unix domain socket instead of a TCP port; omit PATH to use the default per-user socket path (see opp_repl_mcp_bridge --help for the exact path and client configuration examples)")
     parser.add_argument("--mcp-token-hash", default=None, help="SHA-256 hex hash of the bearer token required for MCP authentication (required when --mcp-port is set, unless running inside opp_sandbox)")
     parser.add_argument("--mcp-bypass-token-hash-check", action="store_true", help="bypass the bearer token authentication requirement for the MCP server (use only in trusted environments; normally --mcp-token-hash is required outside opp_sandbox)")
     parser.add_argument("-l", "--log-level", choices=["ERROR", "WARN", "INFO", "DEBUG"], default="INFO", help="controls the verbosity of log messages (default: INFO)")
@@ -47,10 +48,27 @@ def run_repl_main():
         if "-h" in sys.argv:
             sys.exit(0)
         else:
+            if args.mcp_port != 0 and args.mcp_socket is not None:
+                _logger.error("--mcp-port and --mcp-socket are mutually exclusive; specify only one")
+                sys.exit(1)
             if args.mcp_port != 0:
                 try:
                     from opp_repl.common.mcp import start_mcp_server
                     start_mcp_server(port=args.mcp_port, token_hash=args.mcp_token_hash, bypass_token_hash_check=args.mcp_bypass_token_hash_check)
+                except ImportError:
+                    _logger.warning("MCP server not available (install with: pip install opp_repl[mcp])")
+            elif args.mcp_socket is not None:
+                if args.mcp_token_hash or args.mcp_bypass_token_hash_check:
+                    _logger.error(
+                        "--mcp-token-hash and --mcp-bypass-token-hash-check do not apply "
+                        "with --mcp-socket; UDS mode uses filesystem permissions (0600) for "
+                        "access control. Remove the token flags, or use --mcp-port instead."
+                    )
+                    sys.exit(1)
+                try:
+                    from opp_repl.common.mcp import start_mcp_server
+                    socket_path = None if args.mcp_socket == "<auto>" else args.mcp_socket
+                    start_mcp_server(socket_path=socket_path)
                 except ImportError:
                     _logger.warning("MCP server not available (install with: pip install opp_repl[mcp])")
             app = IPython.terminal.ipapp.TerminalIPythonApp.instance()

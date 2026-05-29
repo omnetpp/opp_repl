@@ -21,6 +21,12 @@ Key command-line options:
   assistant integration.  Default is **0**, which disables the MCP
   server entirely.  Setting a non-zero port also requires
   `--mcp-token-hash` (unless running inside `opp_sandbox`).
+- `--mcp-socket [PATH]` — start the MCP server on a Unix domain socket
+  instead of a TCP port.  Omit `PATH` to use the stable per-user default
+  (`$XDG_RUNTIME_DIR/opp_repl/mcp.sock`).  The socket is created with
+  permissions `0600` (owner-only), so no bearer token is required.
+  Mutually exclusive with `--mcp-port`.  See [MCP server](mcp_server.md)
+  and run `opp_repl_mcp_bridge --help` for client configuration examples.
 - `--mcp-token-hash HEX` — SHA-256 hex hash of the bearer token that
   MCP clients must present to authenticate.  Required when
   `--mcp-port` is set, except inside `opp_sandbox`.
@@ -78,6 +84,9 @@ is useful in multi-line REPL scripts where you want to bail out early.
 
 ## MCP server
 
-When started with `--mcp-port`, the REPL exposes its functions to AI
-assistants via the Model Context Protocol.  See [MCP server](mcp_server.md)
-for details.
+When started with `--mcp-port` (TCP) or `--mcp-socket` (Unix domain socket),
+the REPL exposes its functions to AI assistants via the Model Context
+Protocol.  The Unix domain socket transport is the recommended option for
+local use: no bearer token is required (access is controlled by socket file
+permissions), and a stable path means the client configuration never changes
+between sessions.  See [MCP server](mcp_server.md) for details.

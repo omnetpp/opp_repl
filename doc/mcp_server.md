@@ -93,7 +93,85 @@ names (e.g. `SimulationWorkspace`).
 4. Read `opp-repl://package/{package_name}` for a compact API overview
 5. Drill into `opp-repl://class/…`, `opp-repl://method/…`, or `opp-repl://function/…` for full details
 
-## Client Configuration
+## Unix Domain Socket Transport (recommended for local use)
+
+Start opp_repl with `--mcp-socket` to listen on a Unix domain socket
+instead of a TCP port:
+
+```bash
+opp_repl --mcp-socket              # uses stable per-user default path
+opp_repl --mcp-socket /custom/path # explicit path
+```
+
+The default socket path is `$XDG_RUNTIME_DIR/opp_repl/mcp.sock` (falling
+back to `/tmp/opp_repl-<uid>/mcp.sock`).  The socket is created with
+permissions `0600` (owner-only), so **no bearer token is required** — the
+filesystem enforces access control.
+
+`--mcp-socket` and `--mcp-port` are mutually exclusive.
+
+### opp_repl_mcp_bridge bridge
+
+Since most AI coding tools speak MCP over stdio rather than HTTP, a
+small bridge command is provided:
+
+```bash
+opp_repl_mcp_bridge                     # connects to the default socket path
+opp_repl_mcp_bridge --mcp-socket PATH   # connects to a custom path
+```
+
+Run `opp_repl_mcp_bridge --help` to see the resolved default path and
+ready-to-paste configuration snippets for all supported clients.
+
+### Client configuration (Unix socket)
+
+The simplest config — **no arguments needed when using the default path**:
+
+**Windsurf** (`~/.codeium/windsurf/mcp_config.json`):
+
+```json
+{
+  "mcpServers": {
+    "opp_repl": {
+      "command": "opp_repl_mcp_bridge"
+    }
+  }
+}
+```
+
+**Claude Code** (`~/.claude.json` or `.mcp.json` for project scope):
+
+```json
+{
+  "mcpServers": {
+    "opp_repl": {
+      "type": "stdio",
+      "command": "opp_repl_mcp_bridge"
+    }
+  }
+}
+```
+
+Or via the `claude` CLI:
+
+```bash
+claude mcp add --transport stdio opp_repl -- opp_repl_mcp_bridge
+```
+
+**VS Code / Cursor** (`.vscode/mcp.json`):
+
+```json
+{
+  "servers": {
+    "opp_repl": {
+      "type": "stdio",
+      "command": "opp_repl_mcp_bridge"
+    }
+  }
+}
+```
+
+## Client Configuration (TCP)
 
 ### Windsurf / Codeium
 

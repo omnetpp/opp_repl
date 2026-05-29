@@ -43,6 +43,7 @@ Changelog = "https://github.com/omnetpp/opp_repl/commits/main"
 [project.optional-dependencies]
 mcp = [
     "httpx",
+    "mcp",
 ]
 cluster = [
     "dask",
@@ -73,6 +74,7 @@ all = [
     "distributed",
     "httpx",
     "matplotlib",
+    "mcp",
     "numpy",
     "optimparallel",
     "pandas",
@@ -84,6 +86,8 @@ all = [
 
 [project.scripts]
 opp_repl = "opp_repl.repl:run_repl_main"
+opp_repl_mcp_bridge = "opp_repl.common.mcp_bridge:main"
+opp_repl_self_test = "opp_repl.main:run_self_test_main"
 opp_mount = "opp_repl.simulation.overlay:mount_overlays_main"
 opp_unmount = "opp_repl.simulation.overlay:unmount_overlays_main"
 opp_build_project = "opp_repl.main:build_project_main"
@@ -91,7 +95,6 @@ opp_build_omnetpp = "opp_repl.main:build_omnetpp_main"
 opp_clean_omnetpp = "opp_repl.main:clean_omnetpp_main"
 opp_clean_project = "opp_repl.main:clean_project_main"
 opp_run_simulations = "opp_repl.main:run_simulations_main"
-opp_repl_self_test = "opp_repl.main:run_self_test_main"
 opp_run_all_tests = "opp_repl.main:run_all_tests_main"
 opp_run_chart_tests = "opp_repl.main:run_chart_tests_main"
 opp_run_feature_tests = "opp_repl.main:run_feature_tests_main"
