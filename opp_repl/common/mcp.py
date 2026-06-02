@@ -5,10 +5,156 @@ The server runs on a background thread and exposes a single ``execute_python`` t
 executes arbitrary Python code in the live IPython session. The AI assistant shares the
 same namespace as the interactive user, so all opp_repl functions (run_simulations,
 compare_simulations, run_fingerprint_tests, etc.) are available directly.
+
+================================================================================
+Architecture of ``execute_python``
+================================================================================
+
+Goals
+-----
+1. The AI's code runs in the *same* IPython namespace as the interactive user
+   (shared state, shared history, shared display hooks).
+2. The cell appears in the terminal exactly like a user-typed cell:
+   ``In [N]: <code>`` followed by live stdout/stderr/logging output and
+   ``Out[N]: <repr>``.
+3. The cell never interleaves with the live prompt redraw.
+4. Stdout/stderr/logging are captured and returned to the MCP client, AND
+   streamed line-by-line via ``ctx.info`` notifications while the cell runs.
+5. Ctrl-C on the terminal interrupts the cell, and does NOT leak into the
+   user's pending prompt after the cell finishes.
+6. The MCP event loop is never blocked by a long-running cell.
+
+Three threads are involved
+--------------------------
+* **MCP event-loop thread** — created by ``start_mcp_server``. Runs uvicorn /
+  ``_mcp.run`` and awaits the ``execute_python`` coroutine.
+* **Worker thread** — ``anyio.to_thread.run_sync(runner)`` hops off the MCP
+  loop so the rest of the dispatch can do blocking work.
+* **Main (REPL) thread** — where IPython and prompt_toolkit live. The cell
+  must ultimately run here, otherwise output interleaves with the live
+  prompt and Ctrl-C semantics get weird.
+
+Dispatch path
+-------------
+``execute_python`` (MCP loop) → ``anyio.to_thread.run_sync`` (worker) →
+``asyncio.run_coroutine_threadsafe(_run_on_pt, pt_loop)`` (main thread) →
+``async with in_terminal():`` (prompt suspended) →
+``_run_execute_python_sync`` → ``ip.run_cell``.
+
+We can't use prompt_toolkit's sync ``run_in_terminal`` helper because it
+calls ``ensure_future`` on the calling thread, which on the worker thread
+has no event loop.
+
+Why ``in_terminal``?
+--------------------
+It suspends the prompt and puts the tty in cooked mode for the duration of
+the cell, so direct writes to the terminal are not garbled by the prompt
+redraw and Ctrl-C reaches the main thread synchronously.
+
+Output: ``_TeeStream`` + ``_CaptureSink``
+-----------------------------------------
+``sys.stdout`` / ``sys.stderr`` are replaced with ``_TeeStream`` that fans
+writes out to (a) the *raw* interpreter-level streams ``sys.__stdout__`` /
+``sys.__stderr__`` and (b) a ``_CaptureSink``.
+
+We tee to ``__stdout__`` / ``__stderr__`` (NOT the current ``sys.stdout``)
+because IPython at the prompt wraps stdout in prompt_toolkit's
+``StdoutProxy``, which queues writes to a background thread that flushes
+via ``run_in_terminal`` on the loop — and the loop is blocked by our cell.
+Direct writes to the raw fd appear live because ``in_terminal`` already
+put the tty in cooked mode.
+
+``_TeeStream.fileno`` deliberately returns the *real terminal's* fd, so
+``Vt100_Output.from_pty``'s terminal-size detection works. We deliberately
+omit a ``buffer`` attribute so ``flush_stdout`` doesn't write directly to
+the underlying buffer and bypass the fan-out.
+
+``_CaptureSink`` ANSI-strips every write into an internal ``StringIO`` and,
+when ``on_line`` is set, fires the callback once per complete line so the
+MCP client can stream chunks.
+
+Logging is captured by ``_StreamingLogHandler`` attached to the root
+logger; it routes formatted records into the same sink (sink only, not the
+terminal — existing handlers already write to the terminal).
+
+Streaming to the MCP client
+---------------------------
+``on_line`` (created in ``execute_python``) closes over the MCP loop and
+calls ``asyncio.run_coroutine_threadsafe(ctx.info(line), mcp_loop)`` to
+hop each line back to the MCP thread as a log notification. The blocking
+``fut.result(timeout=5.0)`` provides backpressure; failures (closed loop /
+stream) silently drop the streamed chunk because the line is still
+captured into the sink's buffer for the final return value.
+
+Ctrl-C / SIGINT handling
+------------------------
+Two cooperating mechanisms make Ctrl-C work right:
+
+1. **SIGINT handler swap** — asyncio's installed SIGINT handler only
+   schedules a loop wake-up, but the cell runs synchronously inside the
+   loop's current task and never yields, so without swapping in
+   ``signal.default_int_handler`` Ctrl-C would be invisible to the cell.
+   Restored in the ``finally`` BEFORE other cleanup, so a late-arriving
+   Ctrl-C during cleanup routes back to the normal handler.
+
+2. **Wakeup fd redirection** — CPython's C-level signal handler writes a
+   byte to whatever fd is registered via ``signal.set_wakeup_fd`` on
+   every signal. asyncio registers its csock there, so a Ctrl-C during
+   the cell would (a) raise ``KeyboardInterrupt`` synchronously via the
+   handler above (good) and (b) leave a pending byte in asyncio's csock.
+   Once the cell returns and the loop resumes, that byte makes the loop
+   invoke prompt_toolkit's registered SIGINT callback, which raises
+   ``KeyboardInterrupt`` at the prompt and surfaces as
+   ``"KeyboardInterrupt escaped interact()"``. We redirect the wakeup fd
+   to a private pipe for the duration of the cell, then close it on
+   exit so any byte dies with it.
+
+A safety-net ``except KeyboardInterrupt`` around the cleanup catches a
+Ctrl-C that slips through after SIGINT is restored to default-int but
+before the finally chain finishes; the user's intent was already honored
+by the cell-level handler, so we swallow it.
+
+AppSession tweaks during the cell
+---------------------------------
+* ``_session._output = None`` — forces prompt_toolkit to recreate its
+  cached ``Output``, so IPython's display hook's ``Out[N]:`` line routes
+  through the current ``sys.stdout`` tee instead of a stale ``Output``
+  bound to a previous prompt cycle's stdout.
+* ``_session.app = None`` — ``print_formatted_text`` (used by IPython's
+  display hook) otherwise sees a running app and *defers* its render via
+  ``loop.call_soon_threadsafe(lambda: run_in_terminal(render))``, which
+  never fires because the loop is blocked by our cell. With no app
+  visible, the helper renders inline through our restored
+  ``AppSession.output`` (= our tee), so styled output appears live before
+  the next prompt redraw.
+
+Prompt redraw after the cell
+----------------------------
+Our cell incremented ``execution_count``, but the user's pending prompt
+was rendered with pre-evaluated message text (IPython caches it for CPU
+efficiency in default emacs mode). We swap in a callable for
+``pt_app.message`` that re-fetches the tokens, so ``in_terminal``'s
+exit-redraw picks up the fresh count in one draw — no double-redraw
+flicker.
+
+Return value
+------------
+``sink.getvalue()`` (rstrip'd) followed by any ``error_in_exec`` /
+``error_before_exec``. We deliberately do NOT append the cell's result
+repr separately: ``ip.run_cell(..., silent=False)`` already ran the
+display hook and ``Out[N]: <repr>`` was captured into the sink. Appending
+it again would duplicate the value.
+
+Fallback path
+-------------
+If there's no live prompt_toolkit app (simple-prompt mode, tests, or
+between-prompts state), ``runner()`` executes ``_run_execute_python_sync``
+directly on the worker thread, skipping all the ``in_terminal`` /
+signal / AppSession plumbing.
 """
 
+import asyncio
 import atexit
-import ctypes
 import glob
 import hashlib
 import hmac
@@ -19,7 +165,6 @@ import os
 from pathlib import Path
 import pydoc
 import re
-import signal
 import sys
 import threading
 import traceback
@@ -39,24 +184,17 @@ _logger = logging.getLogger(__name__)
 
 mcp_calls = []
 
-_active_mcp_thread_id = None
-_original_sigint_handler = None
-
-def _sigint_handler(signum, frame):
-    tid = _active_mcp_thread_id
-    if tid is not None:
-        _logger.info("Ctrl-C: interrupting MCP execution")
-        ctypes.pythonapi.PyThreadState_SetAsyncExc(
-            ctypes.c_ulong(tid),
-            ctypes.py_object(KeyboardInterrupt)
-        )
-    elif _original_sigint_handler is not None:
-        _original_sigint_handler(signum, frame)
-    else:
-        raise KeyboardInterrupt
+_ANSI_RE = re.compile(
+    # CSI: ESC [ params (0x30-0x3F) intermediates (0x20-0x2F) final (0x40-0x7E)
+    r"\x1b\[[\x30-\x3f]*[\x20-\x2f]*[\x40-\x7e]"
+    # OSC: ESC ] ... terminator (BEL or ESC\)
+    r"|\x1b\][^\x07\x1b]*(?:\x07|\x1b\\)"
+    # Single-char ESC sequence (C1 controls: ESC followed by one byte in @-_)
+    r"|\x1b[@-_]"
+)
 
 def _strip_ansi(text):
-    return re.sub(r"\033\[[0-9;]*m", "", str(text))
+    return _ANSI_RE.sub("", str(text))
 
 
 class _TeeStream:
@@ -90,6 +228,19 @@ class _TeeStream:
 
     def writable(self):
         return True
+
+    def fileno(self):
+        # Return the fd of the first underlying stream that has one (the
+        # real terminal in our case). prompt_toolkit's Vt100_Output.from_pty
+        # uses this for terminal-size detection. We deliberately don't
+        # expose a `buffer` attribute — flush_stdout would otherwise write
+        # to it directly and bypass our fan-out to the sink.
+        for s in self._streams:
+            try:
+                return s.fileno()
+            except (AttributeError, OSError, io.UnsupportedOperation):
+                continue
+        raise io.UnsupportedOperation("fileno")
 
     @property
     def encoding(self):
@@ -153,22 +304,39 @@ class _StreamingLogHandler(logging.Handler):
 
 def _run_execute_python_sync(code, sink):
     """Run a snippet with stdout/stderr/logging tee'd to the REPL console and
-    captured into ``sink``. Called from a worker thread via
-    ``anyio.to_thread.run_sync``.
+    captured into ``sink``. Normally invoked on the main thread via
+    ``prompt_toolkit.application.run_in_terminal`` (with the prompt suspended);
+    falls back to a worker-thread call when no prompt_toolkit app is running.
     """
     import IPython
     ip = IPython.get_ipython()
 
-    global _active_mcp_thread_id
-    _active_mcp_thread_id = threading.get_ident()
+    # Defensive: on Python 3.14+ asyncio.get_event_loop() is strict and raises
+    # on threads without a loop. IPython's autoawait helper may want one, and
+    # we run in three different threads (event-loop thread, worker thread,
+    # main thread inside run_in_terminal) depending on the dispatch path.
+    try:
+        asyncio.get_event_loop()
+    except RuntimeError:
+        asyncio.set_event_loop(asyncio.new_event_loop())
 
     old_pager = pydoc.pager
     pydoc.pager = pydoc.plainpager
 
+    # When the REPL is at the prompt, IPython has wrapped sys.stdout/stderr
+    # in prompt_toolkit's StdoutProxy. That proxy queues writes onto a
+    # background thread which flushes them via `run_in_terminal` on the
+    # loop — which never gets to run while our cell is blocking the loop,
+    # so the user sees nothing until we return. Tee to the underlying
+    # interpreter-level streams instead; the in_terminal context already
+    # suspended the prompt and put the tty in cooked mode, so direct
+    # writes appear live.
+    real_stdout = sys.__stdout__ or sys.stdout
+    real_stderr = sys.__stderr__ or sys.stderr
     old_stdout = sys.stdout
     old_stderr = sys.stderr
-    sys.stdout = _TeeStream(old_stdout, sink)
-    sys.stderr = _TeeStream(old_stderr, sink)
+    sys.stdout = _TeeStream(real_stdout, sink)
+    sys.stderr = _TeeStream(real_stderr, sink)
 
     log_handler = _StreamingLogHandler(sink)
     log_handler.setLevel(logging.NOTSET)
@@ -178,10 +346,20 @@ def _run_execute_python_sync(code, sink):
     info = {}
     try:
         if ip is not None:
+            # Echo "In [N]: <code>" to the terminal so an MCP-initiated cell
+            # looks the same as one the user typed. Use IPython's prompt
+            # tokens + style so the colors match exactly.
             try:
-                result = ip.run_cell(code, silent=False, store_history=False)
-                if result.result is not None:
-                    info["result_repr"] = _strip_ansi(repr(result.result))
+                from prompt_toolkit.formatted_text import PygmentsTokens
+                from prompt_toolkit.shortcuts import print_formatted_text
+                tokens = ip.prompts.in_prompt_tokens()
+                style = getattr(ip, "_style", None)
+                print_formatted_text(PygmentsTokens(tokens), end="", style=style)
+            except Exception:
+                print(f"In [{ip.execution_count}]: ", end="")
+            print(code)
+            try:
+                result = ip.run_cell(code, silent=False, store_history=True)
                 if result.error_in_exec is not None:
                     info["error_in_exec"] = _strip_ansi(str(result.error_in_exec))
                 if result.error_before_exec is not None:
@@ -212,7 +390,6 @@ def _run_execute_python_sync(code, sink):
         sys.stdout = old_stdout
         sys.stderr = old_stderr
         pydoc.pager = old_pager
-        _active_mcp_thread_id = None
     return info
 
 
@@ -521,22 +698,175 @@ def _register_mcp_handlers():
             notifications while the code is running, and printed to the REPL
             console in real time.
         """
-        _logger.info(f"execute_python:\n{code}")
         mcp_calls.append({"tool": "execute_python", "code": code})
+
+        mcp_loop = asyncio.get_running_loop()
 
         def on_line(line):
             if ctx is None:
                 return
             try:
-                anyio.from_thread.run(ctx.info, line)
+                fut = asyncio.run_coroutine_threadsafe(ctx.info(line), mcp_loop)
+                fut.result(timeout=5.0)
             except Exception:
-                # No event-loop portal (writer thread not spawned by anyio),
-                # or stream closed — drop the streamed chunk; the line is
-                # still captured into the buffer for the final return value.
+                # MCP loop closed, stream closed, or no portal — drop the
+                # streamed chunk; the line is still captured into the buffer
+                # for the final return value.
                 pass
 
         sink = _CaptureSink(on_line=on_line if ctx is not None else None)
-        info = await anyio.to_thread.run_sync(_run_execute_python_sync, code, sink)
+
+        # Run the snippet on the main thread (where the interactive user's
+        # IPython REPL lives) by scheduling it onto prompt_toolkit's event
+        # loop and asking it to suspend the prompt for the duration. This
+        # prevents output from interleaving with whatever the user is doing,
+        # and lets a Ctrl-C from the terminal interrupt the cell naturally
+        # via SIGINT on the main thread.
+        def runner():
+            import IPython
+            ip = IPython.get_ipython()
+            pt_app = getattr(ip, "pt_app", None)
+            app = getattr(pt_app, "app", None) if pt_app is not None else None
+            loop = getattr(app, "loop", None) if app is not None else None
+            if app is None or loop is None or not getattr(app, "is_running", False):
+                # Fallback: no live prompt_toolkit app (simple-prompt mode,
+                # tests, between-prompts state) — execute synchronously here.
+                return _run_execute_python_sync(code, sink)
+            # Build a coroutine that, when driven on the prompt_toolkit loop,
+            # enters the `in_terminal` async context manager (which suspends
+            # the prompt) and runs the cell synchronously on the loop's
+            # thread — the same main thread the interactive user is on. We
+            # can't use prompt_toolkit's sync `run_in_terminal` helper here
+            # because it internally calls `ensure_future` on the *calling*
+            # thread, which on a worker thread has no loop.
+            from prompt_toolkit.application import in_terminal
+            from prompt_toolkit.application.current import get_app_session
+            from prompt_toolkit.formatted_text import PygmentsTokens
+            import os as _os
+            import signal as _signal
+            async def _run_on_pt():
+                async with in_terminal():
+                    # Redirect the process-wide signal wakeup fd to a
+                    # private pipe for the duration of the cell. CPython's
+                    # C-level signal handler unconditionally writes to
+                    # whatever wakeup fd is registered when a signal is
+                    # delivered — including SIGINT — *regardless* of the
+                    # Python-level handler. Without this redirection a
+                    # Ctrl-C during our blocking cell would (a) raise
+                    # KeyboardInterrupt synchronously via the Python
+                    # handler we install just below (good), AND (b) leave a
+                    # pending byte in the asyncio loop's csock; once we
+                    # exit and the loop resumes, that byte makes the loop
+                    # invoke prompt_toolkit's registered SIGINT callback,
+                    # which raises KeyboardInterrupt at the prompt and
+                    # surfaces as "KeyboardInterrupt escaped interact()".
+                    _wake_r_fd, _wake_w_fd = _os.pipe()
+                    try:
+                        _os.set_blocking(_wake_w_fd, False)
+                    except Exception:
+                        pass
+                    try:
+                        _saved_wakeup_fd = _signal.set_wakeup_fd(_wake_w_fd)
+                    except Exception:
+                        _saved_wakeup_fd = -1
+                    # Install the default SIGINT handler (raises
+                    # KeyboardInterrupt) for the duration of the cell.
+                    # asyncio's installed handler only schedules a loop
+                    # wake-up, but our cell runs synchronously inside the
+                    # loop's current task and never yields, so without this
+                    # swap Ctrl-C is invisible to the cell.
+                    _old_sigint = _signal.signal(
+                        _signal.SIGINT, _signal.default_int_handler
+                    )
+                    # Force prompt_toolkit's AppSession to recreate its
+                    # cached Output, so the display hook's `Out[N]:` print
+                    # routes through our current sys.stdout tee (live to
+                    # the terminal and captured into the sink). A stale
+                    # cached Output bound to a previous prompt cycle's
+                    # stdout would write somewhere we can't see.
+                    _session = get_app_session()
+                    _saved_session_output = _session._output
+                    _session._output = None
+                    # Detach the running app from the AppSession during the
+                    # cell. `print_formatted_text` (used by IPython's display
+                    # hook for `Out[N]:`) otherwise sees a running app and
+                    # *defers* its render via `loop.call_soon_threadsafe(
+                    # lambda: run_in_terminal(render))` — which never fires
+                    # because the loop is blocked by our sync cell. With no
+                    # app visible, the helper renders inline through our
+                    # restored AppSession.output (= our tee), so the styled
+                    # `Out[N]:` appears live before the next prompt redraw.
+                    _saved_session_app = _session.app
+                    _session.app = None
+                    result = None
+                    try:
+                        try:
+                            result = _run_execute_python_sync(code, sink)
+                        finally:
+                            # Restore the signal handler FIRST so that any
+                            # late-arriving SIGINT after the cell returns
+                            # routes to the prompt_toolkit/asyncio handler
+                            # rather than raising KeyboardInterrupt in main
+                            # thread mid-cleanup.
+                            try:
+                                _signal.signal(_signal.SIGINT, _old_sigint)
+                            except Exception:
+                                pass
+                            # Restore the wakeup fd to whatever asyncio had
+                            # before and discard our private pipe (any
+                            # bytes written into it by SIGINT during the
+                            # cell die with it, so the loop never sees a
+                            # phantom signal).
+                            try:
+                                _signal.set_wakeup_fd(_saved_wakeup_fd)
+                            except Exception:
+                                pass
+                            try:
+                                _os.close(_wake_r_fd)
+                            except Exception:
+                                pass
+                            try:
+                                _os.close(_wake_w_fd)
+                            except Exception:
+                                pass
+                            try:
+                                _session.app = _saved_session_app
+                            except Exception:
+                                pass
+                            try:
+                                _session._output = _saved_session_output
+                            except Exception:
+                                pass
+                    except KeyboardInterrupt:
+                        # A KeyboardInterrupt that slipped through the
+                        # cleanup window (signal still default-int while a
+                        # finally clause was running). The cell itself was
+                        # either completed or already records the interrupt
+                        # via run_cell; swallow here so it doesn't propagate
+                        # to IPython's mainloop and trigger the escape
+                        # message. The user's intent (interrupt the cell)
+                        # has already been honored.
+                        if result is None:
+                            result = {"interrupted": True}
+                    # Our cell incremented execution_count, but the user's
+                    # pending prompt was rendered with a pre-evaluated
+                    # message (IPython caches the message text in default
+                    # emacs mode for CPU efficiency). Swap in a callable
+                    # that re-fetches the tokens now, while we're still
+                    # inside `in_terminal` so its own exit-redraw picks up
+                    # the fresh count in one draw (no double-redraw
+                    # flicker/garble).
+                    try:
+                        pt_app.message = lambda: PygmentsTokens(
+                            ip.prompts.in_prompt_tokens()
+                        )
+                    except Exception:
+                        pass
+                return result
+            cf_future = asyncio.run_coroutine_threadsafe(_run_on_pt(), loop)
+            return cf_future.result()
+
+        info = await anyio.to_thread.run_sync(runner)
 
         if info.get("interrupted"):
             text = "Interrupted by user (Ctrl-C)"
@@ -547,14 +877,15 @@ def _register_mcp_handlers():
         output = sink.getvalue()
         if output:
             parts.append(output.rstrip())
-        if info.get("result_repr") is not None:
-            parts.append(info["result_repr"])
+        # Skip info["result_repr"] — IPython's display hook already prints the
+        # last expression's value (as ``Out[N]: <repr>``) when silent=False,
+        # and that line is captured into ``sink`` above. Including it again
+        # would duplicate the value in the response.
         if info.get("error_in_exec") is not None:
             parts.append(info["error_in_exec"])
         if info.get("error_before_exec") is not None:
             parts.append(info["error_before_exec"])
         text = "\n".join(parts) if parts else "(no output)"
-        _logger.info(f"execute_python → {text}")
         return text
 
 if _mcp_available:
@@ -649,9 +980,7 @@ def start_mcp_server(port=9966, socket_path=_SOCKET_PATH_NOT_SET, token_hash=Non
     if not _mcp_available:
         raise ImportError("MCP server requires the 'mcp' package. Install it with: pip install opp_repl[mcp]")
 
-    global _original_sigint_handler, _cleanup_socket_path
-    _original_sigint_handler = signal.getsignal(signal.SIGINT)
-    signal.signal(signal.SIGINT, _sigint_handler)
+    global _cleanup_socket_path
 
     logging.getLogger("mcp").setLevel(logging.WARNING)
 
