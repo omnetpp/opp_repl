@@ -825,3 +825,46 @@ def run_task_tests(multiple_tasks_class=MultipleTasks, task_class=Task, expected
     assert(len(multiple_task_results2.multiple_tasks.tasks) == 0)
     multiple_task_results3 = multiple_task_results1.rerun(concurrent=False)
     assert(multiple_task_results3.result == expected_result)
+
+
+def run_fake_tasks(num_tasks: int = 3, duration_seconds: int = 30, tick_seconds: float = 1.0):
+    """Run several long-running fake tasks concurrently for testing.
+
+    Each task prints a line to stdout and emits a log record every
+    ``tick_seconds`` for ``duration_seconds``. Built on top of
+    :py:class:`MultipleTasks` so SIGINT (Ctrl-C) cancels the run cleanly
+    via the framework's cooperative cancel flag.
+
+    Args:
+        num_tasks: Number of concurrent fake tasks.
+        duration_seconds: How long each task ticks before stopping normally.
+        tick_seconds: Interval between successive print/log lines per task.
+    """
+    logger = logging.getLogger("fake_tasks")
+
+    class FakeTask(Task):
+        def __init__(self, task_id, duration_seconds, tick_seconds):
+            super().__init__(name=f"fake-task-{task_id}", action="ticking")
+            self.task_id = task_id
+            self.duration_seconds = duration_seconds
+            self.tick_seconds = tick_seconds
+
+        def run_protected(self, **kwargs):
+            deadline = time.monotonic() + self.duration_seconds
+            i = 0
+            while time.monotonic() < deadline:
+                if self.cancel:
+                    return TaskResult(task=self, result="CANCEL", reason="Cancel by user")
+                i += 1
+                print(f"[task {self.task_id}] tick {i}")
+                logger.info("task %d tick %d", self.task_id, i)
+                # Chunk the sleep so cooperative cancel kicks in within ~0.1s.
+                remaining = self.tick_seconds
+                while remaining > 0 and not self.cancel:
+                    chunk = min(0.1, remaining)
+                    time.sleep(chunk)
+                    remaining -= chunk
+            return TaskResult(task=self, result="DONE")
+
+    tasks = [FakeTask(n + 1, duration_seconds, tick_seconds) for n in range(num_tasks)]
+    return MultipleTasks(tasks=tasks, name="fake-task", concurrent=True, scheduler="thread").run()
