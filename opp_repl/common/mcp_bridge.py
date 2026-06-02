@@ -11,6 +11,7 @@ frames) are written back to stdout as newline-terminated JSON objects.
 """
 
 import argparse
+import collections
 import json
 import os
 import socket as _socket
@@ -198,6 +199,122 @@ def _connection_monitor(socket_path, interval=2.0):
             _emit_notification("error", f"opp_repl MCP server is no longer reachable at {socket_path}. Start opp_repl with --mcp-socket.")
 
 
+class _StdinQueue:
+    """Thread-safe FIFO with front-pushback and EOF signalling.
+
+    Decouples stdin reading from the main proxy loop: a background reader
+    thread feeds incoming JSON-RPC lines into the queue, so the main loop
+    can pop them while *also* watching for a ``notifications/cancelled``
+    targeting an in-flight tool call (the SSE iterator would otherwise
+    keep us from reading stdin until the call finishes).
+    """
+
+    def __init__(self):
+        self._items = collections.deque()
+        self._cv = threading.Condition()
+        self._eof = False
+
+    def put(self, line):
+        with self._cv:
+            self._items.append(line)
+            self._cv.notify()
+
+    def put_front(self, lines):
+        """Insert *lines* at the head, preserving their relative order."""
+        with self._cv:
+            for line in reversed(lines):
+                self._items.appendleft(line)
+            self._cv.notify()
+
+    def get(self, timeout=None):
+        """Pop the next line, blocking up to *timeout* seconds.
+
+        Returns None on timeout or after EOF when the buffer is empty.
+        """
+        with self._cv:
+            if timeout is None:
+                while not self._items and not self._eof:
+                    self._cv.wait()
+            else:
+                deadline = time.monotonic() + timeout
+                while not self._items and not self._eof:
+                    remaining = deadline - time.monotonic()
+                    if remaining <= 0:
+                        break
+                    self._cv.wait(timeout=remaining)
+            if self._items:
+                return self._items.popleft()
+            return None
+
+    def close(self):
+        with self._cv:
+            self._eof = True
+            self._cv.notify_all()
+
+
+def _stream_with_cancel_watch(stdin_q, resp, req_id):
+    """Iterate *resp* as SSE while watching *stdin_q* for a cancellation
+    of *req_id*.
+
+    Any message popped from the queue that isn't the matching
+    ``notifications/cancelled`` is stashed in a deferred list and pushed
+    back to the front of the queue when the stream ends, so the main
+    loop processes it next in order.
+
+    When the matching cancellation arrives, the response is closed from
+    the watcher thread — the server sees the ASGI ``http.disconnect``
+    and propagates it into ``execute_python`` as a ``CancelledError``,
+    which then injects SIGINT into the REPL main thread.
+    """
+    deferred = []
+    stop_event = threading.Event()
+    cancelled = threading.Event()
+
+    def _watcher():
+        while not stop_event.is_set():
+            nxt = stdin_q.get(timeout=0.5)
+            if nxt is None:
+                continue
+            try:
+                m = json.loads(nxt)
+            except json.JSONDecodeError:
+                deferred.append(nxt)
+                continue
+            if (m.get("method") == "notifications/cancelled"
+                    and m.get("params", {}).get("requestId") == req_id):
+                cancelled.set()
+                try:
+                    resp.close()
+                except Exception:
+                    pass
+                return
+            deferred.append(nxt)
+
+    watcher_thread = threading.Thread(
+        target=_watcher, daemon=True, name="opp-repl-bridge-cancel-watch"
+    )
+    watcher_thread.start()
+
+    try:
+        for sse_line in resp.iter_lines():
+            if sse_line.startswith("data:"):
+                data = sse_line[5:].strip()
+                if data and data != "[DONE]":
+                    sys.stdout.write(data + "\n")
+                    sys.stdout.flush()
+    except Exception:
+        # If we intentionally aborted via the watcher, swallow whatever
+        # httpx raised on the now-closed connection. Anything else
+        # re-raises into the outer error handler.
+        if not cancelled.is_set():
+            raise
+    finally:
+        stop_event.set()
+        watcher_thread.join(timeout=2.0)
+        if deferred:
+            stdin_q.put_front(deferred)
+
+
 def _proxy(socket_path):
     try:
         import httpx
@@ -217,15 +334,35 @@ def _proxy(socket_path):
         target=_connection_monitor, args=(socket_path,), daemon=True, name="opp-repl-mcp-monitor"
     ).start()
 
+    # Stdin reading runs on its own thread so we can detect a
+    # ``notifications/cancelled`` for the in-flight tool call while we're
+    # blocked inside the SSE iterator of its streaming response. The
+    # reader feeds raw JSON-RPC lines into a queue; the main loop and the
+    # per-request cancellation watcher both pop from it.
+    stdin_q = _StdinQueue()
+
+    def _stdin_reader():
+        try:
+            for raw in sys.stdin.buffer:
+                line = raw.decode("utf-8", errors="replace").rstrip("\n\r")
+                if line:
+                    stdin_q.put(line)
+        finally:
+            stdin_q.close()
+
+    threading.Thread(
+        target=_stdin_reader, daemon=True, name="opp-repl-bridge-stdin"
+    ).start()
+
     transport = httpx.HTTPTransport(uds=socket_path)
     session_id = None
     announced_initial_state = False
 
     with httpx.Client(transport=transport, base_url="http://localhost", timeout=300.0) as client:
-        for raw in sys.stdin.buffer:
-            line = raw.decode("utf-8", errors="replace").rstrip("\n\r")
-            if not line:
-                continue
+        while True:
+            line = stdin_q.get()
+            if line is None:
+                break
 
             # Announce initial reachability on the first client message: MCP
             # forbids server->client notifications before the handshake begins,
@@ -297,12 +434,7 @@ def _proxy(socket_path):
 
                     content_type = resp.headers.get("content-type", "")
                     if "text/event-stream" in content_type:
-                        for sse_line in resp.iter_lines():
-                            if sse_line.startswith("data:"):
-                                data = sse_line[5:].strip()
-                                if data and data != "[DONE]":
-                                    sys.stdout.write(data + "\n")
-                                    sys.stdout.flush()
+                        _stream_with_cancel_watch(stdin_q, resp, req_id)
                     else:
                         body = resp.read().decode("utf-8", errors="replace").strip()
                         if body:
