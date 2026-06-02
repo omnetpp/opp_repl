@@ -669,6 +669,10 @@ class CompareSimulationsTask(Task):
             self.eventlog_options = "module" if not compare_eventlog else ""
         else:
             self.eventlog_options = eventlog_options
+        # Fingerprint trajectory comparison parses the .elog file (see
+        # SimulationTaskResult.get_fingerprint_trajectory), and eventlog
+        # comparison obviously needs it; nothing else does.
+        record_eventlog = compare_fingerprint or compare_eventlog
         self.multiple_simulation_tasks = multiple_simulation_tasks
         num_tasks = len(multiple_simulation_tasks.tasks)
         if num_tasks != 2:
@@ -676,7 +680,7 @@ class CompareSimulationsTask(Task):
         index = 0
         for task in self.multiple_simulation_tasks.tasks:
             index += 1
-            task.record_eventlog = True
+            task.record_eventlog = record_eventlog
             task.stdout_file_path = f"results/{task.simulation_config.config}-#{str(task.run_number)}-{index}.out"
             task.eventlog_file_path = f"results/{task.simulation_config.config}-#{str(task.run_number)}-{index}.elog"
             task.scalar_file_path = f"results/{task.simulation_config.config}-#{str(task.run_number)}-{index}.sca"
@@ -694,8 +698,10 @@ class CompareSimulationsTask(Task):
             return "comparing " + task_parameters_string_1
 
     def run_protected(self, context=None, ingredients="tplx", index=None, append_args=[], **kwargs):
-        eventlog_options_args = ["--eventlog-options=" + self.eventlog_options] if self.eventlog_options else []
-        append_args = append_args + ["--cmdenv-express-mode=false", "--cmdenv-log-prefix=%l %C%<: ", "--cmdenv-redirect-output=true", "--eventlog-snapshot-frequency=100MiB", "--eventlog-index-frequency=10MiB"] + eventlog_options_args + ["--fingerprint=0000-0000/" + ingredients] + get_ingredients_append_args(ingredients)
+        record_eventlog = self.compare_fingerprint or self.compare_eventlog
+        eventlog_args = (["--eventlog-snapshot-frequency=100MiB", "--eventlog-index-frequency=10MiB"]
+                         + (["--eventlog-options=" + self.eventlog_options] if self.eventlog_options else [])) if record_eventlog else []
+        append_args = append_args + ["--cmdenv-express-mode=false", "--cmdenv-log-prefix=%l %C%<: ", "--cmdenv-redirect-output=true"] + eventlog_args + ["--fingerprint=0000-0000/" + ingredients] + get_ingredients_append_args(ingredients)
         multiple_task_results = self.multiple_simulation_tasks.run(context=context, append_args=append_args, **kwargs)
         return self.task_result_class(multiple_task_results=multiple_task_results, task=self, result=multiple_task_results.result, color=multiple_task_results.color)
 
