@@ -62,6 +62,24 @@ packages, functions and classes are pre-loaded.
 Returns captured stdout/stderr output.  If the code is a single
 expression, its repr is returned.
 
+## Interrupting a running cell
+
+A cell launched through `execute_python` can be interrupted from either
+side without losing the REPL session:
+
+- **`Ctrl-C` in the REPL terminal** — exactly as if you had typed the
+  cell yourself.
+- **The agent's Stop / cancel control** — sends an MCP cancellation
+  that the server turns into the same kind of interrupt.
+
+Both paths trigger opp_repl's normal cancellation handling. Long-running
+operations (task pipelines, simulation runs, etc.) see their cooperative
+`cancel` flag set and report a `CANCEL (Cancel by user)` result rather
+than crashing partway. Output produced before the interrupt is
+preserved both in the REPL terminal and in the agent's response, and
+the cell stays in IPython's history (`In [N]:` / `Out[N]:`) like any
+other.
+
 ## Resources
 
 ### Guide resources
