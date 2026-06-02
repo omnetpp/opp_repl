@@ -22,7 +22,10 @@ Goals
    streamed line-by-line via ``ctx.info`` notifications while the cell runs.
 5. Ctrl-C on the terminal interrupts the cell, and does NOT leak into the
    user's pending prompt after the cell finishes.
-6. The MCP event loop is never blocked by a long-running cell.
+6. MCP-side cancellation (Stop button in the agent UI, or any
+   ``notifications/cancelled``) interrupts the cell with the same
+   semantics as a terminal Ctrl-C.
+7. The MCP event loop is never blocked by a long-running cell.
 
 Three threads are involved
 --------------------------
@@ -36,10 +39,15 @@ Three threads are involved
 
 Dispatch path
 -------------
-``execute_python`` (MCP loop) → ``anyio.to_thread.run_sync`` (worker) →
+``execute_python`` (MCP loop) → dedicated worker ``threading.Thread`` →
 ``asyncio.run_coroutine_threadsafe(_run_on_pt, pt_loop)`` (main thread) →
 ``async with in_terminal():`` (prompt suspended) →
 ``_run_execute_python_sync`` → ``ip.run_cell``.
+
+The MCP loop waits for the worker via an ``asyncio.Event`` that the
+worker sets through ``call_soon_threadsafe``. We manage the thread
+ourselves (rather than via ``anyio.to_thread.run_sync``) so we can
+interleave MCP cancellation handling — see below.
 
 We can't use prompt_toolkit's sync ``run_in_terminal`` helper because it
 calls ``ensure_future`` on the calling thread, which on the worker thread
@@ -114,6 +122,27 @@ Ctrl-C that slips through after SIGINT is restored to default-int but
 before the finally chain finishes; the user's intent was already honored
 by the cell-level handler, so we swallow it.
 
+MCP-side cancellation
+---------------------
+When the agent UI sends ``notifications/cancelled``, FastMCP cancels the
+``execute_python`` coroutine, surfacing as ``asyncio.CancelledError`` on
+our ``await done_event.wait()``. The cell is still running on the main
+thread at this point. We deliver SIGINT to our own process via
+``os.kill(os.getpid(), signal.SIGINT)`` — CPython routes the signal to
+the main thread, where ``default_int_handler`` is installed for the
+cell's duration, so ``KeyboardInterrupt`` raises inside ``ip.run_cell``
+exactly as it would for a terminal Ctrl-C. After signalling we
+``asyncio.shield(done_event.wait())`` to let the cell wind down (signal
+handler restore, AppSession restore, etc.) before re-raising the
+``CancelledError`` to the MCP framework, so the REPL is in a clean state
+on return.
+
+The window where SIGINT is meaningful is exactly the window where we've
+installed ``default_int_handler`` (inside ``in_terminal()``). Before or
+after that window the signal routes to asyncio's normal SIGINT handler,
+which is also correct — though it means cancellation arriving during the
+narrow setup/teardown around the cell may not interrupt the cell itself.
+
 AppSession tweaks during the cell
 ---------------------------------
 * ``_session._output = None`` — forces prompt_toolkit to recreate its
@@ -165,6 +194,7 @@ import os
 from pathlib import Path
 import pydoc
 import re
+import signal
 import sys
 import threading
 import traceback
@@ -866,7 +896,53 @@ def _register_mcp_handlers():
             cf_future = asyncio.run_coroutine_threadsafe(_run_on_pt(), loop)
             return cf_future.result()
 
-        info = await anyio.to_thread.run_sync(runner)
+        # Run the snippet in a dedicated worker thread, observed via an
+        # asyncio.Event. We manage this ourselves (rather than via
+        # anyio.to_thread.run_sync) so we can react to MCP cancellation
+        # — e.g. the Stop button in the agent UI sends a
+        # notifications/cancelled which FastMCP turns into an
+        # asyncio.CancelledError on our task — by injecting Ctrl-C into
+        # the main thread before the worker has finished.
+        done_event = asyncio.Event()
+        result_box = {}
+
+        def _worker():
+            try:
+                result_box["info"] = runner()
+            except BaseException as e:
+                result_box["exc"] = e
+            finally:
+                mcp_loop.call_soon_threadsafe(done_event.set)
+
+        worker_thread = threading.Thread(
+            target=_worker, daemon=True, name="opp-repl-mcp-execute"
+        )
+        worker_thread.start()
+
+        try:
+            await done_event.wait()
+        except asyncio.CancelledError:
+            # MCP client cancelled. Inject Ctrl-C into the main thread —
+            # same mechanism as a terminal Ctrl-C. The cell, running
+            # inside in_terminal() with default_int_handler installed,
+            # raises KeyboardInterrupt at the next bytecode boundary;
+            # ip.run_cell records it and the cleanup path runs.
+            try:
+                os.kill(os.getpid(), signal.SIGINT)
+            except Exception:
+                pass
+            # Wait for the cell to wind down before propagating, so the
+            # REPL is back in a clean state when we return. Shield so a
+            # double-cancel can't strand us mid-cleanup.
+            try:
+                await asyncio.shield(done_event.wait())
+            except BaseException:
+                pass
+            raise
+
+        if "exc" in result_box:
+            raise result_box["exc"]
+        info = result_box["info"]
 
         if info.get("interrupted"):
             text = "Interrupted by user (Ctrl-C)"
