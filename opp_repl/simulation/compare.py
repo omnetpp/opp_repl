@@ -704,7 +704,8 @@ class CompareSimulationsTask(Task):
         # Express mode is much faster, but skips per-event log output that
         # stdout trajectory comparison needs.
         stdout_args = ["--cmdenv-express-mode=false", "--cmdenv-log-prefix=%l %C%<: ", "--cmdenv-redirect-output=true"] if self.compare_stdout else []
-        append_args = append_args + stdout_args + eventlog_args + ["--fingerprint=0000-0000/" + ingredients] + get_ingredients_append_args(ingredients)
+        statistics_args = [] if self.compare_statistics else ["--scalar-recording=false", "--vector-recording=false", "--bin-recording=false", "--param-recording=false"]
+        append_args = append_args + stdout_args + eventlog_args + statistics_args + ["--fingerprint=0000-0000/" + ingredients] + get_ingredients_append_args(ingredients)
         multiple_task_results = self.multiple_simulation_tasks.run(context=context, append_args=append_args, **kwargs)
         return self.task_result_class(multiple_task_results=multiple_task_results, task=self, result=multiple_task_results.result, color=multiple_task_results.color)
 
