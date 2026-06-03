@@ -166,6 +166,11 @@ class OmnetppProject:
             env.setdefault("CCACHE_BASEDIR", root)
             # CCACHE_NOHASHDIR: don't hash the CWD so worktrees at different absolute paths still hit the cache
             env.setdefault("CCACHE_NOHASHDIR", "true")
+            # CCACHE_SLOPPINESS: tolerate trivial cache-busters so makefile/task engines share entries
+            env.setdefault("CCACHE_SLOPPINESS",
+                           "time_macros,locale,include_file_mtime,include_file_ctime,system_headers,pch_defines")
+            # CCACHE_COMPILERCHECK=content: hash the compiler binary by content rather than mtime/size
+            env.setdefault("CCACHE_COMPILERCHECK", "content")
         return env
 
     def is_build_up_to_date(self, mode="release"):
@@ -564,6 +569,11 @@ class SimulationProject:
             env.setdefault("CCACHE_BASEDIR", root)
             # CCACHE_NOHASHDIR: don't hash the CWD so worktrees at different absolute paths still hit the cache
             env.setdefault("CCACHE_NOHASHDIR", "true")
+            # CCACHE_SLOPPINESS: tolerate trivial cache-busters so makefile/task engines share entries
+            env.setdefault("CCACHE_SLOPPINESS",
+                           "time_macros,locale,include_file_mtime,include_file_ctime,system_headers,pch_defines")
+            # CCACHE_COMPILERCHECK=content: hash the compiler binary by content rather than mtime/size
+            env.setdefault("CCACHE_COMPILERCHECK", "content")
         ws = self.get_workspace()
         for used_project_name in self.used_projects:
             used_project = ws.get_simulation_project(used_project_name, None)
