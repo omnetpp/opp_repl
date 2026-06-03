@@ -924,7 +924,7 @@ class CleanSimulationProjectTask(MultipleCleanTasks):
                 generated_file = re.sub(r"\.msg", suffix, msg_file)
                 msg_clean_tasks.append(CleanFileTask(simulation_project=self.simulation_project, file_path=generated_file))
         if msg_clean_tasks:
-            tasks.append(MultipleCleanTasks(tasks=msg_clean_tasks, name="clean generated MSG file", concurrent=True))
+            tasks.append(MultipleCleanTasks(tasks=msg_clean_tasks, name="generated MSG file clean", concurrent=True))
         # Copied binaries — apply the same prefix/suffix/extension as SimulationProjectCopyBinaryTask
         binary_clean_tasks = []
         for build_type in self.simulation_project.build_types:
@@ -938,7 +938,7 @@ class CleanSimulationProjectTask(MultipleCleanTasks):
                 file_path = _binary_target_relative_path(self.simulation_project, build_type, binary_name, self.mode, makefile_inc_config)
                 binary_clean_tasks.append(CleanFileTask(simulation_project=self.simulation_project, file_path=file_path))
         if binary_clean_tasks:
-            tasks.append(MultipleCleanTasks(tasks=binary_clean_tasks, name="clean binary", concurrent=True))
+            tasks.append(MultipleCleanTasks(tasks=binary_clean_tasks, name="binary clean", concurrent=True))
         # Output directory
         tasks.append(CleanDirectoryTask(simulation_project=self.simulation_project, directory_path="out"))
         return tasks
