@@ -846,18 +846,17 @@ class SimulationProject:
 
     # KLUDGE TODO replace this with a Python binding to the C++ configuration reader
     def collect_ini_file_simulation_configs(self, ini_path, mode="release"):
-        def get_sim_time_limit(config_dicts, config):
+        def get_inherited(config_dicts, config, key):
             config_dict = config_dicts[config]
-            if "sim_time_limit" in config_dict:
-                return config_dict["sim_time_limit"]
+            if key in config_dict:
+                return config_dict[key]
             if "extends" in config_dict:
-                extends = config_dict["extends"]
-                for base_config in extends.split(","):
+                for base_config in config_dict["extends"].split(","):
                     if base_config in config_dicts:
-                        sim_time_limit = get_sim_time_limit(config_dicts, base_config)
-                        if sim_time_limit:
-                            return sim_time_limit
-            return config_dicts["General"].get("sim_time_limit")
+                        value = get_inherited(config_dicts, base_config, key)
+                        if value is not None:
+                            return value
+            return config_dicts["General"].get(key)
         def create_config_dict(config):
             return {"config": config, "abstract": False, "emulation": False, "expected_result": "DONE", "user_interface": None, "description": None, "network": None}
         simulation_configs = []
@@ -881,6 +880,9 @@ class SimulationProject:
             match = re.match(r"#? *expected-result *= *\"(\w+)\"", line)
             if match:
                 config_dict["expected_result"] = match.group(1)
+            match = re.match(r"#? *bounded *= *(\w+)", line)
+            if match:
+                config_dict["bounded"] = match.group(1).lower() == "true"
             line = re.sub(r"(.*)#.*", "//1", line).strip()
             match = re.match(r" *extends *= *(\w+)", line)
             if match:
@@ -897,20 +899,33 @@ class SimulationProject:
             match = re.match(r"sim-time-limit *= *(.*)", line)
             if match:
                 config_dict["sim_time_limit"] = match.group(1)
+            match = re.match(r"cpu-time-limit *= *(.*)", line)
+            if match:
+                config_dict["cpu_time_limit"] = match.group(1)
+            match = re.match(r"real-time-limit *= *(.*)", line)
+            if match:
+                config_dict["real_time_limit"] = match.group(1)
         general_config_dict = config_dicts["General"]
         for config, config_dict in config_dicts.items():
             config = config_dict["config"]
             num_runs = self.get_num_runs_in_config(ini_path, config, mode=mode)
             if num_runs is None:
                 continue
-            sim_time_limit = get_sim_time_limit(config_dicts, config)
+            sim_time_limit = get_inherited(config_dicts, config, "sim_time_limit")
+            cpu_time_limit = get_inherited(config_dicts, config, "cpu_time_limit")
+            real_time_limit = get_inherited(config_dicts, config, "real_time_limit")
+            explicit_bounded = get_inherited(config_dicts, config, "bounded")
+            if explicit_bounded is None:
+                bounded = bool(sim_time_limit or cpu_time_limit or real_time_limit)
+            else:
+                bounded = explicit_bounded
             description = config_dict["description"]
             description_abstract = (re.search(r"\((a|A)bstract\)", description) is not None) if description else False
             abstract = (config_dict["network"] is None and config_dict["config"] == "General") or config_dict["abstract"] or description_abstract
             emulation = config_dict["emulation"]
             expected_result = config_dict["expected_result"]
             user_interface = config_dict["user_interface"] or general_config_dict["user_interface"]
-            simulation_config = SimulationConfig(self, os.path.relpath(working_directory, self.get_full_path(".")), ini_file=ini_file, config=config, sim_time_limit=sim_time_limit, num_runs=num_runs, abstract=abstract, emulation=emulation, expected_result=expected_result, user_interface=user_interface, description=description)
+            simulation_config = SimulationConfig(self, os.path.relpath(working_directory, self.get_full_path(".")), ini_file=ini_file, config=config, sim_time_limit=sim_time_limit, cpu_time_limit=cpu_time_limit, real_time_limit=real_time_limit, bounded=bounded, num_runs=num_runs, abstract=abstract, emulation=emulation, expected_result=expected_result, user_interface=user_interface, description=description)
             simulation_configs.append(simulation_config)
         return simulation_configs
 

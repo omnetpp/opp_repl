@@ -23,7 +23,7 @@ class SimulationConfig:
     Represents a simulation config from an INI file under a working directory in a specific simulation project.
     """
 
-    def __init__(self, simulation_project, working_directory, ini_file="omnetpp.ini", config="General", num_runs=1, sim_time_limit=None, abstract=False, emulation=False, expected_result="DONE", user_interface="Cmdenv", description=None):
+    def __init__(self, simulation_project, working_directory, ini_file="omnetpp.ini", config="General", num_runs=1, sim_time_limit=None, cpu_time_limit=None, real_time_limit=None, bounded=False, abstract=False, emulation=False, expected_result="DONE", user_interface="Cmdenv", description=None):
         """
         Initializes a new simulation config.
 
@@ -45,6 +45,17 @@ class SimulationConfig:
 
             sim_time_limit (string):
                 The simulation time limit specified by the configuration section of the INI file.
+
+            cpu_time_limit (string):
+                The CPU time limit specified by the configuration section of the INI file.
+
+            real_time_limit (string):
+                The wall-clock time limit specified by the configuration section of the INI file.
+
+            bounded (bool):
+                Whether the simulation is guaranteed to terminate. True when a time limit is set,
+                or when the INI file contains an explicit ``# bounded = true`` marker (which also
+                lets users assert termination for configs that end naturally on no-more-events).
 
             abstract (bool):
                 Specifies if the simulation config is not final (i.e. it's meant to be derived from) and thus it cannot be run.
@@ -68,6 +79,9 @@ class SimulationConfig:
         self.config = config
         self.num_runs = num_runs
         self.sim_time_limit = sim_time_limit
+        self.cpu_time_limit = cpu_time_limit
+        self.real_time_limit = real_time_limit
+        self.bounded = bounded
         self.abstract = abstract
         self.emulation = emulation or working_directory.find("emulation") != -1
         self.expected_result = expected_result
