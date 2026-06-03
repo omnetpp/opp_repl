@@ -41,6 +41,27 @@ from opp_repl.common.util import *
 
 _logger = logging.getLogger(__name__)
 
+# Gerund -> simple past, for rendering "Building foo" at start (▶) and "Built foo"
+# at end (◉) of a MultipleTasks group. Unknown verbs fall back to the gerund.
+_PAST_TENSE = {
+    "Building": "Built",
+    "Cleaning": "Cleaned",
+    "Compiling": "Compiled",
+    "Generating": "Generated",
+    "Linking": "Linked",
+    "Copying": "Copied",
+    "Running": "Ran",
+    "Testing": "Tested",
+    "Updating": "Updated",
+    "Removing": "Removed",
+    "Installing": "Installed",
+    "Capturing": "Captured",
+}
+
+def _past_tense(action):
+    return _PAST_TENSE.get(action, action)
+
+
 class TaskProgress:
     """
     scheduler:
@@ -335,20 +356,23 @@ class MultipleTaskResults:
         self.expected = self.expected_result == self.result
 
     def __repr__(self):
+        past = _past_tense(self.multiple_tasks.action)
+        prefix = f"{past} " if past else ""
+        name = self.multiple_tasks.name
         if len(self.results) == 0:
             if self.result != self.possible_results[0]:
                 reason = self.kwargs.get("reason", "")
-                return f"Multiple {self.multiple_tasks.name} results: " + self.color + self.result + COLOR_RESET + (f" ({reason})" if reason else "")
-            return f"Empty {self.multiple_tasks.name} result"
+                return f"{prefix}{name}: " + self.color + self.result + COLOR_RESET + (f" ({reason})" if reason else "")
+            return f"{prefix}{name}: empty"
         elif len(self.results) == 1:
-            return f"Single {self.multiple_tasks.name} result: " + self.results[0].__repr__()
+            return f"{prefix}{name}: " + self.results[0].__repr__()
         else:
             exclude_result_filter = "|".join(filter(lambda possible_result: (self.possible_result_colors[self.possible_results.index(possible_result)] == COLOR_GREEN or
                                                                              self.possible_result_colors[self.possible_results.index(possible_result)] == COLOR_CYAN),
                                                     self.possible_results))
             details = self.get_details(exclude_result_filter=exclude_result_filter, expected=False, include_parameters=True)
-            return f"Multiple {self.multiple_tasks.name} results: " + self.color + self.result + COLOR_RESET + ", " + \
-                   "summary: " + self.get_summary() + ("" if details.strip() == "" else "\n" + details)
+            return f"{prefix}{name}: " + self.color + self.result + COLOR_RESET + \
+                   f" ({self.get_summary()})" + ("" if details.strip() == "" else "\n" + details)
 
     def is_all_results_done(self):
         return self.num_expected["DONE"] == len(self.results)
@@ -394,7 +418,7 @@ class MultipleTaskResults:
         details = self.get_details(level=level + 1, exclude_result_filter=exclude_result_filter, expected=False, include_parameters=True)
         if not details.isspace():
             details = "\n" + details
-        return f"Multiple {self.multiple_tasks.name}s: " + self.get_summary() + details
+        return f"{self.multiple_tasks.get_close_description()}: " + self.get_summary() + details
 
     def get_summary(self):
         if len(self.results) == 1:
@@ -637,7 +661,7 @@ class MultipleTasks:
     Represents multiple tasks that can be run together. 
     """
 
-    def __init__(self, tasks=[], name="task", concurrent=True, pass_keyboard_interrupt=False, randomize=False, chunksize=1, scheduler="thread", cluster=None, multiple_task_results_class=MultipleTaskResults, **kwargs):
+    def __init__(self, tasks=[], name="task", action="", concurrent=True, pass_keyboard_interrupt=False, randomize=False, chunksize=1, scheduler="thread", cluster=None, multiple_task_results_class=MultipleTaskResults, **kwargs):
         """
         Initializes a new multiple tasks object.
 
@@ -647,6 +671,11 @@ class MultipleTasks:
 
             name (string):
                 A human readable short description of the multiple tasks, usually a noun.
+
+            action (string):
+                A human readable gerund describing the operation, e.g. "Building",
+                "Cleaning", "Compiling". Used to render "<Action> <name> (N concurrent)"
+                at the start of the group and the past-tense form at the end.
 
             concurrent (bool):
                 Specifies if the individual tasks are run sequentially or concurrently.
@@ -668,6 +697,7 @@ class MultipleTasks:
         self.kwargs = kwargs
         self.tasks = tasks
         self.name = name
+        self.action = action
         self.concurrent = concurrent
         self.pass_keyboard_interrupt = pass_keyboard_interrupt
         self.randomize = randomize
@@ -695,12 +725,19 @@ class MultipleTasks:
             task.set_cancel(cancel)
 
     def get_description(self):
-        concurrency_description = "concurrently" if self.concurrent else "sequentially"
-        return f"{self.name}s ({concurrency_description})"
+        mode = "concurrent" if self.concurrent else "sequential"
+        prefix = f"{self.action} " if self.action else ""
+        return f"{prefix}{self.name} ({len(self.tasks)} {mode})"
+
+    def get_close_description(self):
+        mode = "concurrent" if self.concurrent else "sequential"
+        past = _past_tense(self.action)
+        prefix = f"{past} " if past else ""
+        return f"{prefix}{self.name} ({len(self.tasks)} {mode})"
 
     def log_structure(self, indent=0):
         status = "up-to-date" if self.is_up_to_date() else "to be done"
-        _logger.debug(f"{'  ' * indent}{self.get_description()}: {len(self.tasks)} tasks ({status})")
+        _logger.debug(f"{'  ' * indent}{self.get_description()} ({status})")
         for task in self.tasks:
             task.log_structure(indent=indent + 1)
 
@@ -718,7 +755,7 @@ class MultipleTasks:
         if self.is_up_to_date():
             return self.multiple_task_results_class(multiple_tasks=self, results=[], expected_result="SKIP", reason="Up-to-date")
         def run_internal(context=None, progress=None, output_stream=sys.stdout, **kwargs):
-            elements = [e for e in [progress.get_string(**kwargs), context.get_string(**kwargs), "▶", str(len(self.tasks)), self.get_description()] if e != ""]
+            elements = [e for e in [progress.get_string(**kwargs), context.get_string(**kwargs), "▶", self.get_description()] if e != ""]
             print(" ".join(elements), file=output_stream)
             if self.cancel:
                 task_results = list(map(lambda task: task.task_result_class(task=task, result="CANCEL", reason="Cancel by user"), self.tasks))
@@ -733,10 +770,10 @@ class MultipleTasks:
                     task_results = list(map(lambda task: task.task_result_class(task=task, result="CANCEL", reason="Cancel by user"), self.tasks))
                     multiple_task_results = self.multiple_task_results_class(multiple_tasks=self, results=task_results)
             progress = progress.increment_num_finished()
-            elements = [e for e in [progress.get_string(**kwargs), context.get_string(**kwargs), "◉", str(len(self.tasks)), self.get_description(), multiple_task_results.get_description()] if e != ""]
+            elements = [e for e in [progress.get_string(**kwargs), context.get_string(**kwargs), "◉", multiple_task_results.get_description()] if e != ""]
             print(" ".join(elements), file=output_stream)
             return multiple_task_results
-        return run_with_log_levels(run_internal, **dict(kwargs, context=extend_task_context(context, "multiple " + self.name + "s", index, count), progress=progress or TaskProgress(self.count_progress_steps(), scheduler=self.scheduler)))
+        return run_with_log_levels(run_internal, **dict(kwargs, context=extend_task_context(context, self.name, index, count), progress=progress or TaskProgress(self.count_progress_steps(), scheduler=self.scheduler)))
 
     def run_protected(self, output_stream=None, **kwargs):
         if self.scheduler == "cluster":

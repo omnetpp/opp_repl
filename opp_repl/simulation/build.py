@@ -18,6 +18,15 @@ from opp_repl.simulation.project import *
 
 _logger = logging.getLogger(__name__)
 
+
+def _project_prefixed_name(simulation_project, name):
+    """Build a MultipleTasks display name of the form '<project> <suffix>'."""
+    if simulation_project is None:
+        return name
+    project = simulation_project.get_name()
+    return f"{project} {name}" if name else project
+
+
 _default_build_engine = "makefile"
 
 def get_default_build_engine():
@@ -212,12 +221,10 @@ def build_project_using_makefile(simulation_project=None, mode="release", **kwar
         _logger.info(f"Building {simulation_project.get_name()} in {mode} mode ended")
 
 class MultipleBuildTasks(MultipleTasks):
-    def __init__(self, simulation_project=None, concurrent=True, multiple_task_results_class=MultipleBuildTaskResults, **kwargs):
-        super().__init__(concurrent=concurrent, multiple_task_results_class=multiple_task_results_class, **kwargs)
+    def __init__(self, simulation_project=None, action="Building", concurrent=True, multiple_task_results_class=MultipleBuildTaskResults, **kwargs):
+        kwargs["name"] = _project_prefixed_name(simulation_project, kwargs.pop("name", ""))
+        super().__init__(action=action, concurrent=concurrent, multiple_task_results_class=multiple_task_results_class, **kwargs)
         self.simulation_project = simulation_project
-
-    def get_description(self):
-        return self.simulation_project.get_name() + " " + super().get_description()
 
     def is_up_to_date(self):
         # Delegate to children: the wrapper is up-to-date iff each child is.
@@ -240,13 +247,10 @@ class MultipleBuildTasks(MultipleTasks):
         return outpu_files
 
 class MultipleMsgCompileTasks(MultipleTasks):
-    def __init__(self, simulation_project=None, name="MSG compile task", mode="release", concurrent=True, multiple_task_results_class=MultipleBuildTaskResults, **kwargs):
-        super().__init__(name=name, mode=mode, concurrent=concurrent, multiple_task_results_class=multiple_task_results_class, **kwargs)
+    def __init__(self, simulation_project=None, name="MSG", mode="release", action="Compiling", concurrent=True, multiple_task_results_class=MultipleBuildTaskResults, **kwargs):
+        super().__init__(name=_project_prefixed_name(simulation_project, name), action=action, mode=mode, concurrent=concurrent, multiple_task_results_class=multiple_task_results_class, **kwargs)
         self.simulation_project = simulation_project
         self.mode = mode
-
-    def get_description(self):
-        return self.simulation_project.get_name() + " " + super().get_description()
 
     def is_up_to_date(self):
         return all(t.is_up_to_date() for t in self.tasks)
@@ -260,13 +264,10 @@ class MultipleMsgCompileTasks(MultipleTasks):
         return result
 
 class MultipleCppCompileTasks(MultipleTasks):
-    def __init__(self, simulation_project=None, name="C++ compile task", mode="release", concurrent=True, multiple_task_results_class=MultipleBuildTaskResults, **kwargs):
-        super().__init__(name=name, mode=mode, concurrent=concurrent, multiple_task_results_class=multiple_task_results_class, **kwargs)
+    def __init__(self, simulation_project=None, name="C++", mode="release", action="Compiling", concurrent=True, multiple_task_results_class=MultipleBuildTaskResults, **kwargs):
+        super().__init__(name=_project_prefixed_name(simulation_project, name), action=action, mode=mode, concurrent=concurrent, multiple_task_results_class=multiple_task_results_class, **kwargs)
         self.simulation_project = simulation_project
         self.mode = mode
-
-    def get_description(self):
-        return self.simulation_project.get_name() + " " + super().get_description()
 
     def is_up_to_date(self):
         return all(t.is_up_to_date() for t in self.tasks)
@@ -786,7 +787,7 @@ class BuildSimulationProjectTask(MultipleTasks):
     Represents a task that builds a simulation project.
     """
 
-    def __init__(self, simulation_project, name="build task", mode="release", concurrent=True, multiple_task_results_class=MultipleBuildTaskResults, **kwargs):
+    def __init__(self, simulation_project, name="", mode="release", action="Building", concurrent=True, multiple_task_results_class=MultipleBuildTaskResults, **kwargs):
         """
         Initializes a new build simulation project task.
 
@@ -797,7 +798,7 @@ class BuildSimulationProjectTask(MultipleTasks):
             mode (string):
                 Specifies the build mode for the output binaries. Valie values are "debug" and "release".
         """
-        super().__init__(concurrent=False, name=name, mode=mode, multiple_task_results_class=multiple_task_results_class, **kwargs)
+        super().__init__(concurrent=False, name=_project_prefixed_name(simulation_project, name), action=action, mode=mode, multiple_task_results_class=multiple_task_results_class, **kwargs)
         self.simulation_project = simulation_project
         self.mode = mode
         self.concurrent_child_tasks = concurrent
@@ -805,9 +806,6 @@ class BuildSimulationProjectTask(MultipleTasks):
 
     def is_up_to_date(self):
         return all(t.is_up_to_date() for t in self.tasks)
-
-    def get_description(self):
-        return self.simulation_project.get_name() + " " + super().get_description()
 
     def get_build_tasks(self, **kwargs):
         # Get Makefile.inc configuration from the OMNeT++ project
@@ -871,7 +869,7 @@ class BuildSimulationProjectTask(MultipleTasks):
         all_cpp_compile_tasks = msg_cpp_compile_tasks + cpp_compile_tasks
         multiple_cpp_compile_tasks = MultipleCppCompileTasks(simulation_project=self.simulation_project, mode=self.mode, tasks=all_cpp_compile_tasks, concurrent=self.concurrent_child_tasks)
         link_tasks = flatten([[SimulationProjectLinkTask(simulation_project=self.simulation_project, build_type=build_type, mode=self.mode, compile_tasks=all_cpp_compile_tasks, makefile_inc_config=makefile_inc_config, feature_ldflags=feature_ldflags) for build_type in self.simulation_project.build_types] for _ in self.simulation_project.executables])
-        multiple_link_tasks = MultipleBuildTasks(simulation_project=self.simulation_project, tasks=link_tasks, name="link task", concurrent=self.concurrent_child_tasks)
+        multiple_link_tasks = MultipleBuildTasks(simulation_project=self.simulation_project, tasks=link_tasks, action="Linking", concurrent=self.concurrent_child_tasks)
         copy_binary_tasks = []
         for build_type in self.simulation_project.build_types:
             if build_type == "executable":
@@ -882,7 +880,7 @@ class BuildSimulationProjectTask(MultipleTasks):
                 names = self.simulation_project.static_libraries
             for name in names:
                 copy_binary_tasks.append(SimulationProjectCopyBinaryTask(simulation_project=self.simulation_project, build_type=build_type, name=name, mode=self.mode, makefile_inc_config=makefile_inc_config))
-        multiple_copy_binary_tasks = MultipleBuildTasks(simulation_project=self.simulation_project, tasks=copy_binary_tasks, name="copy task", concurrent=self.concurrent_child_tasks)
+        multiple_copy_binary_tasks = MultipleBuildTasks(simulation_project=self.simulation_project, tasks=copy_binary_tasks, action="Copying", concurrent=self.concurrent_child_tasks)
         all_tasks = []
         if features_header_task is not None:
             all_tasks.append(features_header_task)
@@ -981,18 +979,18 @@ class CleanDirectoryTask(Task):
         return self.task_result_class(task=self, result="DONE")
 
 class MultipleCleanTasks(MultipleTasks):
+    def __init__(self, action="Cleaning", **kwargs):
+        super().__init__(action=action, **kwargs)
+
     def is_up_to_date(self):
         return all(t.is_up_to_date() for t in self.tasks)
 
 class CleanSimulationProjectTask(MultipleCleanTasks):
-    def __init__(self, simulation_project=None, name="clean task", mode="release", **kwargs):
-        super().__init__(concurrent=False, name=name, **kwargs)
+    def __init__(self, simulation_project=None, name="", mode="release", **kwargs):
+        super().__init__(concurrent=False, name=_project_prefixed_name(simulation_project, name), **kwargs)
         self.simulation_project = simulation_project
         self.mode = mode
         self.tasks = self.get_clean_tasks()
-
-    def get_description(self):
-        return self.simulation_project.get_name() + " " + super().get_description()
 
     def get_clean_tasks(self):
         # Resolve makefile_inc_config so the binary suffix (_dbg, _sanitize, ...) matches
@@ -1012,7 +1010,7 @@ class CleanSimulationProjectTask(MultipleCleanTasks):
                 generated_file = re.sub(r"\.msg", suffix, msg_file)
                 msg_clean_tasks.append(CleanFileTask(simulation_project=self.simulation_project, file_path=generated_file))
         if msg_clean_tasks:
-            tasks.append(MultipleCleanTasks(tasks=msg_clean_tasks, name="generated MSG file clean", concurrent=True))
+            tasks.append(MultipleCleanTasks(tasks=msg_clean_tasks, name="generated MSG files", concurrent=True))
         # Copied binaries — apply the same prefix/suffix/extension as SimulationProjectCopyBinaryTask
         binary_clean_tasks = []
         for build_type in self.simulation_project.build_types:
@@ -1026,7 +1024,7 @@ class CleanSimulationProjectTask(MultipleCleanTasks):
                 file_path = _binary_target_relative_path(self.simulation_project, build_type, binary_name, self.mode, makefile_inc_config)
                 binary_clean_tasks.append(CleanFileTask(simulation_project=self.simulation_project, file_path=file_path))
         if binary_clean_tasks:
-            tasks.append(MultipleCleanTasks(tasks=binary_clean_tasks, name="binary clean", concurrent=True))
+            tasks.append(MultipleCleanTasks(tasks=binary_clean_tasks, name="binaries", concurrent=True))
         # Output directory
         tasks.append(CleanDirectoryTask(simulation_project=self.simulation_project, directory_path="out"))
         return tasks

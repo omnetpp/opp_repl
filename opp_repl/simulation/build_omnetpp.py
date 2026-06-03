@@ -29,8 +29,8 @@ class _RecursiveBuildTasks(MultipleTasks):
     log output) once everything is built.
     """
 
-    def __init__(self, multiple_task_results_class=MultipleBuildTaskResults, **kwargs):
-        super().__init__(multiple_task_results_class=multiple_task_results_class, **kwargs)
+    def __init__(self, action="Building", multiple_task_results_class=MultipleBuildTaskResults, **kwargs):
+        super().__init__(action=action, multiple_task_results_class=multiple_task_results_class, **kwargs)
 
     def is_up_to_date(self):
         return bool(self.tasks) and all(t.is_up_to_date() for t in self.tasks)
@@ -1051,7 +1051,7 @@ def _build_component_tasks(omnetpp_project, component, mode, makefile_inc_config
             return None
         return _RecursiveBuildTasks(
             tasks=copy_tasks,
-            name=f"{name} build",
+            name=name,
             concurrent=concurrent,
         )
 
@@ -1114,14 +1114,16 @@ def _build_component_tasks(omnetpp_project, component, mode, makefile_inc_config
     if generator_tasks:
         component_tasks.append(_RecursiveBuildTasks(
             tasks=generator_tasks,
-            name=f"{name} generate",
+            name=name,
+            action="Generating",
             concurrent=concurrent,
         ))
 
     if compile_tasks:
         component_tasks.append(_RecursiveBuildTasks(
             tasks=compile_tasks,
-            name=f"{name} compile",
+            name=name,
+            action="Compiling",
             concurrent=concurrent,
         ))
 
@@ -1154,7 +1156,8 @@ def _build_component_tasks(omnetpp_project, component, mode, makefile_inc_config
         if extra_compile_tasks:
             component_tasks.append(_RecursiveBuildTasks(
                 tasks=extra_compile_tasks,
-                name=f"{extra_lib['basename']} compile",
+                name=extra_lib['basename'],
+                action="Compiling",
                 concurrent=concurrent,
             ))
             component_tasks.append(OmnetppProjectLinkTask(
@@ -1214,7 +1217,7 @@ def _build_component_tasks(omnetpp_project, component, mode, makefile_inc_config
             ))
         component_tasks.append(_ToolBuildTasks(
             tasks=tool_chain,
-            name=f"{tool['basename']} build",
+            name=tool['basename'],
             concurrent=False,
             executable_path=tool_link_task.output_file,
             source_file=tool_src_abs,
@@ -1224,7 +1227,7 @@ def _build_component_tasks(omnetpp_project, component, mode, makefile_inc_config
         return None
     return _RecursiveBuildTasks(
         tasks=component_tasks,
-        name=f"{name} build",
+        name=name,
         concurrent=False,  # within a component, ordering matters (compile -> link)
     )
 
@@ -1290,7 +1293,7 @@ def _build_opp_run_tasks(omnetpp_project, mode, cfg, concurrent):
 
     return _RecursiveBuildTasks(
         tasks=tasks,
-        name="opp_run build",
+        name="opp_run",
         concurrent=False,  # compile -> link -> copy
     )
 
@@ -1459,6 +1462,9 @@ class _CleanDirectoryTask(Task):
 
 
 class _MultipleCleanTasks(MultipleTasks):
+    def __init__(self, action="Cleaning", **kwargs):
+        super().__init__(action=action, **kwargs)
+
     def is_up_to_date(self):
         return bool(self.tasks) and all(t.is_up_to_date() for t in self.tasks)
 
@@ -1618,7 +1624,7 @@ def clean_omnetpp_using_tasks(omnetpp_project=None, mode="release", concurrent=T
         if comp_tasks:
             component_tasks.append(_MultipleCleanTasks(
                 tasks=comp_tasks,
-                name=f"{component['name']} clean",
+                name=component['name'],
                 concurrent=concurrent,
             ))
 
@@ -1641,7 +1647,7 @@ def clean_omnetpp_using_tasks(omnetpp_project=None, mode="release", concurrent=T
         ))
     component_tasks.append(_MultipleCleanTasks(
         tasks=opp_run_clean_tasks,
-        name="opp_run clean",
+        name="opp_run",
         concurrent=concurrent,
     ))
 
@@ -1649,12 +1655,12 @@ def clean_omnetpp_using_tasks(omnetpp_project=None, mode="release", concurrent=T
     out_path = f"out/{cfg.configname}" if cfg else "out"
     component_tasks.append(_CleanDirectoryTask(
         working_dir=omnetpp_root, directory_path=out_path,
-        name="output directory clean",
+        name="output directory",
     ))
 
     top_task = _MultipleCleanTasks(
         tasks=component_tasks,
-        name=f"OMNeT++ ({mode}) clean",
+        name=f"OMNeT++ ({mode})",
         concurrent=False,
     )
     top_task.log_structure()
@@ -1696,7 +1702,7 @@ def build_omnetpp_using_tasks(omnetpp_project=None, mode="release", concurrent=T
 
     top_task = _RecursiveBuildTasks(
         tasks=component_tasks,
-        name=f"OMNeT++ ({mode}) build",
+        name=f"OMNeT++ ({mode})",
         concurrent=False,  # components must be built in dependency order
     )
     top_task.log_structure()

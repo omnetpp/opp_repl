@@ -69,8 +69,8 @@ class MultipleTestTasks(MultipleTasks):
     Represents multiple test tasks that can be run together.
     """
 
-    def __init__(self, name="test", multiple_task_results_class=MultipleTestTaskResults, **kwargs):
-        super().__init__(name=name, multiple_task_results_class=multiple_task_results_class, **kwargs)
+    def __init__(self, name="test", action="Testing", multiple_task_results_class=MultipleTestTaskResults, **kwargs):
+        super().__init__(name=name, action=action, multiple_task_results_class=multiple_task_results_class, **kwargs)
         self.locals = locals()
         self.locals.pop("self")
         self.kwargs = kwargs
@@ -161,8 +161,8 @@ class UpdateTask(Task):
         return self.task_result_class(self, result="KEEP", reason="Update completed")
 
 class MultipleUpdateTasks(MultipleTasks):
-    def __init__(self, tasks=[], multiple_task_results_class=MultipleUpdateTaskResults, **kwargs):
-        super().__init__(tasks=tasks, multiple_task_results_class=multiple_task_results_class, **kwargs)
+    def __init__(self, tasks=[], action="Updating", multiple_task_results_class=MultipleUpdateTaskResults, **kwargs):
+        super().__init__(tasks=tasks, action=action, multiple_task_results_class=multiple_task_results_class, **kwargs)
         self.locals = locals()
         self.locals.pop("self")
         self.kwargs = kwargs
