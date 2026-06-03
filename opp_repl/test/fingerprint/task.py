@@ -226,7 +226,16 @@ def select_fingerprint_with_smallest_sim_time_limit(fingerprint_entries):
 def select_fingerprint_with_largest_sim_time_limit(fingerprint_entries):
     return select_fingerprint_by_sim_time_limit(fingerprint_entries, True)
 
+select_fingerprint_aliases = {
+    "shortest": select_fingerprint_with_smallest_sim_time_limit,
+    "longest": select_fingerprint_with_largest_sim_time_limit,
+}
+
 def get_fingerprint_test_task(simulation_task, ingredients="tplx", sim_time_limit=None, select_fingerprint=None, baseline_simulation_project=None, **kwargs):
+    if isinstance(select_fingerprint, str):
+        if select_fingerprint not in select_fingerprint_aliases:
+            raise ValueError(f"unknown select_fingerprint alias {select_fingerprint!r}; expected one of {sorted(select_fingerprint_aliases)}")
+        select_fingerprint = select_fingerprint_aliases[select_fingerprint]
     simulation_config = simulation_task.simulation_config
     baseline_project = baseline_simulation_project or simulation_config.simulation_project
     correct_fingerprint_store = get_correct_fingerprint_store(baseline_project)

@@ -147,19 +147,20 @@ The store can hold fingerprints for the same simulation at several
 instead of matching the limit from the INI file:
 
 ```python
-from opp_repl.test.fingerprint.task import (
-    select_fingerprint_with_smallest_sim_time_limit,
-    select_fingerprint_with_largest_sim_time_limit,
-)
-
 # Fast CI run: use whichever stored baseline has the smallest sim_time_limit.
 run_fingerprint_tests(simulation_project=inet_project,
-                      select_fingerprint=select_fingerprint_with_smallest_sim_time_limit)
+                      select_fingerprint="shortest")
 
 # Nightly run: use the longest stored baseline.
 run_fingerprint_tests(simulation_project=inet_project,
-                      select_fingerprint=select_fingerprint_with_largest_sim_time_limit)
+                      select_fingerprint="longest")
 ```
+
+The string aliases `"shortest"` and `"longest"` resolve to
+`select_fingerprint_with_smallest_sim_time_limit` and
+`select_fingerprint_with_largest_sim_time_limit` respectively; pass either
+the alias or the function directly, or supply your own callable that takes
+a list of store entries and returns one.
 
 When `select_fingerprint` is given, the `sim_time_limit` filter is dropped
 and the selected entry's `sim_time_limit` is applied to the simulation run.
