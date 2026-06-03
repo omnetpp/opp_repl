@@ -64,12 +64,28 @@ def _compute_metric(old_path: Optional[str], new_path: Optional[str]) -> Optiona
         return None
 
 
-def find_diff_entries(root: str) -> List[DiffEntry]:
+@dataclass(frozen=True)
+class _DiffCandidate:
+    """Discovered PNG group before the (slow) RMSE metric is computed.
+
+    Mirrors :class:`DiffEntry` minus the ``metric`` field — produced by the
+    cheap directory-walk phase so the expensive per-candidate RMSE can be
+    deferred / parallelised / streamed.
     """
-    Scan 'root' recursively and find entries with any of: <foo>.png, <foo>-new.png, <foo>-old.png
-    (at least one must exist in the same directory).
+    base: str
+    dirpath: str
+    name: str
+    diff_path: Optional[str]
+    current_path: Optional[str]
+    old_path: Optional[str]
+    new_path: Optional[str]
+
+
+def _collect_diff_candidates(root: str) -> List[_DiffCandidate]:
+    """Walk *root* and return the sorted list of PNG groups that need a diff,
+    without computing per-group metrics.
     """
-    entries: List[DiffEntry] = []
+    candidates: List[_DiffCandidate] = []
     stems_seen = set()  # Track (dirpath, stem) to avoid duplicates
 
     for dirpath, _dirs, files in os.walk(root):
@@ -86,45 +102,67 @@ def find_diff_entries(root: str) -> List[DiffEntry]:
                 # This is a base .png file (not ending in -new or -old)
                 stem = f[:-len(".png")]
 
-            if stem and (dirpath, stem) not in stems_seen:
-                stems_seen.add((dirpath, stem))
+            if not stem or (dirpath, stem) in stems_seen:
+                continue
+            stems_seen.add((dirpath, stem))
 
-                # Check which files exist
-                diff_name = f"{stem}-diff.png"
-                current_name = f"{stem}.png"
-                old_name = f"{stem}-old.png"
-                new_name = f"{stem}-new.png"
+            # Check which files exist
+            diff_name = f"{stem}-diff.png"
+            current_name = f"{stem}.png"
+            old_name = f"{stem}-old.png"
+            new_name = f"{stem}-new.png"
 
-                diff_path = os.path.join(dirpath, diff_name) if diff_name in pngs else None
-                current_path = os.path.join(dirpath, current_name) if current_name in pngs else None
-                old_path = os.path.join(dirpath, old_name) if old_name in pngs else None
-                new_path = os.path.join(dirpath, new_name) if new_name in pngs else None
+            diff_path = os.path.join(dirpath, diff_name) if diff_name in pngs else None
+            current_path = os.path.join(dirpath, current_name) if current_name in pngs else None
+            old_path = os.path.join(dirpath, old_name) if old_name in pngs else None
+            new_path = os.path.join(dirpath, new_name) if new_name in pngs else None
 
-                # Skip if old and new exist and are byte-identical - nothing to diff
-                if new_path and old_path and filecmp.cmp(new_path, old_path, shallow=False):
-                    continue
+            # Skip if old and new exist and are byte-identical - nothing to diff
+            if new_path and old_path and filecmp.cmp(new_path, old_path, shallow=False):
+                continue
 
-                # Only add if at least one of NEW or OLD exists
-                if new_path or old_path:
-                    # Display name: relative to root or folder+stem
-                    rel_dir = os.path.relpath(dirpath, root)
-                    display = os.path.join(rel_dir, stem) if rel_dir != "." else stem
-                    entries.append(
-                        DiffEntry(
-                            base=os.path.join(dirpath, stem),
-                            dirpath=dirpath,
-                            name=display,
-                            diff_path=diff_path,
-                            current_path=current_path,
-                            old_path=old_path,
-                            new_path=new_path,
-                            metric=_compute_metric(old_path, new_path),
-                        )
-                    )
+            # Only add if at least one of NEW or OLD exists
+            if not (new_path or old_path):
+                continue
+
+            # Display name: relative to root or folder+stem
+            rel_dir = os.path.relpath(dirpath, root)
+            display = os.path.join(rel_dir, stem) if rel_dir != "." else stem
+            candidates.append(_DiffCandidate(
+                base=os.path.join(dirpath, stem),
+                dirpath=dirpath,
+                name=display,
+                diff_path=diff_path,
+                current_path=current_path,
+                old_path=old_path,
+                new_path=new_path,
+            ))
 
     # Sort consistently (by relative display name, then by dir)
-    entries.sort(key=lambda e: (e.name.lower(), e.dirpath.lower()))
-    return entries
+    candidates.sort(key=lambda c: (c.name.lower(), c.dirpath.lower()))
+    return candidates
+
+
+def _finalize_candidate(c: _DiffCandidate) -> DiffEntry:
+    """Compute the RMSE for one candidate and return the full :class:`DiffEntry`."""
+    return DiffEntry(
+        base=c.base,
+        dirpath=c.dirpath,
+        name=c.name,
+        diff_path=c.diff_path,
+        current_path=c.current_path,
+        old_path=c.old_path,
+        new_path=c.new_path,
+        metric=_compute_metric(c.old_path, c.new_path),
+    )
+
+
+def find_diff_entries(root: str) -> List[DiffEntry]:
+    """
+    Scan 'root' recursively and find entries with any of: <foo>.png, <foo>-new.png, <foo>-old.png
+    (at least one must exist in the same directory).
+    """
+    return [_finalize_candidate(c) for c in _collect_diff_candidates(root)]
 
 
 class ImageCache:
@@ -348,6 +386,54 @@ class ImageView(QtWidgets.QLabel):
         super().wheelEvent(e)
 
 
+class _ScanWorker(QtCore.QObject):
+    """Background scan: collect candidates, compute RMSE per candidate, stream
+    the resulting :class:`DiffEntry` objects to the GUI in small batches.
+
+    The generation tag lets the GUI ignore stragglers from an older scan after
+    the user hits F5.
+    """
+    discovery_started = QtCore.pyqtSignal(int)              # generation
+    candidates_collected = QtCore.pyqtSignal(int, int)       # generation, total
+    batch_ready = QtCore.pyqtSignal(int, object)             # generation, List[DiffEntry]
+    failed = QtCore.pyqtSignal(int, str)                     # generation, message
+    finished = QtCore.pyqtSignal(int)                        # generation
+
+    BATCH_SIZE = 8
+
+    def __init__(self, root: str, generation: int) -> None:
+        super().__init__()
+        self._root = root
+        self.generation = generation
+        self._cancel = False
+
+    def cancel(self) -> None:
+        self._cancel = True
+
+    @QtCore.pyqtSlot()
+    def run(self) -> None:
+        try:
+            self.discovery_started.emit(self.generation)
+            candidates = _collect_diff_candidates(self._root)
+            if self._cancel:
+                self.finished.emit(self.generation)
+                return
+            self.candidates_collected.emit(self.generation, len(candidates))
+            batch: List[DiffEntry] = []
+            for c in candidates:
+                if self._cancel:
+                    break
+                batch.append(_finalize_candidate(c))
+                if len(batch) >= self.BATCH_SIZE:
+                    self.batch_ready.emit(self.generation, batch)
+                    batch = []
+            if batch and not self._cancel:
+                self.batch_ready.emit(self.generation, batch)
+        except Exception as ex:
+            self.failed.emit(self.generation, str(ex))
+        self.finished.emit(self.generation)
+
+
 class MainWindow(QtWidgets.QMainWindow):
     def __init__(self, root_dir: str) -> None:
         super().__init__()
@@ -358,6 +444,27 @@ class MainWindow(QtWidgets.QMainWindow):
         self._current_index = -1   # index in self._entries for viewer
         self._current_kind = 0     # 0=diff,1=current,2=old,3=new
         self._kinds = ("diff", "current", "old", "new")
+
+        # Async scan state. `_live_scans` keeps Python refs to all (thread,
+        # worker) pairs that haven't yet emitted thread.finished — even
+        # cancelled ones — so QThread C++ objects don't get destroyed while
+        # the underlying OS thread is still running.
+        self._scan_thread: Optional[QtCore.QThread] = None
+        self._scan_worker: Optional[_ScanWorker] = None
+        self._live_scans: dict[int, tuple[QtCore.QThread, _ScanWorker]] = {}
+        self._scan_generation = 0
+        self._scan_total = 0
+        self._refresh_initial = True
+        self._size_apply_pending = False
+
+        # Pre-warm the matplotlib-based metric computation on the main thread.
+        # _compute_metric lazy-imports opp_repl.test.chart which pulls in
+        # matplotlib; doing that first-time import from a non-main QThread
+        # has been observed to clash with Qt and abort the process.
+        try:
+            import opp_repl.test.chart  # noqa: F401
+        except ImportError:
+            pass
 
         # Central stacked layout: [0]=table page, [1]=viewer page
         self._stack = QtWidgets.QStackedWidget(self)
@@ -373,87 +480,230 @@ class MainWindow(QtWidgets.QMainWindow):
         self._viewer.wheelNavigation.connect(self._on_viewer_wheel_navigation)
         self._stack.addWidget(self._viewer)
 
+        # Status bar with progress feedback for the async scan
+        self._progress = QtWidgets.QProgressBar(self)
+        self._progress.setMaximumWidth(240)
+        self._progress.setTextVisible(False)
+        self._progress.setVisible(False)
+        self.statusBar().addPermanentWidget(self._progress)
+
         # Actions
         refresh = QtGui.QAction(self)
         refresh.setShortcut(QtGui.QKeySequence.StandardKey.Refresh)  # F5
         refresh.triggered.connect(self.refresh)
         self.addAction(refresh)
 
-        # Initial data
-        self.refresh(initial=True)
-
         # After show, set initial thumbs to fit ~3 rows on the current screen
         QtCore.QTimer.singleShot(0, self._init_base_thumb_side)
+
+        # Initial data: starts a background worker; rows stream in.
+        self.refresh(initial=True)
 
     # ----- Data scanning & table population -----
 
     def refresh(self, *, initial: bool = False) -> None:
-        """(Re)scan directory and rebuild table."""
-        root = self._root_dir
-        self._entries = find_diff_entries(root)
-        # Reset cache so removed images don't linger
+        """(Re)scan directory and rebuild table asynchronously.
+
+        Discovery and per-image RMSE run on a background QThread; rows stream
+        into the table as they're produced. F5 cancels any in-flight scan and
+        starts a fresh one — late signals from the previous worker are
+        discarded via the generation tag.
+        """
+        # Cancel any in-flight scans; their remaining signals get ignored
+        # via the generation check in the slots, and their (thread, worker)
+        # tuples stay in _live_scans until thread.finished fires.
+        for _t, _w in self._live_scans.values():
+            _w.cancel()
+
+        self._scan_generation += 1
+        generation = self._scan_generation
+        self._refresh_initial = initial
+
+        # Reset state
+        self._entries = []
         self._cache.clear()
-
         self._table.setRowCount(0)
-        self._table.setRowCount(len(self._entries))
-        self._table.setEntries(self._entries, self._root_dir)  # Pass entries and anchor for width/path calculation
+        self._table.setEntries(self._entries, self._root_dir)
+        self._scan_total = 0
 
-        for row, ent in enumerate(self._entries):
-            # Row header text: show a short label so user knows which diff this is.
-            item = QtWidgets.QTableWidgetItem(ent.name)
-            item.setFlags(QtCore.Qt.ItemFlag.ItemIsSelectable | QtCore.Qt.ItemFlag.ItemIsEnabled)
-            self._table.setVerticalHeaderItem(row, item)
+        # Status feedback: indeterminate bar during discovery.
+        self._progress.setRange(0, 0)
+        self._progress.setVisible(True)
+        self.statusBar().showMessage(f"Scanning {self._root_dir}…")
 
-            # Create index label (starting from 1)
-            index_w = QtWidgets.QLabel(str(row + 1), self._table)
-            index_w.setAlignment(QtCore.Qt.AlignmentFlag.AlignCenter)
-            index_w.setStyleSheet("font-weight: bold; font-size: 14px;")
+        # Spawn worker on its own QThread.
+        thread = QtCore.QThread()
+        worker = _ScanWorker(self._root_dir, generation)
+        worker.moveToThread(thread)
+        worker.discovery_started.connect(self._on_discovery_started)
+        worker.candidates_collected.connect(self._on_candidates_collected)
+        worker.batch_ready.connect(self._on_batch_ready)
+        worker.failed.connect(self._on_scan_failed)
+        worker.finished.connect(self._on_scan_finished)
+        worker.finished.connect(thread.quit)
+        worker.finished.connect(worker.deleteLater)
+        thread.finished.connect(self._on_thread_finished)
+        thread.finished.connect(thread.deleteLater)
+        thread.started.connect(worker.run)
+        self._live_scans[generation] = (thread, worker)
+        self._scan_thread = thread
+        self._scan_worker = worker
+        thread.start()
 
-            # Create widgets only for existing files
-            diff_w = ThumbLabel(ent.diff_path, self._cache, self._table) if ent.diff_path else None
-            current_w = ThumbLabel(ent.current_path, self._cache, self._table) if ent.current_path else None
-            old_w = ThumbLabel(ent.old_path, self._cache, self._table) if ent.old_path else None
-            new_w = ThumbLabel(ent.new_path, self._cache, self._table) if ent.new_path else None
+    def _append_entry_row(self, ent: DiffEntry) -> None:
+        """Append one DiffEntry as a new row in the table."""
+        row = len(self._entries)
+        self._entries.append(ent)
+        self._table.setRowCount(row + 1)
 
-            # Metric label (RMSE between old and new)
-            if ent.metric is None:
-                metric_text = "—"
-            elif ent.metric == 0:
-                metric_text = "0"
-            else:
-                metric_text = f"{ent.metric:.6f}"
-            metric_w = QtWidgets.QLabel(metric_text, self._table)
-            metric_w.setAlignment(QtCore.Qt.AlignmentFlag.AlignCenter)
-            metric_w.setStyleSheet("font-family: monospace; font-size: 12px; padding: 2px;")
-            if ent.metric is not None and ent.metric > 0:
-                metric_w.setToolTip(f"RMSE = {ent.metric}")
+        # Row header text: show a short label so user knows which diff this is.
+        item = QtWidgets.QTableWidgetItem(ent.name)
+        item.setFlags(QtCore.Qt.ItemFlag.ItemIsSelectable | QtCore.Qt.ItemFlag.ItemIsEnabled)
+        self._table.setVerticalHeaderItem(row, item)
 
-            # Create path label - show path relative to the scanned root (the
-            # staging_dir when invoked from compare_charts), falling back to cwd
-            # if no root is set. Fall back across image kinds since -old.png and
-            # -new.png may be the only files present.
-            display_path = ent.current_path or ent.diff_path or ent.new_path or ent.old_path
-            if display_path:
-                relative_path = os.path.relpath(display_path, self._root_dir or os.getcwd())
-                path_w = QtWidgets.QLabel(relative_path, self._table)
-                path_w.setToolTip(display_path)
-            else:
-                path_w = QtWidgets.QLabel("", self._table)
-            path_w.setAlignment(QtCore.Qt.AlignmentFlag.AlignLeft | QtCore.Qt.AlignmentFlag.AlignVCenter)
-            path_w.setStyleSheet("font-size: 14px; padding: 2px;")
+        # Create index label (starting from 1)
+        index_w = QtWidgets.QLabel(str(row + 1), self._table)
+        index_w.setAlignment(QtCore.Qt.AlignmentFlag.AlignCenter)
+        index_w.setStyleSheet("font-weight: bold; font-size: 14px;")
 
-            self._table.setRowWidgets(row, (index_w, diff_w, current_w, old_w, new_w, metric_w, path_w))
+        # Create widgets only for existing files
+        diff_w = ThumbLabel(ent.diff_path, self._cache, self._table) if ent.diff_path else None
+        current_w = ThumbLabel(ent.current_path, self._cache, self._table) if ent.current_path else None
+        old_w = ThumbLabel(ent.old_path, self._cache, self._table) if ent.old_path else None
+        new_w = ThumbLabel(ent.new_path, self._cache, self._table) if ent.new_path else None
+
+        # Metric label (RMSE between old and new)
+        if ent.metric is None:
+            metric_text = "—"
+        elif ent.metric == 0:
+            metric_text = "0"
+        else:
+            metric_text = f"{ent.metric:.6f}"
+        metric_w = QtWidgets.QLabel(metric_text, self._table)
+        metric_w.setAlignment(QtCore.Qt.AlignmentFlag.AlignCenter)
+        metric_w.setStyleSheet("font-family: monospace; font-size: 12px; padding: 2px;")
+        if ent.metric is not None and ent.metric > 0:
+            metric_w.setToolTip(f"RMSE = {ent.metric}")
+
+        # Create path label - show path relative to the scanned root (the
+        # staging_dir when invoked from compare_charts), falling back to cwd
+        # if no root is set. Fall back across image kinds since -old.png and
+        # -new.png may be the only files present.
+        display_path = ent.current_path or ent.diff_path or ent.new_path or ent.old_path
+        if display_path:
+            relative_path = os.path.relpath(display_path, self._root_dir or os.getcwd())
+            path_w = QtWidgets.QLabel(relative_path, self._table)
+            path_w.setToolTip(display_path)
+        else:
+            path_w = QtWidgets.QLabel("", self._table)
+        path_w.setAlignment(QtCore.Qt.AlignmentFlag.AlignLeft | QtCore.Qt.AlignmentFlag.AlignVCenter)
+        path_w.setStyleSheet("font-size: 14px; padding: 2px;")
+
+        self._table.setRowWidgets(row, (index_w, diff_w, current_w, old_w, new_w, metric_w, path_w))
+
+    # ----- Async scan signal handlers -----
+
+    def _on_discovery_started(self, generation: int) -> None:
+        if generation != self._scan_generation:
+            return
+        self.statusBar().showMessage(f"Scanning {self._root_dir}…")
+
+    def _on_candidates_collected(self, generation: int, total: int) -> None:
+        if generation != self._scan_generation:
+            return
+        self._scan_total = total
+        if total == 0:
+            self._progress.setRange(0, 1)
+            self._progress.setValue(1)
+            self.statusBar().showMessage("No diff entries found.")
+        else:
+            self._progress.setRange(0, total)
+            self._progress.setValue(0)
+            self.statusBar().showMessage(f"Comparing 0 / {total} images…")
+
+    def _on_batch_ready(self, generation: int, batch: object) -> None:
+        if generation != self._scan_generation:
+            return
+        for ent in batch:  # type: ignore[union-attr]
+            self._append_entry_row(ent)
+        self._table.setEntries(self._entries, self._root_dir)
+        self._progress.setValue(len(self._entries))
+        self.statusBar().showMessage(
+            f"Comparing {len(self._entries)} / {self._scan_total} images…"
+        )
+        # Coalesced thumb/column resize — kept off the per-batch hot path.
+        self._schedule_size_apply()
+
+    def _on_scan_failed(self, generation: int, message: str) -> None:
+        if generation != self._scan_generation:
+            return
+        self.statusBar().showMessage(f"Scan failed: {message}")
+
+    def _on_scan_finished(self, generation: int) -> None:
+        # Stragglers from a cancelled scan: ignore — _on_thread_finished
+        # below clears the refs once the OS thread actually exits.
+        if generation != self._scan_generation:
+            return
+        self._progress.setVisible(False)
+        total = len(self._entries)
+        if total == 0:
+            self.statusBar().showMessage("No diff entries found.")
+        else:
+            self.statusBar().showMessage(f"{total} entries loaded.", 5000)
 
         # If we were in viewer mode, try to keep position (clamped)
+        initial = self._refresh_initial
         if not initial and self._stack.currentIndex() == 1 and self._entries:
-            self._current_index = max(0, min(self._current_index, len(self._entries) - 1))
+            self._current_index = max(0, min(self._current_index, total - 1))
             self._current_kind = 0  # switch to diff on refresh
             self._show_current_in_viewer()
         elif self._stack.currentIndex() == 1 and not self._entries:
             self._viewer.clearImage()
 
-        # Apply current size policy
+        # Final pass to settle column widths against the full entries list.
         self._apply_sizes_from_window()
+        # NB: self._scan_thread / self._scan_worker are cleared in
+        # _on_thread_finished — clearing them here would drop the Python
+        # ref before QThread's event loop has actually exited, causing a
+        # "QThread destroyed while still running" abort.
+
+    def _on_thread_finished(self) -> None:
+        """Connected to ``QThread.finished``; safe to drop our Python refs now."""
+        sender = self.sender()
+        # Drop the live-scan entry whose thread emitted this signal.
+        for gen, (thread, _worker) in list(self._live_scans.items()):
+            if thread is sender:
+                del self._live_scans[gen]
+                break
+        if sender is self._scan_thread:
+            self._scan_thread = None
+            self._scan_worker = None
+
+    def _schedule_size_apply(self) -> None:
+        """Coalesce repeated `_apply_sizes_from_window` calls during streaming.
+
+        `_applySizes` iterates `self._entries` to recompute the path column
+        width, so calling it per row would be O(N²). A short single-shot timer
+        merges back-to-back batches into one repaint.
+        """
+        if self._size_apply_pending:
+            return
+        self._size_apply_pending = True
+        QtCore.QTimer.singleShot(50, self._do_size_apply)
+
+    def _do_size_apply(self) -> None:
+        self._size_apply_pending = False
+        self._apply_sizes_from_window()
+
+    def closeEvent(self, ev: QtGui.QCloseEvent) -> None:
+        # Stop any background scans before destruction so their threads
+        # don't outlive the widgets they talk to.
+        for thread, worker in self._live_scans.values():
+            worker.cancel()
+        for thread, _worker in list(self._live_scans.values()):
+            thread.quit()
+            thread.wait(2000)
+        super().closeEvent(ev)
 
     # ----- Sizing logic -----
 
