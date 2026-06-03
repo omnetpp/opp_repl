@@ -1307,14 +1307,12 @@ class ConfigureOmnetppTask(Task):
         self.omnetpp_project = omnetpp_project
 
     def get_parameters_string(self, **kwargs):
-        root = self.omnetpp_project.get_root_path()
-        return root or ""
+        return self.omnetpp_project.get_root_path() if self.omnetpp_project.has_root_path() else ""
 
     def is_up_to_date(self):
-        root = self.omnetpp_project.get_root_path()
-        if root is None:
+        if not self.omnetpp_project.has_root_path():
             return True
-        return os.path.isfile(os.path.join(root, "Makefile.inc"))
+        return os.path.isfile(os.path.join(self.omnetpp_project.get_root_path(), "Makefile.inc"))
 
     def run_protected(self, **kwargs):
         import shutil
@@ -1382,8 +1380,6 @@ def build_omnetpp_using_makefile(omnetpp_project=None, mode="release", **kwargs)
     omnetpp_project.ensure_mounted()
     omnetpp_project.ensure_configured()
     root = omnetpp_project.get_root_path()
-    if root is None:
-        raise RuntimeError("Cannot build OMNeT++: root path is not set")
     if omnetpp_project.is_build_up_to_date(mode=mode):
         return
     env = omnetpp_project.get_env()
@@ -1585,8 +1581,6 @@ def clean_omnetpp_using_makefile(omnetpp_project=None, mode="release", **kwargs)
         raise RuntimeError("omnetpp_project is required")
     omnetpp_project.ensure_mounted()
     root = omnetpp_project.get_root_path()
-    if root is None:
-        raise RuntimeError("Cannot clean OMNeT++: root path is not set")
     if not os.path.isfile(os.path.join(root, "Makefile")):
         _logger.info("Cleaning OMNeT++ in %s mode at %s skipped (no Makefile)", mode, root)
         return
@@ -1612,8 +1606,6 @@ def clean_omnetpp_using_tasks(omnetpp_project=None, mode="release", concurrent=T
         raise RuntimeError("omnetpp_project is required")
     omnetpp_project.ensure_mounted()
     omnetpp_root = omnetpp_project.get_root_path()
-    if omnetpp_root is None:
-        raise RuntimeError("Cannot clean OMNeT++: root path is not set")
 
     try:
         cfg = omnetpp_project.get_makefile_inc_config(mode)

@@ -84,39 +84,43 @@ class OmnetppProject:
         self._overlay = None
         if overlay_name is not None:
             from opp_repl.simulation.overlay import OverlayMount
-            source_root = self._resolve_source_root()
-            if source_root is None:
-                raise RuntimeError("Cannot create overlay: root path is not set")
-            self._overlay = OverlayMount(source_root, overlay_name, overlay_build_root)
+            self._overlay = OverlayMount(self.get_root_path(), overlay_name, overlay_build_root)
             self.root_folder = self._overlay.merged_path
-
-    def _resolve_source_root(self):
-        if self.root_folder is not None:
-            return os.path.abspath(self.root_folder)
-        elif self.root_folder_environment_variable is not None and self.root_folder_environment_variable in os.environ:
-            return os.path.abspath(os.environ[self.root_folder_environment_variable])
-        else:
-            return None
 
     def __repr__(self):
         overlay = f", overlay={self._overlay.overlay_name!r}" if self._overlay else ""
         return f"OmnetppProject(root_folder_environment_variable={self.root_folder_environment_variable!r}, root_folder={self.root_folder!r}{overlay})"
 
+    def has_root_path(self):
+        """True if the project root can be resolved without raising."""
+        if self.root_folder is not None:
+            return True
+        if self.root_folder_environment_variable is not None and self.root_folder_environment_variable in os.environ:
+            return True
+        return False
+
     def get_root_path(self):
+        """Return the absolute project root. Raises RuntimeError when neither
+        ``root_folder`` is set nor the named env var resolves — every operation
+        that actually needs the project on disk (build, clean, run, list files)
+        depends on this, so failing loud here gives a self-explanatory error
+        instead of an opaque ``NoneType`` crash deeper in stdlib."""
         if self.root_folder is not None:
             return os.path.abspath(self.root_folder)
-        elif self.root_folder_environment_variable is not None and self.root_folder_environment_variable in os.environ:
+        if self.root_folder_environment_variable is not None and self.root_folder_environment_variable in os.environ:
             return os.path.abspath(os.environ[self.root_folder_environment_variable])
-        else:
-            return None
+        env = self.root_folder_environment_variable
+        hint = (f"set the '{env}' environment variable" if env
+                else "pass root_folder=... when defining the project")
+        raise RuntimeError(
+            f"Cannot resolve root path of OMNeT++ project '{self.name}': "
+            f"project root is not set ({hint}).")
 
     def get_full_path(self, path):
-        root = self.get_root_path()
-        return os.path.abspath(os.path.join(root, path)) if root is not None else None
+        return os.path.abspath(os.path.join(self.get_root_path(), path))
 
     def get_relative_path(self, path):
-        root = self.get_root_path()
-        return os.path.relpath(path, root) if root is not None else None
+        return os.path.relpath(path, self.get_root_path())
 
     def get_library_suffix(self, mode="release"):
         """Return the binary suffix for *mode* (``"_release"``, ``"_dbg"``,
@@ -136,11 +140,8 @@ class OmnetppProject:
             raise Exception(f"Unknown mode: {mode}")
 
     def get_executable(self, mode="release"):
-        root = self.get_root_path()
-        if root is None:
-            return None
         suffix = self.get_library_suffix(mode=mode)
-        return os.path.abspath(os.path.join(root, "bin/opp_run" + suffix))
+        return os.path.abspath(os.path.join(self.get_root_path(), "bin/opp_run" + suffix))
 
     def ensure_configured(self, **kwargs):
         """Run ``./configure`` as a task if ``Makefile.inc`` does not yet exist.
@@ -154,28 +155,31 @@ class OmnetppProject:
 
     def get_env(self):
         env = os.environ.copy()
+        if not self.has_root_path():
+            return env
         root = self.get_root_path()
-        if root is not None:
-            bin_dir = os.path.join(root, "bin")
-            lib_dir = os.path.join(root, "lib")
-            if bin_dir not in env.get("PATH", "").split(os.pathsep):
-                env["PATH"] = bin_dir + os.pathsep + env.get("PATH", "")
-            if lib_dir not in env.get("LD_LIBRARY_PATH", "").split(os.pathsep):
-                env["LD_LIBRARY_PATH"] = lib_dir + os.pathsep + env.get("LD_LIBRARY_PATH", "")
-            # CCACHE_BASEDIR: make paths relative so builds in different worktrees can share the cache
-            env.setdefault("CCACHE_BASEDIR", root)
-            # CCACHE_NOHASHDIR: don't hash the CWD so worktrees at different absolute paths still hit the cache
-            env.setdefault("CCACHE_NOHASHDIR", "true")
-            # CCACHE_SLOPPINESS: tolerate trivial cache-busters so makefile/task engines share entries
-            env.setdefault("CCACHE_SLOPPINESS",
-                           "time_macros,locale,include_file_mtime,include_file_ctime,system_headers,pch_defines")
-            # CCACHE_COMPILERCHECK=content: hash the compiler binary by content rather than mtime/size
-            env.setdefault("CCACHE_COMPILERCHECK", "content")
+        bin_dir = os.path.join(root, "bin")
+        lib_dir = os.path.join(root, "lib")
+        if bin_dir not in env.get("PATH", "").split(os.pathsep):
+            env["PATH"] = bin_dir + os.pathsep + env.get("PATH", "")
+        if lib_dir not in env.get("LD_LIBRARY_PATH", "").split(os.pathsep):
+            env["LD_LIBRARY_PATH"] = lib_dir + os.pathsep + env.get("LD_LIBRARY_PATH", "")
+        # CCACHE_BASEDIR: make paths relative so builds in different worktrees can share the cache
+        env.setdefault("CCACHE_BASEDIR", root)
+        # CCACHE_NOHASHDIR: don't hash the CWD so worktrees at different absolute paths still hit the cache
+        env.setdefault("CCACHE_NOHASHDIR", "true")
+        # CCACHE_SLOPPINESS: tolerate trivial cache-busters so makefile/task engines share entries
+        env.setdefault("CCACHE_SLOPPINESS",
+                       "time_macros,locale,include_file_mtime,include_file_ctime,system_headers,pch_defines")
+        # CCACHE_COMPILERCHECK=content: hash the compiler binary by content rather than mtime/size
+        env.setdefault("CCACHE_COMPILERCHECK", "content")
         return env
 
     def is_build_up_to_date(self, mode="release"):
+        if not self.has_root_path():
+            return False
         root = self.get_root_path()
-        if root is None or not os.path.isfile(os.path.join(root, "Makefile")):
+        if not os.path.isfile(os.path.join(root, "Makefile")):
             return False
         env = self.get_env()
         args = ["make", "-q", "MODE=" + mode]
@@ -231,10 +235,7 @@ class OmnetppProject:
             self._makefile_inc_configs = {}
         if mode not in self._makefile_inc_configs:
             from opp_repl.simulation.makefile_vars import MakefileIncConfig
-            root = self.get_root_path()
-            if root is None:
-                raise RuntimeError("Cannot get Makefile.inc config: root path is not set")
-            self._makefile_inc_configs[mode] = MakefileIncConfig(root, mode)
+            self._makefile_inc_configs[mode] = MakefileIncConfig(self.get_root_path(), mode)
         return self._makefile_inc_configs[mode]
 
     def clean(self, mode="release", build_engine=None, **kwargs):
@@ -534,10 +535,7 @@ class SimulationProject:
         self.workspace = workspace
         if overlay_name is not None:
             from opp_repl.simulation.overlay import OverlayMount
-            source_root = self.get_root_path()
-            if source_root is None:
-                raise RuntimeError("Cannot create overlay: root path is not set")
-            self._overlay = OverlayMount(source_root, overlay_name, overlay_build_root)
+            self._overlay = OverlayMount(self.get_root_path(), overlay_name, overlay_build_root)
             self.root_folder = self._overlay.merged_path
             self.simulation_configs = None
 
@@ -563,16 +561,16 @@ class SimulationProject:
     def get_env(self):
         env = os.environ.copy()
         opp = self.get_omnetpp_project()
-        opp_root = opp.get_root_path() if opp else None
-        if opp_root is not None:
+        if opp is not None and opp.has_root_path():
+            opp_root = opp.get_root_path()
             bin_dir = os.path.join(opp_root, "bin")
             lib_dir = os.path.join(opp_root, "lib")
             if bin_dir not in env.get("PATH", "").split(os.pathsep):
                 env["PATH"] = bin_dir + os.pathsep + env.get("PATH", "")
             if lib_dir not in env.get("LD_LIBRARY_PATH", "").split(os.pathsep):
                 env["LD_LIBRARY_PATH"] = lib_dir + os.pathsep + env.get("LD_LIBRARY_PATH", "")
-        root = self.get_root_path()
-        if root is not None:
+        if self.has_root_path():
+            root = self.get_root_path()
             # CCACHE_BASEDIR: make paths relative so builds in different worktrees can share the cache
             env.setdefault("CCACHE_BASEDIR", root)
             # CCACHE_NOHASHDIR: don't hash the CWD so worktrees at different absolute paths still hit the cache
@@ -585,34 +583,49 @@ class SimulationProject:
         ws = self.get_workspace()
         for used_project_name in self.used_projects:
             used_project = ws.get_simulation_project(used_project_name, None)
-            used_root = used_project.get_root_path()
-            if used_root is not None:
-                env_var = used_project.root_folder_environment_variable or (used_project_name.upper().replace("-", "_") + "_ROOT")
-                env[env_var] = used_root
-                used_lib_dir = used_project.get_library_folder_full_path()
-                if used_lib_dir and used_lib_dir not in env.get("LD_LIBRARY_PATH", "").split(os.pathsep):
-                    env["LD_LIBRARY_PATH"] = used_lib_dir + os.pathsep + env.get("LD_LIBRARY_PATH", "")
+            if used_project is None or not used_project.has_root_path():
+                continue
+            env_var = used_project.root_folder_environment_variable or (used_project_name.upper().replace("-", "_") + "_ROOT")
+            env[env_var] = used_project.get_root_path()
+            used_lib_dir = used_project.get_library_folder_full_path()
+            if used_lib_dir and used_lib_dir not in env.get("LD_LIBRARY_PATH", "").split(os.pathsep):
+                env["LD_LIBRARY_PATH"] = used_lib_dir + os.pathsep + env.get("LD_LIBRARY_PATH", "")
         return env
 
     def get_environment_variable_relative_path(self, enviroment_variable, path):
         return os.path.abspath(os.path.join(os.environ[enviroment_variable], path)) if enviroment_variable in os.environ else None
 
+    def has_root_path(self):
+        """True if the project root can be resolved without raising."""
+        if self.root_folder is not None:
+            return True
+        if self.root_folder_environment_variable is not None and self.root_folder_environment_variable in os.environ:
+            return True
+        return False
+
     def get_root_path(self):
+        """Return the absolute project root. Raises RuntimeError when neither
+        ``root_folder`` is set nor the named env var resolves — every operation
+        that actually needs the project on disk (build, clean, run, list files)
+        depends on this, so failing loud here gives a self-explanatory error
+        instead of an opaque ``NoneType`` crash deeper in stdlib."""
         if self.root_folder is not None:
             return os.path.abspath(self.root_folder)
-        elif self.root_folder_environment_variable is not None and self.root_folder_environment_variable in os.environ:
+        if self.root_folder_environment_variable is not None and self.root_folder_environment_variable in os.environ:
             return os.path.abspath(os.environ[self.root_folder_environment_variable])
-        else:
-            return None
+        env = self.root_folder_environment_variable
+        hint = (f"set the '{env}' environment variable" if env
+                else "pass root_folder=... when defining the project")
+        raise RuntimeError(
+            f"Cannot resolve root path of simulation project '{self.name}': "
+            f"project root is not set ({hint}).")
 
     def get_full_path(self, path):
-        root = self.get_root_path()
-        base = os.path.join(root, self.root_folder_environment_variable_relative_folder) if root is not None else None
-        return os.path.abspath(os.path.join(base, path)) if base is not None else None
+        base = os.path.join(self.get_root_path(), self.root_folder_environment_variable_relative_folder)
+        return os.path.abspath(os.path.join(base, path))
 
     def get_relative_path(self, path):
-        root = self.get_root_path()
-        base = os.path.join(root, self.root_folder_environment_variable_relative_folder) if root is not None else None
+        base = os.path.join(self.get_root_path(), self.root_folder_environment_variable_relative_folder)
         return os.path.relpath(path, base)
 
     def get_omnetpp_project(self):
@@ -641,8 +654,7 @@ class SimulationProject:
         else:
             suffix = "" if mode == "release" else self.get_omnetpp_project().get_library_suffix(mode=mode)
             executable = os.path.join(self.root_folder_environment_variable_relative_folder, self.executables[0] + suffix)
-            root = self.get_root_path()
-            return os.path.abspath(os.path.join(root, executable)) if root is not None else None
+            return os.path.abspath(os.path.join(self.get_root_path(), executable))
 
     def get_library_folder_full_path(self):
         return self.get_full_path(self.library_folder)
@@ -1022,10 +1034,7 @@ def make_worktree_simulation_project(simulation_project, git_hash):
     Returns:
         :py:class:`SimulationProject`: A new project rooted at the worktree.
     """
-    src_root = simulation_project.get_root_path()
-    if src_root is None:
-        raise RuntimeError("Source project has no root path")
-    src_root = os.path.abspath(src_root)
+    src_root = os.path.abspath(simulation_project.get_root_path())
 
     workspace = simulation_project.get_workspace()
     cached = workspace.get_simulation_projects().get((simulation_project.name, git_hash))
@@ -1054,12 +1063,10 @@ def make_worktree_simulation_project(simulation_project, git_hash):
     # OMNeT++ may be installed outside of git (release tarball, package),
     # in which case we skip the redirect.
     omnetpp_project = simulation_project.get_omnetpp_project()
-    if omnetpp_project is not None:
-        omnetpp_root = omnetpp_project.get_root_path()
-        if omnetpp_root is not None:
-            omnetpp_root = os.path.abspath(omnetpp_root)
-            omnetpp_git_root = _get_git_root(omnetpp_root, optional=True)
-            if omnetpp_git_root == git_root:
+    if omnetpp_project is not None and omnetpp_project.has_root_path():
+        omnetpp_root = os.path.abspath(omnetpp_project.get_root_path())
+        omnetpp_git_root = _get_git_root(omnetpp_root, optional=True)
+        if omnetpp_git_root == git_root:
                 omnetpp_project_copy = copy.copy(omnetpp_project)
                 omnetpp_rel = os.path.relpath(omnetpp_root, git_root)
                 omnetpp_project_copy.root_folder = worktree_path if omnetpp_rel == "." else os.path.join(worktree_path, omnetpp_rel)
