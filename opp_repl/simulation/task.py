@@ -278,7 +278,7 @@ class SimulationTask(Task):
     Please note that undocumented features are not supposed to be called by the user.
     """
 
-    def __init__(self, simulation_config=None, run_number=0, inifile_entries=[], itervars=None, mode="release", build=None, build_engine=None, debug=None, remove_launch=True, break_at_event_number=None, break_at_matching_event=None, user_interface="Cmdenv", result_folder="results", sim_time_limit=None, cpu_time_limit=None, record_eventlog=None, record_pcap=None, stdout_file_path=None, eventlog_file_path=None, scalar_file_path=None, vector_file_path=None, wait=True, name="simulation", task_result_class=SimulationTaskResult, **kwargs):
+    def __init__(self, simulation_config=None, run_number=0, inifile_entries=[], itervars=None, mode="release", build=None, build_engine=None, debug=None, remove_launch=True, break_at_event_number=None, break_at_matching_event=None, user_interface="Cmdenv", result_folder="results", sim_time_limit=None, cpu_time_limit=None, bounded=None, record_eventlog=None, record_pcap=None, stdout_file_path=None, eventlog_file_path=None, scalar_file_path=None, vector_file_path=None, wait=True, name="simulation", task_result_class=SimulationTaskResult, **kwargs):
         """
         Parameters:
             simulation_config (:py:class:`SimulationConfig <opp_repl.simulation.config.SimulationConfig>`):
@@ -333,6 +333,13 @@ class SimulationTask(Task):
             cpu_time_limit (string):
                 The CPU time limit as quantity with unit (e.g. "1s").
 
+            bounded (bool or None):
+                Overrides whether the simulation is guaranteed to terminate. When ``None``
+                (the default), this is derived from task-level ``sim_time_limit`` /
+                ``cpu_time_limit`` and the underlying :py:class:`SimulationConfig`'s
+                ``bounded`` attribute. When :py:meth:`MultipleSimulationTasks.run` is called
+                with ``run_unbounded=False`` (the default), unbounded tasks are skipped.
+
             record_eventlog (bool):
                 Specifies whether the eventlog file should be recorded or not.
 
@@ -381,6 +388,7 @@ class SimulationTask(Task):
         self.result_folder = result_folder
         self.sim_time_limit = sim_time_limit
         self.cpu_time_limit = cpu_time_limit
+        self.bounded = bounded
         self.record_eventlog = record_eventlog
         self.record_pcap = record_pcap
         self.stdout_file_path = stdout_file_path
@@ -485,6 +493,19 @@ class SimulationTask(Task):
     def get_cpu_time_limit(self):
         return self.cpu_time_limit(self.simulation_config, self.run_number) if callable(self.cpu_time_limit) else self.cpu_time_limit
 
+    def is_bounded(self):
+        """
+        Returns True if the simulation is guaranteed to terminate. The explicit ``bounded``
+        constructor argument wins when set; otherwise a task-level ``sim_time_limit`` or
+        ``cpu_time_limit`` makes the task bounded, and finally the underlying
+        :py:class:`SimulationConfig`'s ``bounded`` attribute is consulted.
+        """
+        if self.bounded is not None:
+            return self.bounded
+        if self.get_sim_time_limit() or self.get_cpu_time_limit():
+            return True
+        return bool(self.simulation_config and self.simulation_config.bounded)
+
     def run(self, **kwargs):
         """
         Runs a simulation task by running the simulation as a child process or in the same process where Python is running.
@@ -501,6 +522,11 @@ class SimulationTask(Task):
                 The simulation runner class that is used to run the simulation. If not specified, then this is determined
                 by the simulation_runner parameter.
 
+            run_unbounded (bool):
+                When False (the default), tasks for which :py:meth:`is_bounded` returns False
+                are not executed and a SKIP task result is returned instead. Pass True to run
+                a simulation that may not terminate on its own.
+
         Returns (SimulationTaskResult):
             a simulation task result that contains the several simulation specific information and also the subprocess
             result if applicable.
@@ -510,7 +536,9 @@ class SimulationTask(Task):
     def build_before_run(self, **kwargs):
         self.simulation_config.simulation_project.build(mode=self.mode, build_engine=self.build_engine)
 
-    def run_protected(self, prepend_args=[], append_args=[],  simulation_runner=None, simulation_runner_class=None, build=None, **kwargs):
+    def run_protected(self, prepend_args=[], append_args=[],  simulation_runner=None, simulation_runner_class=None, build=None, run_unbounded=False, **kwargs):
+        if not run_unbounded and not self.is_bounded():
+            return self.task_result_class(task=self, result="SKIP", expected_result="SKIP", reason="Unbounded simulation")
         if (build if build is not None else self.build):
             self.build_before_run(**kwargs)
         simulation_project = self.simulation_config.simulation_project
@@ -693,6 +721,11 @@ class MultipleSimulationTasks(MultipleTasks):
         Runs multiple simulation tasks.
 
         Parameters:
+            run_unbounded (bool):
+                When False (the default), tasks for which :py:meth:`SimulationTask.is_bounded`
+                returns False are skipped with a SKIP result. Pass True to run simulations
+                that may not terminate on their own.
+
             kwargs (dict):
                 Additional parameters are inherited from the :py:func:`build_project <opp_repl.simulation.build.build_project>` function
                 and also from the :py:meth:`run <opp_repl.common.task.MultipleTasks.run>` method.
