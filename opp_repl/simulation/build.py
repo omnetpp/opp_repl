@@ -359,10 +359,32 @@ class SimulationProjectMsgCompileTask(MsgCompileTask):
         return [self.file_path]
 
 
+def _project_dll_export_define(simulation_project):
+    """
+    Compute ``-D<SYM>_EXPORT`` for a project, matching ``opp_makemake -p<SYM>``.
+
+    Uses ``dll_symbol`` when set; otherwise derives the symbol from
+    ``dynamic_libraries[0]`` (which is what ``opp_makemake -o <NAME>`` would
+    produce by default when invoked with ``-p<NAME>``).
+    """
+    sym = simulation_project.dll_symbol
+    if not sym and simulation_project.dynamic_libraries:
+        sym = simulation_project.dynamic_libraries[0]
+    return [f"-D{sym}_EXPORT"] if sym else []
+
+
 class SimulationProjectCppCompileTask(CppCompileTask):
     """
     Derived ``CppCompileTask`` that materializes its parameters from a
     ``SimulationProject`` and an optional ``MakefileIncConfig``.
+
+    The compile runs from the project's first ``cpp_folder`` (typically
+    ``src/``), with the source passed as a path relative to that directory and
+    include flags emitted in cwd-relative form when they live under the
+    project root. The argv order matches the ``$(CXX) -c $(CXXFLAGS) $(COPTS)``
+    recipe that ``opp_makemake`` generates, so a prior makefile build leaves
+    ccache entries that the task engine hits when it (re-)compiles the same
+    sources.
     """
 
     def __init__(self, simulation_project=None, file_path=None, mode="release", makefile_inc_config=None, feature_cflags=None, **kwargs):
@@ -372,8 +394,28 @@ class SimulationProjectCppCompileTask(CppCompileTask):
         self.makefile_inc_config = makefile_inc_config
         self.feature_cflags = feature_cflags or []
 
-        output_folder = _simulation_project_output_folder(simulation_project, mode, makefile_inc_config)
-        output_file = f"{output_folder}/" + re.sub(r"\.cc$", ".o", file_path)
+        sp = simulation_project
+        root = sp.get_full_path(".")
+
+        # The "source folder" where the makefile would run (cpp_folders[0],
+        # typically "src/"). Defaults to project root if cpp_folders is empty.
+        src_folder_rel = sp.cpp_folders[0] if sp.cpp_folders else "."
+        src_folder_abs = os.path.join(root, src_folder_rel)
+
+        # file_path comes from get_cpp_files() as a project-root-relative path
+        # (e.g. "src/inet/foo.cc"). Convert to a cpp-folder-relative path
+        # (e.g. "inet/foo.cc") so the compiler sees the same source token the
+        # makefile uses.
+        file_abs = sp.get_full_path(file_path)
+        input_basename = os.path.relpath(file_abs, src_folder_abs)
+
+        # Output path mirrors opp_makemake's $O = ../out/<configname>/<src_folder>.
+        # Keep absolute (under project root) so ccache-stripped -o doesn't matter.
+        output_folder = os.path.join(
+            root, _simulation_project_output_folder(sp, mode, makefile_inc_config),
+            src_folder_rel)
+        obj_name = re.sub(r"\.(cc|cpp|c\+\+|cxx|c)$", ".o", input_basename)
+        output_file = os.path.join(output_folder, obj_name)
         dependency_file = f"{output_file}.d"
 
         if makefile_inc_config:
@@ -390,19 +432,38 @@ class SimulationProjectCppCompileTask(CppCompileTask):
             import_defines = ["-DOMNETPPLIBS_IMPORT"]
             incl_dir = "/usr/include"
 
-        dll_defines = [f"-D{simulation_project.dll_symbol}_EXPORT"] if simulation_project.dll_symbol else []
-        project_defines = [f"-D{d}" for d in simulation_project.cpp_defines]
-        include_dirs = [incl_dir, *simulation_project.get_effective_include_folders(), *simulation_project.external_include_folders]
-        extra_cflags = getattr(simulation_project, "extra_cflags", []) or []
+        # Project includes go first, in cwd-relative form when they live under
+        # the project root (mirrors what opp_makemake's `-I.` plus makefrag
+        # `INCLUDE_PATH += -Ifoo` produces). OMNETPP_INCL_DIR comes last —
+        # opp_makemake's COPTS layout is `$(INCLUDE_PATH) -I$(OMNETPP_INCL_DIR)`.
+        project_include_dirs = []
+        for inc in sp.get_effective_include_folders():
+            inc_abs = inc if os.path.isabs(inc) else os.path.join(root, inc)
+            try:
+                rel = os.path.relpath(inc_abs, src_folder_abs)
+            except ValueError:
+                rel = inc_abs  # different drive on Windows etc.
+            project_include_dirs.append(rel if not rel.startswith("..") else inc_abs)
+        include_dirs = [*project_include_dirs, incl_dir]
 
+        # cpp_defines, dll-export define, import define
+        dll_defines = _project_dll_export_define(sp)
+        project_defines = [f"-D{d}" for d in sp.cpp_defines]
+        extra_cflags = getattr(sp, "extra_cflags", []) or []
+
+        # Argument layout matches the opp_makemake `.cc` recipe:
+        #   $(CXX) -c $(CXXFLAGS) $(CFLAGS) <extra_cflags> $(IMPORT_DEFINES)
+        #          -D<SYM>_EXPORT <project_defines> $(INCLUDE_PATH) -I$(OMNETPP_INCL_DIR)
+        # extra_cflags (e.g. -Wno-overloaded-virtual) goes inside CFLAGS via
+        # the makefrag's `CFLAGS += ...`, so we place it right after cflags.
         super().__init__(
-            working_dir=simulation_project.get_full_path("."),
+            working_dir=src_folder_abs,
             compiler=cxx_parts,
             cxxflags=cxxflags,
             cflags=cflags,
             defines=[*import_defines, *dll_defines, *project_defines],
             include_dirs=include_dirs,
-            input_file=file_path,
+            input_file=input_basename,
             output_file=output_file,
             dependency_file=dependency_file,
             extra_args=[*self.feature_cflags, *extra_cflags],
@@ -412,13 +473,31 @@ class SimulationProjectCppCompileTask(CppCompileTask):
     def get_parameters_string(self, **kwargs):
         return self.file_path
 
+    def get_arguments(self):
+        # Override parent to place `extra_args` right after cflags (matches
+        # makefrag `CFLAGS += ...`), instead of after include_dirs.
+        args = [
+            *self.compiler, "-c",
+            *self.cxxflags,
+            *self.cflags,
+            *self.extra_args,
+            *self.defines,
+            *[f"-I{p}" for p in self.include_dirs],
+        ]
+        if self.dependency_file:
+            args += ["-MF", self.dependency_file]
+        args += ["-o", self.output_file, self.input_file]
+        return args
+
     def get_input_files(self):
         dep = self._resolve(self.dependency_file)
         if dep and os.path.exists(dep):
             dependency = read_dependency_file(dep)
             if self.output_file in dependency:
                 return dependency[self.output_file]
-        return [self.file_path]
+            if dependency:
+                return next(iter(dependency.values()))
+        return [self.input_file]
 
 
 class SimulationProjectLinkTask(LinkTask):
