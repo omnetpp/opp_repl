@@ -268,7 +268,7 @@ class SimulationProject:
                  used_projects=[], external_bin_folders=[], external_library_folders=[], external_libraries=[], external_include_folders=[],
                  dll_symbol=None, feature_libraries=None, pkg_config_libraries=None, opp_defines_file=None, precompiled_header=None, extra_cflags=[], extra_ldflags=[],
                  simulation_configs=None, overlay_name=None, overlay_build_root=None, opp_env_workspace=None, opp_env_project=None,
-                 github_owner=None, github_repository=None, github_workflows=None, **kwargs):
+                 github_owner=None, github_repository=None, github_workflows=None, workspace=None, **kwargs):
         """
         Initializes a new simulation project.
 
@@ -451,6 +451,14 @@ class SimulationProject:
                 (e.g. ``["fingerprint-tests.yml"]``).  Used by
                 :py:func:`dispatch_all_workflows <opp_repl.common.github.dispatch_all_workflows>`.
 
+            workspace (:py:class:`SimulationWorkspace` or None):
+                The workspace this project belongs to.  Used for resolving
+                ``used_projects`` references and the associated OMNeT++
+                project.  If ``None``, the project falls back to the default
+                workspace at access time (see :py:meth:`get_workspace`).
+                Normally set automatically by
+                :py:meth:`SimulationWorkspace.define_simulation_project`.
+
             kwargs (dict):
                 Ignored.
         """
@@ -510,6 +518,7 @@ class SimulationProject:
         self._simulation_configs_freshness_key = None
         self.binary_simulation_distribution_file_paths = None
         self._overlay = None
+        self.workspace = workspace
         if overlay_name is not None:
             from opp_repl.simulation.overlay import OverlayMount
             source_root = self.get_root_path()
@@ -524,6 +533,10 @@ class SimulationProject:
 
     def get_name(self):
         return self.name
+
+    def get_workspace(self):
+        """Return the workspace this project belongs to, or the default workspace."""
+        return self.workspace or get_default_simulation_workspace()
 
     def get_hash(self, binary=True, **kwargs):
         hasher = hashlib.sha256()
@@ -551,7 +564,7 @@ class SimulationProject:
             env.setdefault("CCACHE_BASEDIR", root)
             # CCACHE_NOHASHDIR: don't hash the CWD so worktrees at different absolute paths still hit the cache
             env.setdefault("CCACHE_NOHASHDIR", "true")
-        ws = getattr(self, '_workspace', None) or get_default_simulation_workspace()
+        ws = self.get_workspace()
         for used_project_name in self.used_projects:
             used_project = ws.get_simulation_project(used_project_name, None)
             used_root = used_project.get_root_path()
@@ -586,7 +599,7 @@ class SimulationProject:
 
     def get_omnetpp_project(self):
         if isinstance(self.omnetpp_project, str):
-            ws = getattr(self, '_workspace', None) or get_default_simulation_workspace()
+            ws = self.get_workspace()
             try:
                 self.omnetpp_project = ws.get_omnetpp_project(self.omnetpp_project)
             except KeyError:
@@ -595,7 +608,7 @@ class SimulationProject:
                     self.omnetpp_project = ws.define_omnetpp_project(self.omnetpp_project, root_folder=root)
                 else:
                     self.omnetpp_project = None
-        ws = getattr(self, '_workspace', None) or get_default_simulation_workspace()
+        ws = self.get_workspace()
         result = self.omnetpp_project or ws.get_default_omnetpp_project()
         if result is None:
             omnetpp_projects = ws.get_omnetpp_projects()
@@ -621,7 +634,7 @@ class SimulationProject:
         if self.build_types[0] == "dynamic library":
             for library in self.dynamic_libraries:
                 result.append(os.path.join(self.library_folder, library))
-            ws = getattr(self, '_workspace', None) or get_default_simulation_workspace()
+            ws = self.get_workspace()
             for used_project in self.used_projects:
                 simulation_project = ws.get_simulation_project(used_project, None)
                 result = result + list(map(simulation_project.get_full_path, simulation_project.get_dynamic_libraries_for_running()))
@@ -629,7 +642,7 @@ class SimulationProject:
 
     def get_ned_folders_for_running(self):
         result = self.ned_folders
-        ws = getattr(self, '_workspace', None) or get_default_simulation_workspace()
+        ws = self.get_workspace()
         for used_project in self.used_projects:
             simulation_project = ws.get_simulation_project(used_project, None)
             result = result + list(map(simulation_project.get_full_path, simulation_project.get_ned_folders_for_running()))
@@ -656,14 +669,14 @@ class SimulationProject:
         return list(map(lambda include_folder: self.get_full_path(include_folder), self.include_folders))
 
     def get_effective_include_folders(self):
-        ws = getattr(self, '_workspace', None) or get_default_simulation_workspace()
+        ws = self.get_workspace()
         return self.get_direct_include_folders() + flatten(map(lambda used_project: ws.get_simulation_project(used_project, None).get_direct_include_folders(), self.used_projects))
 
     def get_direct_msg_folders(self):
         return list(map(lambda msg_folder: self.get_full_path(msg_folder), self.msg_folders))
 
     def get_effective_msg_folders(self):
-        ws = getattr(self, '_workspace', None) or get_default_simulation_workspace()
+        ws = self.get_workspace()
         return self.get_direct_msg_folders() + flatten(map(lambda used_project: ws.get_simulation_project(used_project, None).get_direct_msg_folders(), self.used_projects))
 
     def get_cpp_files(self):
@@ -691,7 +704,7 @@ class SimulationProject:
         self.ensure_mounted()
         if recursive:
             if self.used_projects:
-                ws = getattr(self, '_workspace', None) or get_default_simulation_workspace()
+                ws = self.get_workspace()
                 for used_project_name in self.used_projects:
                     used_project = ws.get_simulation_project(used_project_name, None)
                     if used_project is not None:
@@ -719,7 +732,7 @@ class SimulationProject:
     def clean(self, mode="release", recursive=True, build_engine=None, **kwargs):
         if recursive:
             if self.used_projects:
-                ws = getattr(self, '_workspace', None) or get_default_simulation_workspace()
+                ws = self.get_workspace()
                 for used_project_name in self.used_projects:
                     used_project = ws.get_simulation_project(used_project_name, None)
                     if used_project is not None:
@@ -970,7 +983,7 @@ def make_worktree_simulation_project(simulation_project, git_hash):
         raise RuntimeError("Source project has no root path")
     src_root = os.path.abspath(src_root)
 
-    workspace = getattr(simulation_project, "_workspace", None) or get_default_simulation_workspace()
+    workspace = simulation_project.get_workspace()
     cached = workspace.get_simulation_projects().get((simulation_project.name, git_hash))
     if cached is not None:
         return cached
@@ -1035,7 +1048,7 @@ def remove_worktree_simulation_project(simulation_project):
             ["git", "worktree", "remove", "--force", worktree_top],
             cwd=os.path.dirname(worktree_top),
             error_message=f"Failed to remove git worktree {worktree_top}")
-    workspace = getattr(simulation_project, "_workspace", None) or get_default_simulation_workspace()
+    workspace = simulation_project.get_workspace()
     workspace.get_simulation_projects().pop(
         (simulation_project.name, simulation_project.version), None)
 

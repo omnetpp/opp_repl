@@ -115,8 +115,8 @@ class SimulationWorkspace:
         self._simulation_projects[(name, version)] = simulation_project
 
     def define_simulation_project(self, name, version=None, **kwargs):
+        kwargs.setdefault("workspace", self)
         simulation_project = SimulationProject(name, version, **kwargs)
-        simulation_project._workspace = self
         self.set_simulation_project(name, version, simulation_project)
         return simulation_project
 
