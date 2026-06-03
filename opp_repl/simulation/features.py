@@ -9,8 +9,104 @@ import logging
 import os
 import shlex
 import subprocess
+import xml.etree.ElementTree as ET
 
 _logger = logging.getLogger(__name__)
+
+
+class _Feature:
+    __slots__ = ("id", "initially_enabled", "ned_packages", "extra_source_folders",
+                 "compile_flags", "linker_flags", "requires")
+
+    def __init__(self, elem):
+        self.id = elem.get("id", "")
+        self.initially_enabled = elem.get("initiallyEnabled", "true").strip().lower() == "true"
+        self.ned_packages = elem.get("nedPackages", "").split()
+        self.extra_source_folders = elem.get("extraSourceFolders", "").split()
+        self.compile_flags = elem.get("compileFlags", "")
+        self.linker_flags = elem.get("linkerFlags", "")
+        self.requires = elem.get("requires", "").split()
+
+
+def _parse_oppfeatures(simulation_project):
+    """
+    Parses ``.oppfeatures`` and returns (root_attrs, list[_Feature]).
+    ``root_attrs`` is a dict with ``cppSourceRoots`` (list, possibly empty) and
+    ``defines_file`` (string, project-root-relative; default ``src/features.h``).
+    Returns (None, []) if no .oppfeatures exists.
+    """
+    if not has_features(simulation_project):
+        return None, []
+    path = simulation_project.get_full_path(".oppfeatures")
+    root = ET.parse(path).getroot()
+    attrs = {
+        "cppSourceRoots": root.get("cppSourceRoots", "").split(),
+        "defines_file": root.get("definesFile", "src/features.h"),
+    }
+    features = [_Feature(elem) for elem in root.iter("feature")]
+    return attrs, features
+
+
+def _parse_oppfeaturestate(simulation_project):
+    """
+    Parses ``.oppfeaturestate`` and returns a {feature_id: bool} dict.
+    Returns {} when the file is absent (caller falls back to ``initiallyEnabled``).
+    """
+    path = simulation_project.get_full_path(".oppfeaturestate")
+    if not os.path.isfile(path):
+        return {}
+    root = ET.parse(path).getroot()
+    return {f.get("id"): (f.get("enabled", "true").strip().lower() == "true")
+            for f in root.iter("feature") if f.get("id")}
+
+
+def get_enabled_features(simulation_project):
+    """
+    Returns ``{feature_id: bool}`` reflecting current enable/disable state.
+    Falls back to each feature's ``initiallyEnabled`` when ``.oppfeaturestate``
+    is absent or doesn't list the feature.
+    """
+    _, features = _parse_oppfeatures(simulation_project)
+    state = _parse_oppfeaturestate(simulation_project)
+    return {f.id: state.get(f.id, f.initially_enabled) for f in features}
+
+
+def get_disabled_feature_folders(simulation_project):
+    """
+    Returns a list of project-root-relative folder paths whose contents should
+    be skipped at source-collection time because their owning feature is
+    disabled.
+
+    For each disabled feature, expands ``nedPackages`` (with dots → slashes,
+    prefixed by each ``cppSourceRoots`` entry) and ``extraSourceFolders``
+    (taken as-is, project-root-relative). Mirrors the ``-X`` options that
+    ``opp_featuretool options -f`` would emit, but reads the XML directly so
+    no subprocess is needed.
+    """
+    attrs, features = _parse_oppfeatures(simulation_project)
+    if not features:
+        return []
+    state = _parse_oppfeaturestate(simulation_project)
+    cpp_roots = attrs["cppSourceRoots"] or [""]
+    folders = []
+    for f in features:
+        enabled = state.get(f.id, f.initially_enabled)
+        if enabled:
+            continue
+        for pkg in f.ned_packages:
+            pkg_path = pkg.replace(".", "/")
+            for root in cpp_roots:
+                folders.append(os.path.join(root, pkg_path) if root else pkg_path)
+        for extra in f.extra_source_folders:
+            folders.append(extra)
+    # Dedup while preserving order
+    seen = set()
+    out = []
+    for p in folders:
+        if p not in seen:
+            seen.add(p)
+            out.append(p)
+    return out
 
 
 def has_features(simulation_project):
