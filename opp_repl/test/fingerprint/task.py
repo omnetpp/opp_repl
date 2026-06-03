@@ -144,6 +144,13 @@ class FingerprintTestGroupTask(MultipleTestTasks):
     def __repr__(self):
         return repr(self)
 
+    def count_progress_steps(self):
+        # When a group has a single task, run() short-circuits to it and
+        # does not fire its own ▶/◉ events, so don't count an extra step.
+        if len(self.tasks) == 1:
+            return self.tasks[0].count_progress_steps()
+        return super().count_progress_steps()
+
     def run(self, output_stream=sys.stdout, **kwargs):
         if len(self.tasks) == 1:
             return self.tasks[0].run(output_stream=output_stream, **kwargs)
