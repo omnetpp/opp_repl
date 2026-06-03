@@ -324,6 +324,31 @@ tr2 = tr.recheck(metric_threshold=0.01)  # tolerate small differences
 print(tr2.result)   # "PASS" or "FAIL"
 ```
 
+### SimulationUpdateTaskResult
+
+Wraps the result of an update that re-ran a simulation
+(`SimulationUpdateTask` and its subclasses).  It delegates the data
+accessors to the underlying `SimulationTaskResult`, so result data is
+available directly from the update result without reaching through
+`simulation_task_result`:
+
+```python
+r = update_statistical_test_results(config_filter="PureAloha")
+
+# Read merged result data straight off the update result
+df = r.get_scalars()
+df = r.get_vectors(name_filter="rcvdPk")
+df = r.get_histograms()
+
+# Per-result access works the same way
+tr = r.results[0]
+tr.get_scalars()
+```
+
+The merged accessors on `MultipleSimulationUpdateTaskResults` skip update
+results whose simulation did not finish (`DONE`), so failed runs do not
+contaminate the merged DataFrame.
+
 ### SpeedUpdateTaskResult
 
 Carries instruction counts for the speed update comparison:
