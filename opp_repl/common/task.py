@@ -540,6 +540,8 @@ class Task:
         return self.name
 
     def log_structure(self, indent=0):
+        if not _logger.isEnabledFor(logging.DEBUG):
+            return
         status = "up-to-date" if self.is_up_to_date() else "to be done"
         _logger.debug(f"{'  ' * indent}{self.get_description()} ({status})")
 
@@ -736,6 +738,8 @@ class MultipleTasks:
         return f"{prefix}{self.name} ({len(self.tasks)} {mode})"
 
     def log_structure(self, indent=0):
+        if not _logger.isEnabledFor(logging.DEBUG):
+            return
         status = "up-to-date" if self.is_up_to_date() else "to be done"
         _logger.debug(f"{'  ' * indent}{self.get_description()} ({status})")
         for task in self.tasks:
