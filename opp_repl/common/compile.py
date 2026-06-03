@@ -40,16 +40,39 @@ class BuildTask(Task):
         def get_mtime(p):
             full = self._resolve(p)
             return os.path.getmtime(full) if full and os.path.exists(full) else None
-        input_files = self.get_input_files()
+        debug = _logger.isEnabledFor(logging.DEBUG)
         output_files = self.get_output_files()
-        input_times = list(map(get_mtime, input_files))
-        output_times = list(map(get_mtime, output_files))
-        result = input_times and output_times and \
-                 not list(filter(lambda t: t is None, input_times)) and \
-                 not list(filter(lambda t: t is None, output_times)) and \
-                 max(input_times) < min(output_times)
-        _logger.debug(f"  {self.name} is_up_to_date={result}: input_files={input_files}, output_files={output_files}, input_times={input_times}, output_times={output_times}")
-        return result
+        if not output_files:
+            if debug:
+                _logger.debug(f"  {self.name} is_up_to_date=False: no output_files")
+            return False
+        min_output_time = None
+        for p in output_files:
+            t = get_mtime(p)
+            if t is None:
+                if debug:
+                    _logger.debug(f"  {self.name} is_up_to_date=False: missing output {p}")
+                return False
+            if min_output_time is None or t < min_output_time:
+                min_output_time = t
+        input_files = self.get_input_files()
+        if not input_files:
+            if debug:
+                _logger.debug(f"  {self.name} is_up_to_date=False: no input_files")
+            return False
+        for p in input_files:
+            t = get_mtime(p)
+            if t is None:
+                if debug:
+                    _logger.debug(f"  {self.name} is_up_to_date=False: missing input {p}")
+                return False
+            if t >= min_output_time:
+                if debug:
+                    _logger.debug(f"  {self.name} is_up_to_date=False: input {p} ({t}) >= oldest output ({min_output_time})")
+                return False
+        if debug:
+            _logger.debug(f"  {self.name} is_up_to_date=True")
+        return True
 
     def run_protected(self, **kwargs):
         args = self.get_arguments()
