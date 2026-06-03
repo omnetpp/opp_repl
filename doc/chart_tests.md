@@ -112,6 +112,28 @@ run_chart_tests(simulation_project=inet_project,
                 baseline_simulation_project=inet_baseline_project)
 ```
 
+## Browsing failures in the diff GUI
+
+`opp_diff_charts` is a PyQt6 viewer that walks a folder for chart-diff
+quadruples (`<stem>.png`, `<stem>-old.png`, `<stem>-new.png`,
+`<stem>-diff.png`) and shows them side-by-side with an RMSE column for
+each row.  Byte-identical pairs are filtered out automatically.
+
+```bash
+opp_diff_charts /path/to/media_folder      # browse a chart-test baseline directory
+opp_diff_charts /path/to/staging_dir       # browse a compare_charts() staging dir
+```
+
+The GUI requires the **`diffcharts`** optional dependency group (PyQt6):
+
+```bash
+pip install -e ".[diffcharts]"
+```
+
+It is opened automatically by [`compare_charts()`](comparing_simulations.md)
+and [`compare_module_images()`](comparing_simulations.md) when their
+`open_gui=True` default is in effect.
+
 ## Command Line
 
 ```bash

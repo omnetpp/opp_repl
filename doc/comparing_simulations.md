@@ -1,9 +1,20 @@
 # Comparing Simulations
 
 Compare simulation results between two projects, between two git commits,
-or across a sequence of commits.  The comparison checks three aspects of
-each simulation run: stdout trajectories, fingerprint trajectories, and
-scalar statistical results.
+or across a sequence of commits.  The comparison can check up to five
+aspects of each simulation run:
+
+- **stdout trajectory** (default on) — line-by-line diff of stdout
+- **fingerprint trajectory** (default on) — cumulative event-by-event hash
+- **scalar statistics** (default on) — `.sca` results compared by name
+- **eventlog** (default off) — line-by-line diff of `.elog` files
+- **chart images** (default off) — pixel diff of every `.anf` chart on both sides
+- **module images** (default off) — pixel diff of compound module screenshots
+
+The three default-on axes are inexpensive and run on every comparison.
+The eventlog, chart, and module-image axes are heavier and must be
+enabled explicitly (or via the dedicated shorthand functions described
+below).
 
 ## Python API
 
@@ -132,23 +143,41 @@ results = compare_fingerprints(
 ```
 
 Each shorthand also has a `*_between_commits()` variant for comparing two
-commits and a `*_across_commits()` variant for walking a sequence of commits:
+commits.  The three default-on axes additionally have an `*_across_commits()`
+variant for walking a sequence of commits:
 
 - `compare_statistics_between_commits()` / `compare_statistics_across_commits()`
 - `compare_stdout_between_commits()` / `compare_stdout_across_commits()`
 - `compare_fingerprints_between_commits()` / `compare_fingerprints_across_commits()`
 
-Chart and speed comparison (`compare_charts()`, `compare_speed()`) are planned
-but not yet implemented.
+For the heavier axes there is no separate shorthand — pass
+`compare_eventlog=True` to `compare_simulations()` to run an eventlog-only
+comparison, or use the dedicated chart and module-image helpers:
 
-### Disabling individual comparison axes
+- `compare_charts()` / `compare_charts_between_commits()` — render every
+  `.anf` chart on both sides into a shared staging folder and compute
+  pixel diffs.  When `open_gui=True` (the default) the result is opened
+  in the `opp_diff_charts` GUI.  See [chart_tests.md](chart_tests.md)
+  for the underlying capture/diff machinery.
+- `compare_module_images()` / `compare_module_images_between_commits()` —
+  launch each side a second time in Qtenv, capture a PNG of every
+  compound module that matches the include/exclude filters, and diff
+  them.  Also opens the `opp_diff_charts` GUI by default.  See
+  [module_image_tests.md](module_image_tests.md) for the capture API.
 
-By default the comparison checks stdout trajectories, fingerprint trajectories,
-and scalar statistics.  Each axis can be disabled independently:
+Speed comparison (`compare_speed()`) is planned but not yet implemented.
 
-- **`compare_stdout`** (bool) — compare stdout trajectories (default `True`)
-- **`compare_fingerprint`** (bool) — compare fingerprint trajectories (default `True`)
-- **`compare_statistics`** (bool) — compare scalar statistical results (default `True`)
+### Enabling and disabling individual comparison axes
+
+Each axis is controlled by its own boolean flag.  The three default-on
+axes can be turned off; the three default-off axes can be turned on:
+
+- **`compare_stdout`** (bool) — stdout trajectories (default `True`)
+- **`compare_fingerprint`** (bool) — fingerprint trajectories (default `True`)
+- **`compare_statistics`** (bool) — scalar statistical results (default `True`)
+- **`compare_eventlog`** (bool) — eventlog files (default `False`)
+- **`compare_charts`** (bool) — `.anf` chart images (default `False`)
+- **`compare_module_images`** (bool) — Qtenv compound-module screenshots (default `False`)
 
 ```python
 # Only compare statistics, skip stdout and fingerprint trajectories
@@ -172,10 +201,24 @@ results = compare_simulations_between_commits(
 The flags are stored on the `CompareSimulationsTask`, so they are honoured when
 the task is re-run.
 
-Additional keyword arguments can narrow the statistical and stdout comparison.
-These are *result-content filters* — they apply within each compared pair's
-results — and are distinct from the task-level filters (`config_filter`,
-`working_directory_filter`, …) that select *which* pairs to compare.
+Disabling an axis also disables the simulation-side recording it would
+otherwise force on:
+
+- `compare_statistics=False` skips the simulation's statistics recording.
+- `compare_stdout=False` lets `cmdenv-express-mode` keep its default; only
+  when stdout comparison is on does opp_repl force express mode off so
+  individual event lines reach the captured stdout.
+- `compare_fingerprint=False` *and* `compare_eventlog=False` skips eventlog
+  recording entirely (fingerprint trajectories are parsed out of the eventlog).
+  `compare_eventlog=True` also forces full eventlog recording by clearing
+  the default `eventlog-options = module` restriction; pass an explicit
+  `eventlog_options="..."` to override.
+
+Additional keyword arguments can narrow what is compared within each
+pair.  These are *result-content filters* — they apply within each
+compared pair's results — and are distinct from the task-level filters
+(`config_filter`, `working_directory_filter`, …) that select *which*
+pairs to compare.
 
 - **`result_name_filter`** / **`exclude_result_name_filter`** — filter scalar names in the *different* result
 - **`result_module_filter`** / **`exclude_result_module_filter`** — filter module paths in the *different* result
@@ -183,6 +226,10 @@ results — and are distinct from the task-level filters (`config_filter`,
 - **`only_result_module_filter`** / **`exclude_only_result_module_filter`** — filter modules among the rows present on only one side
 - **`rename_1`** / **`rename_2`** — per-side `(module, name) -> (module, name)` callable that rewrites keys before the merge, so renamed statistics line up
 - **`stdout_filter`** / **`exclude_stdout_filter`** — filter stdout lines before comparing
+- **`eventlog_filter`** / **`exclude_eventlog_filter`** — regex applied to eventlog lines before comparing (the eventlog header and `SB` lines are always skipped, since both carry run-specific IDs)
+- **`chart_filter`** / **`exclude_chart_filter`** — regex applied to chart names when `compare_charts=True`
+- **`module_path_filter`** / **`exclude_module_path_filter`** — glob applied to module full paths when `compare_module_images=True`
+- **`module_type_filter`** / **`exclude_module_type_filter`** — glob applied to module NED types when `compare_module_images=True`
 
 ### Understanding the result
 
@@ -248,6 +295,60 @@ r.print_divergence_position_cause_chain()             # prints 3 cause events by
 r.print_divergence_position_cause_chain(num_cause_events=5)  # walk further back
 ```
 
+### Eventlog comparison
+
+When `compare_eventlog=True`, the two `.elog` files are compared line by
+line.  Header lines and `SB` records (which contain run-specific IDs) are
+always skipped; `eventlog_filter` / `exclude_eventlog_filter` can narrow
+the comparison further.
+
+```python
+r.eventlog_comparison_result          # "IDENTICAL" or "DIVERGENT"
+r.eventlog_divergence_position        # first differing line (or None)
+r.eventlog_divergence_position.get_description()
+```
+
+Unlike fingerprint comparison — which only knows *that* the runs diverged —
+eventlog comparison shows the first differing line directly, which is
+often enough to identify the cause without a debugger.
+
+### Chart image comparison
+
+When `compare_charts=True`, every `.anf` chart from every matching
+working directory is rendered on both sides into a shared staging folder,
+and per-chart pixel diffs are computed.  Byte-identical pairs are dropped
+automatically.
+
+```python
+r.chart_comparison_result   # "IDENTICAL" or "DIVERGENT"
+results.staging_dir         # path to the rendered PNGs
+results.open_charts_in_gui()  # launch the opp_diff_charts browser
+```
+
+The `compare_charts()` shorthand wraps this and opens the GUI by default;
+see [chart_tests.md](chart_tests.md) for the underlying capture and diff
+machinery.
+
+### Module image comparison
+
+When `compare_module_images=True`, each side's simulation is re-launched
+in Qtenv (driven through its MCP endpoint) so a PNG of every compound
+module that matches the filters can be captured.  The captures are
+diffed pixel-by-pixel and grouped per working directory.
+
+Relevant parameters:
+
+- `module_path_filter` / `exclude_module_path_filter` — glob on full module paths
+- `module_type_filter` / `exclude_module_type_filter` — glob on NED types
+- `group_by` — `"path"` (default), `"type"`, or `"path_no_indices"`
+- `area` — `"all_elements"` (default), `"module_rectangle"`, or `"viewport"`
+- `margin` — pixel margin around the captured area (default 5)
+- `startup_timeout` — seconds to wait for the Qtenv-side MCP endpoint (default 30)
+
+The `compare_module_images()` shorthand wraps this and opens the GUI by
+default.  See [module_image_tests.md](module_image_tests.md) for the
+capture API.
+
 ### Statistical (scalar) result comparison
 
 Scalar results (`.sca` files, plus statistics extracted from `.vec` files) are
@@ -308,6 +409,7 @@ r2.result                                # overall verdict is recomputed
 `recompare()` accepts the following keyword arguments:
 
 - **Stdout filters**: `stdout_filter`, `exclude_stdout_filter`
+- **Eventlog filters**: `eventlog_filter`, `exclude_eventlog_filter`
 - **Statistics filters (on *different* rows)**: `result_name_filter`,
   `exclude_result_name_filter`, `result_module_filter`,
   `exclude_result_module_filter`, `full_match`
@@ -317,6 +419,9 @@ r2.result                                # overall verdict is recomputed
 - **Rename callables**: `rename_1`, `rename_2` — per-side
   `(module, name) -> (module, name)` rewriters that line up renamed
   statistics
+
+Only axes whose `compare_*` flag was enabled on the original task are
+recomputed; the rest are passed through unchanged.
 
 ### Interactive debugging and visualization
 
