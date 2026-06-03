@@ -93,7 +93,7 @@ variants and analyse the differences.
 
 | Class | Purpose |
 |---|---|
-| `CompareSimulationsTask` | Compare stdout trajectories, fingerprint trajectories, and scalar results |
+| `CompareSimulationsTask` | Compare any combination of stdout, fingerprint, statistics, eventlog, chart images, and module images |
 | `MultipleCompareSimulationsTaskResults` | Aggregate comparison results; codes include `IDENTICAL`, `DIVERGENT`, `DIFFERENT` |
 
 ## Simulation tasks in detail
@@ -141,6 +141,42 @@ number, the build mode, and a set of optional overrides:
 - **User interface** — `"Cmdenv"` (default) or `"Qtenv"`.
 - **Extra INI entries** — `inifile_entries` is a list of additional entries
   passed on the command line as `--<entry>`.
+
+### Bounded and unbounded tasks
+
+A simulation task is **bounded** when something will eventually stop it —
+a finite `sim-time-limit`, `cpu-time-limit`, or `real-time-limit` in the
+INI file, or an explicit `bounded` marker.  Otherwise it is **unbounded**
+and may run forever.
+
+By default `SimulationTask.run()` and `MultipleSimulationTasks.run()`
+**skip** unbounded tasks (the result is `SKIP` with a "task is unbounded"
+reason).  This avoids accidentally running infinite simulations from a
+collection-level command.  Pass `run_unbounded=True` to override:
+
+```python
+# Run every matching task, including unbounded ones
+run_simulations(config_filter="Endless", run_unbounded=True)
+```
+
+There is also a collection-time gate.  `get_simulation_tasks()` accepts a
+`bounded_filter` parameter:
+
+- `bounded_filter=None` (default) — return all tasks regardless of boundedness
+- `bounded_filter=True` — keep only bounded tasks
+- `bounded_filter=False` — keep only unbounded tasks
+
+The two settings complement each other: `bounded_filter` shapes the task
+list at collection time; `run_unbounded` is a run-time safety net for
+tasks that slipped through.
+
+### Progress display
+
+Each task's progress line is rendered as **`<thing> <verb>`** rather than
+`<verb> <thing>` — e.g. `opp_run build`, `common clean`, `inet link`.
+This keeps the same set of components visually aligned when a single
+build run goes through several verbs in sequence.  Groups of concurrent
+tasks are rendered as `<verb> <name> (N concurrent)`.
 
 ### Build modes
 
