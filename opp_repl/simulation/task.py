@@ -506,7 +506,7 @@ class SimulationTask(Task):
             return True
         return bool(self.simulation_config and self.simulation_config.bounded)
 
-    def run(self, **kwargs):
+    def run(self, run_unbounded=False, **kwargs):
         """
         Runs a simulation task by running the simulation as a child process or in the same process where Python is running.
 
@@ -531,7 +531,7 @@ class SimulationTask(Task):
             a simulation task result that contains the several simulation specific information and also the subprocess
             result if applicable.
         """
-        return super().run(**kwargs)
+        return super().run(run_unbounded=run_unbounded, **kwargs)
 
     def build_before_run(self, **kwargs):
         self.simulation_config.simulation_project.build(mode=self.mode, build_engine=self.build_engine)
@@ -716,7 +716,7 @@ class MultipleSimulationTasks(MultipleTasks):
         self.build_engine = build_engine
         self.simulation_project = simulation_project
 
-    def run(self, **kwargs):
+    def run(self, run_unbounded=False, **kwargs):
         """
         Runs multiple simulation tasks.
 
@@ -733,7 +733,7 @@ class MultipleSimulationTasks(MultipleTasks):
         Returns (MultipleTaskResults):
             An object that contains a list of :py:class:`SimulationTask`.
         """
-        return super().run(**kwargs)
+        return super().run(run_unbounded=run_unbounded, **kwargs)
 
     def build_before_run(self, **kwargs):
         self.simulation_project.build(mode=self.mode, build_engine=self.build_engine)
@@ -752,7 +752,7 @@ class MultipleSimulationTasks(MultipleTasks):
     def get_parameters_string(self, **kwargs):
         return ""
 
-def get_simulation_tasks(simulation_project=None, simulation_configs=None, mode=None, debug=None, break_at_event_number=None, break_at_matching_event=None, run_number=None, run_number_filter=None, exclude_run_number_filter=None, sim_time_limit=None, cpu_time_limit=None, concurrent=True, expected_num_tasks=None, simulation_task_class=SimulationTask, multiple_simulation_tasks_class=MultipleSimulationTasks, affected_by_modification_filter=None, **kwargs):
+def get_simulation_tasks(simulation_project=None, simulation_configs=None, mode=None, debug=None, break_at_event_number=None, break_at_matching_event=None, run_number=None, run_number_filter=None, exclude_run_number_filter=None, sim_time_limit=None, cpu_time_limit=None, bounded_filter=None, concurrent=True, expected_num_tasks=None, simulation_task_class=SimulationTask, multiple_simulation_tasks_class=MultipleSimulationTasks, affected_by_modification_filter=None, **kwargs):
     """
     Returns multiple simulation tasks matching the filter criteria. The returned tasks can be run by calling the
     :py:meth:`run <opp_repl.common.task.MultipleTasks.run>` method.
@@ -800,6 +800,11 @@ def get_simulation_tasks(simulation_project=None, simulation_configs=None, mode=
         cpu_time_limit (string or None):
             The CPU processing time limit of the returned simulation tasks. If not specified, then the value in the
             simulation configuration is used.
+
+        bounded_filter (bool or None):
+            When None (the default), all tasks are returned regardless of whether they are bounded.
+            When True, only bounded tasks are returned. When False, only unbounded tasks are returned.
+            Boundedness is decided per task via :py:meth:`SimulationTask.is_bounded`.
 
         concurrent (bool):
             Specifies if collecting simulation configurations and simulation tasks is done sequentially or concurrently.
@@ -853,6 +858,8 @@ def get_simulation_tasks(simulation_project=None, simulation_configs=None, mode=
         if affected_keys is not None:
             simulation_configs = [c for c in simulation_configs if (c.working_directory, c.ini_file, c.config) in affected_keys]
     simulation_tasks = _collect_simulation_tasks_for_project(simulation_configs, run_number=run_number, run_number_filter=run_number_filter, exclude_run_number_filter=exclude_run_number_filter, sim_time_limit=sim_time_limit, cpu_time_limit=cpu_time_limit, mode=mode, debug=debug, break_at_event_number=break_at_event_number, break_at_matching_event=break_at_matching_event, simulation_task_class=simulation_task_class, **kwargs)
+    if bounded_filter is not None:
+        simulation_tasks = [t for t in simulation_tasks if t.is_bounded() == bounded_filter]
     if expected_num_tasks is not None and len(simulation_tasks) != expected_num_tasks:
         raise Exception("Number of found and expected simulation tasks mismatch")
     return multiple_simulation_tasks_class(tasks=simulation_tasks, simulation_project=simulation_project, mode=mode, concurrent=concurrent, **kwargs)
