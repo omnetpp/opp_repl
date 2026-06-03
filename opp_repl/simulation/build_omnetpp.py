@@ -50,15 +50,120 @@ def _split(value):
 # Derived task classes for OMNeT++ self-build
 # ---------------------------------------------------------------------------
 
+def _filter_cflags(cfg):
+    """Return ``cfg.cflags`` parsed and stripped of the ``-MF <path>`` that we set ourselves."""
+    from opp_repl.simulation.build import _filter_mf_flags
+    return _filter_mf_flags(_split(cfg.cflags)) if cfg else []
+
+
+def _build_component_copts_layout(component_name, cfg, mode="release"):
+    """
+    Reproduce one OMNeT++ component's ``COPTS`` layout from its ``src/<comp>/Makefile``
+    so the task-engine compile cmdline matches the makefile one, for ccache reuse.
+
+    Returns a 5-tuple ``(prefix, cflags_extra, middle, late, export_extra)``:
+
+    * ``prefix``       — tokens before ``$(CFLAGS)`` in the component's ``COPTS=`` line
+    * ``cflags_extra`` — tokens appended to ``$(CFLAGS)`` via the component's
+                         ``DEFINES += ...`` lines (qtenv adds Qt-feature defines this way)
+    * ``middle``       — tokens between ``$(CFLAGS)`` and ``$(INCL_FLAGS)``
+    * ``late``         — tokens after ``$(INCL_FLAGS)`` in ``COPTS=`` plus all
+                         ``COPTS += ...`` additions, in their textual order
+    * ``export_extra`` — additional ``EXPORT_MACRO`` tokens beyond ``-D<COMP>_EXPORT``
+                         (currently just ``-DSQLITE_API=...`` for ``common``)
+    """
+    prefix, cflags_extra, middle, late, export_extra = [], [], [], [], []
+    if not cfg:
+        return prefix, cflags_extra, middle, late, export_extra
+    if component_name == "common":
+        prefix += ["-Wno-unused-function"]
+        middle += _split(cfg.libxml_cflags)
+        if cfg.with_backtrace:
+            late += ["-DWITH_BACKTRACE"]
+        export_extra += ['-DSQLITE_API=__attribute__ ((visibility ("default")))']
+    elif component_name == "nedxml":
+        middle += _split(cfg.libxml_cflags)
+    elif component_name == "scave":
+        # `-DTHREADED $(PTHREAD_CFLAGS)` is gated on BUILDING_UILIBS in src/scave/Makefile;
+        # the task engine never builds uilibs, so we skip it here too.
+        pass
+    elif component_name == "sim":
+        prefix += ["-Wno-unused-function"]
+        if cfg.with_parsim:
+            late += _split(cfg.mpi_cflags)
+        if cfg.with_python:
+            late += _split(cfg.python_embed_cflags)
+    elif component_name == "envir":
+        middle += _split(cfg.akaroa_cflags)
+        late += [
+            f'-DSHARED_LIB_SUFFIX="{cfg.shared_lib_suffix}"',
+            f'-DOMNETPP_IMAGE_PATH="{cfg.omnetpp_image_path}"',
+            f'-DLIBSUFFIX="{cfg.debug_suffix}"',
+        ]
+        if cfg.with_parsim:
+            late += _split(cfg.mpi_cflags)
+    elif component_name == "qtenv":
+        # qtenv extends `DEFINES` (used inside $(CFLAGS)) with Qt feature flags,
+        # so these end up between -DBACKWARD_HAS_DW=1 and $(INCL_FLAGS).
+        cflags_extra += [
+            "-DUNICODE", "-DQT_NO_KEYWORDS",
+            "-DQT_OPENGL_LIB", "-DQT_OPENGLWIDGETS_LIB",
+            "-DQT_PRINTSUPPORT_LIB", "-DQT_WIDGETS_LIB",
+            "-DQT_GUI_LIB", "-DQT_CORE_LIB",
+        ]
+        if mode == "release":
+            cflags_extra += ["-DQT_NO_DEBUG_OUTPUT"]
+        late += _split(cfg.qt_cflags)
+        late += [
+            "-Wno-deprecated-declarations",
+            "-Wno-ignored-attributes",
+            "-Wno-inconsistent-missing-override",
+        ]
+    return prefix, cflags_extra, middle, late, export_extra
+
+
+# Per-file specializations for sources whose Makefile rule deviates from the
+# standard ``$(CXX) -c $(CXXFLAGS) $(COPTS) $(EXPORT_DEFINES) $(IMPORT_DEFINES)``
+# layout. Each entry maps ``(component, basename)`` to a dict with optional keys:
+#
+# * ``extra_pre_copts``     — tokens inserted before ``COPTS`` (e.g. yxml.c's ``-I.``)
+# * ``extra_pre_export``    — tokens between ``COPTS`` and ``EXPORT_DEFINES``
+#                             (e.g. sqlite3.c's ``-Wno-deprecated-declarations``)
+# * ``extra_post_export``   — tokens between ``EXPORT_DEFINES`` and ``IMPORT_DEFINES``
+#                             (e.g. sqlite3.c's ``SQLITE_*`` feature defines)
+# * ``skip_import_defines`` — drop ``-DOMNETPPLIBS_IMPORT`` (.c files)
+_PER_FILE_COMPILE_OVERRIDES = {
+    ("common", "sqlite3.c"): {
+        "extra_pre_export": ["-Wno-deprecated-declarations"],
+        "extra_post_export": [
+            "-DSQLITE_THREADSAFE=0",
+            "-DSQLITE_OMIT_LOAD_EXTENSION",
+            "-DSQLITE_DEFAULT_FOREIGN_KEYS=1",
+        ],
+        "skip_import_defines": True,
+    },
+    ("common", "yxml.c"): {
+        "extra_pre_copts": ["-I."],
+        "skip_import_defines": True,
+    },
+}
+
+
 class OmnetppProjectCppCompileTask(CppCompileTask):
     """
     Compiles one C/C++ source file from an OMNeT++ component, using flags
     derived from the project's ``Makefile.inc``.
+
+    The compile is run from ``<root>/src/<component>/`` (mirroring how the
+    makefile build invokes ``make`` per component), the source is passed as a
+    bare basename, and the argument order matches the per-component
+    ``$(CXX) -c $(CXXFLAGS) $(COPTS) $(EXPORT_DEFINES) $(IMPORT_DEFINES)``
+    recipe. This lets ccache treat the makefile and task engines as
+    interchangeable: build one, clean, build the other → cache hits.
     """
 
     def __init__(self, omnetpp_project=None, component=None, source_file=None,
-                 mode="release", makefile_inc_config=None, extra_cflags=None,
-                 extra_defines=None, is_c=False, **kwargs):
+                 mode="release", makefile_inc_config=None, is_c=False, **kwargs):
         self.omnetpp_project = omnetpp_project
         self.component = component
         self.source_file = source_file
@@ -69,44 +174,94 @@ class OmnetppProjectCppCompileTask(CppCompileTask):
         cfg = makefile_inc_config
         compiler = _split(cfg.cc if is_c else cfg.cxx) if cfg else (["cc"] if is_c else ["c++"])
 
-        # Filter out -MF from the flags since we set it ourselves
-        from opp_repl.simulation.build import _filter_mf_flags
-        cflags = _filter_mf_flags(_split(cfg.cflags)) if cfg else []
-        cxxflags = [] if is_c else _split(cfg.cxxflags) if cfg else []
-
         omnetpp_root = omnetpp_project.get_root_path()
-        include_dir = cfg.omnetpp_incl_dir if cfg else os.path.join(omnetpp_root, "include")
-        src_dir = cfg.omnetpp_src_dir if (cfg and cfg.omnetpp_src_dir) else os.path.join(omnetpp_root, "src")
-        include_dirs = [
-            os.path.join(omnetpp_root, "src", component),  # component-local headers (for <yxml.h>, ui_*.h, moc_*.cpp)
-            include_dir,
-            src_dir,
-            os.path.join(include_dir, "omnetpp"),  # for generated msg headers (sim_std_m.h, etc.)
-        ]
+        component_dir = os.path.join(omnetpp_root, "src", component)
 
-        output_folder = _omnetpp_output_folder(cfg, component, mode)
+        # Path of the source relative to the component dir — typically just the
+        # basename, but sources from a subdir (e.g. sim/parsim) are passed as
+        # "parsim/foo.cc" to match the makefile's `%.cc` pattern in that subdir.
+        src_abs = source_file if os.path.isabs(source_file) else os.path.join(omnetpp_root, source_file)
+        input_basename = os.path.relpath(src_abs, component_dir)
+
+        # Output and dep paths kept absolute (under the shared out tree).
+        output_folder_rel = _omnetpp_output_folder(cfg, component, mode)
+        output_folder = os.path.join(omnetpp_root, output_folder_rel)
         obj_name = re.sub(r"\.(cc|cpp|c\+\+|cxx|c)$", ".o", os.path.basename(source_file))
         output_file = os.path.join(output_folder, obj_name)
         dependency_file = f"{output_file}.d"
 
-        defines = list(extra_defines or [])
-
         super().__init__(
-            working_dir=omnetpp_root,
+            working_dir=component_dir,
             compiler=compiler,
-            cxxflags=cxxflags,
-            cflags=cflags,
-            defines=defines,
-            include_dirs=include_dirs,
-            input_file=source_file,
+            cxxflags=[] if is_c else _split(cfg.cxxflags) if cfg else [],
+            cflags=_filter_cflags(cfg),
+            defines=[],
+            include_dirs=[],
+            input_file=input_basename,
             output_file=output_file,
             dependency_file=dependency_file,
-            extra_args=list(extra_cflags or []),
+            extra_args=[],
             **kwargs,
         )
 
     def get_parameters_string(self, **kwargs):
         return self.source_file
+
+    def get_arguments(self):
+        cfg = self.makefile_inc_config
+        omnetpp_root = self.omnetpp_project.get_root_path()
+        include_dir = cfg.omnetpp_incl_dir if cfg else os.path.join(omnetpp_root, "include")
+        src_dir = cfg.omnetpp_src_dir if (cfg and cfg.omnetpp_src_dir) else os.path.join(omnetpp_root, "src")
+        incl_flags = [f'-I{include_dir}', f'-I{src_dir}']
+
+        prefix, cflags_extra, middle, late, export_extra = _build_component_copts_layout(
+            self.component, cfg, self.mode)
+
+        export_defs = []
+        comp = next((c for c in OMNETPP_COMPONENTS if c["name"] == self.component), None)
+        if comp and comp.get("define"):
+            export_defs.append(f'-D{comp["define"]}')
+        export_defs += export_extra
+
+        import_defs = []
+        if cfg and getattr(cfg, "shared_libs", True):
+            import_defs.append("-DOMNETPPLIBS_IMPORT")
+
+        # Per-file special cases (sqlite3.c, yxml.c) bypass the standard layout.
+        override = _PER_FILE_COMPILE_OVERRIDES.get((self.component, os.path.basename(self.input_file)))
+        if override and override.get("skip_import_defines"):
+            import_defs = []
+
+        extra_pre_copts = (override or {}).get("extra_pre_copts", [])
+        extra_pre_export = (override or {}).get("extra_pre_export", [])
+        extra_post_export = (override or {}).get("extra_post_export", [])
+
+        # _m.cc files (generated message wrappers) need -I include/omnetpp for the
+        # installed companion header, placed between COPTS and EXPORT_DEFINES.
+        msg_incl = []
+        if os.path.basename(self.input_file).endswith("_m.cc") and cfg:
+            msg_incl = [f'-I{os.path.join(cfg.omnetpp_incl_dir, "omnetpp")}']
+
+        args = [
+            *self.compiler, "-c",
+            *self.cxxflags,
+            *extra_pre_copts,
+            *prefix,
+            *self.cflags,
+            *cflags_extra,
+            *middle,
+            *incl_flags,
+            *late,
+            *msg_incl,
+            *extra_pre_export,
+            *export_defs,
+            *extra_post_export,
+            *import_defs,
+        ]
+        if self.dependency_file:
+            args += ["-MF", self.dependency_file]
+        args += ["-o", self.output_file, self.input_file]
+        return args
 
 
 class OmnetppProjectLinkTask(LinkTask):
