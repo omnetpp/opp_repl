@@ -30,11 +30,11 @@ def generate_coverage_report(simulation_project=None, output_dir="coverage", **k
         if not file_names:
             raise Exception("No .profraw files found — was the project built with coverage instrumentation?")
         args = ["llvm-profdata", "merge", f"--input-files={profraw_files}", f"-output={merged_profdata_file}"]
-        run_command_with_logging(args)
+        run_command_with_logging(args, command_line_logger=_logger)
         coverage_binary = simulation_project.get_executable(mode="coverage")
         output_path = os.path.join(project_root, output_dir)
         args = ["llvm-cov", "show", coverage_binary, f"-instr-profile={merged_profdata_file}", "-format=html", f"-output-dir={output_path}"]
-        run_command_with_logging(args)
+        run_command_with_logging(args, command_line_logger=_logger)
     finally:
         for path in [profraw_files, merged_profdata_file, *file_names]:
             if os.path.exists(path):

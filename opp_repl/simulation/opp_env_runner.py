@@ -19,4 +19,4 @@ class OppEnvSimulationRunner:
     def run_args(self, simulation_project, args, cwd=None, wait=True):
         shell_cmd = ("cd " + shlex.quote(cwd) + " && " if cwd else "") + shlex.join(args)
         opp_env_args = ["opp_env", "-l", "WARN", "run", simulation_project.opp_env_project, "-w", simulation_project.opp_env_workspace, "-c", shell_cmd]
-        return run_command_with_logging(opp_env_args, wait=wait)
+        return run_command_with_logging(opp_env_args, wait=wait, command_line_logger=_logger)

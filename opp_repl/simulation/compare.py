@@ -578,7 +578,7 @@ class CompareSimulationsTaskResult(TaskResult):
         scalar_file_path = simulation_project.get_full_path(os.path.join(working_directory, simulation_task_result.scalar_file_path))
         vector_file_path = simulation_project.get_full_path(os.path.join(working_directory, simulation_task_result.vector_file_path))
         if os.path.exists(vector_file_path):
-            run_command_with_logging(["opp_scavetool", "x", "--type", "sth", "-w", vector_file_path, "-o", scalar_file_path])
+            run_command_with_logging(["opp_scavetool", "x", "--type", "sth", "-w", vector_file_path, "-o", scalar_file_path], command_line_logger=_logger)
             os.remove(vector_file_path)
         stored_scalar_result_file_name = simulation_project.get_full_path(os.path.join(simulation_project.statistics_folder, working_directory, simulation_task_result.scalar_file_path))
         _logger.debug(f"Reading result file {scalar_file_path}")
@@ -922,7 +922,8 @@ def _resolve_commit_list(simulation_project, commits):
         result = run_command_with_logging(
             ["git", "-C", simulation_project.get_full_path("."),
              "rev-list", "--reverse", "--first-parent", commits],
-            error_message=f"Failed to resolve commit range {commits!r}")
+            error_message=f"Failed to resolve commit range {commits!r}",
+            command_line_logger=_logger)
         commits = result.stdout.strip().splitlines()
     if len(commits) < 2:
         raise ValueError(f"Need at least two commits to compare, got {len(commits)}")

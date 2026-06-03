@@ -71,18 +71,18 @@ class OppTestTask(TestTask):
         has_lib = os.path.exists(os.path.join(self.working_directory, "lib"))
         os.makedirs(test_directory, exist_ok=True)
         args = ["opp_test", "gen", "-v", self.test_file_name]
-        subprocess_result = run_command_with_logging(args, cwd=self.working_directory, env=self.simulation_project.get_env())
+        subprocess_result = run_command_with_logging(args, cwd=self.working_directory, env=self.simulation_project.get_env(), command_line_logger=_logger)
         if subprocess_result.returncode != 0:
             return self.task_result_class(self, result="ERROR", stderr=subprocess_result.stderr)
         library_name = self.simulation_project.dynamic_libraries[0]
         library_folder = self.simulation_project.get_library_folder_full_path()
         include_folders = [self.simulation_project.get_full_path(f) for f in self.simulation_project.include_folders]
         args = ["opp_makemake", "-f", "--deep", f"-l{library_name}{binary_suffix}", f"-L{library_folder}", *([f"-ltest{binary_suffix}", "-L../../lib"] if has_lib else []), "-P", test_directory, *[f"-I{d}" for d in include_folders], *(["-I../../lib"] if has_lib else [])]
-        subprocess_result = run_command_with_logging(args, cwd=test_directory, env=self.simulation_project.get_env())
+        subprocess_result = run_command_with_logging(args, cwd=test_directory, env=self.simulation_project.get_env(), command_line_logger=_logger)
         if subprocess_result.returncode != 0:
             return self.task_result_class(self, result="ERROR", stderr=subprocess_result.stderr)
         args = ["make", f"MODE={self.mode}", "-j", str(multiprocessing.cpu_count())]
-        subprocess_result = run_command_with_logging(args, cwd=test_directory, env=self.simulation_project.get_env())
+        subprocess_result = run_command_with_logging(args, cwd=test_directory, env=self.simulation_project.get_env(), command_line_logger=_logger)
         if subprocess_result.returncode != 0:
             return self.task_result_class(self, result="ERROR", stderr=subprocess_result.stderr)
         test_program = f"{test_binary_name}/{test_binary_name}{binary_suffix}"
@@ -90,7 +90,7 @@ class OppTestTask(TestTask):
         simulation_args = ["--check-signals=false", f"-l{library_name}", "-n", ":".join(ned_folders + ["."] + (["../../lib"] if has_lib else []))]
         if not self.debug:
             args = ["opp_test", "run", "-v", "-p", test_program, self.test_file_name, "-a", *simulation_args]
-            subprocess_result = run_command_with_logging(args, cwd=self.working_directory, env=self.simulation_project.get_env())
+            subprocess_result = run_command_with_logging(args, cwd=self.working_directory, env=self.simulation_project.get_env(), command_line_logger=_logger)
             stdout = subprocess_result.stdout
         else:
             ide_opp_test = IdeOppTest(remove_launch=self.remove_launch)
@@ -149,7 +149,7 @@ class MultipleOppTestTasks(MultipleSimulationTestTasks):
         lib_directory = os.path.join(test_directory, "lib")
         if os.path.exists(lib_directory) and os.path.isfile(os.path.join(lib_directory, "Makefile")):
             args = ["make", f"MODE={self.mode}", "-j", str(multiprocessing.cpu_count())]
-            subprocess_result = run_command_with_logging(args, cwd=lib_directory, env=self.simulation_project.get_env())
+            subprocess_result = run_command_with_logging(args, cwd=lib_directory, env=self.simulation_project.get_env(), command_line_logger=_logger)
             if subprocess_result.returncode != 0:
                 raise Exception("Cannot build lib")
 

@@ -12,8 +12,8 @@ def run_release_tests(simulation_project, clean=True, build=True, **kwargs):
         raise Exception("Cannot run release tests because omnetpp must be first built in release, debug and sanitize mode")
     logging.getLogger("opp_repl.common.task").setLevel("INFO")
     logging.getLogger("opp_repl.simulation.build").setLevel("INFO")
-    run_command_with_logging(["opp_featuretool", "enable", "all"], cwd=simulation_project.get_full_path("."), error_message="Enabling all features failed")
-    run_command_with_logging(["opp_featuretool", "disable", "SelfDoc"], cwd=simulation_project.get_full_path("."), error_message="Disabling SelfDoc feature failed")
+    run_command_with_logging(["opp_featuretool", "enable", "all"], cwd=simulation_project.get_full_path("."), error_message="Enabling all features failed", command_line_logger=_logger)
+    run_command_with_logging(["opp_featuretool", "disable", "SelfDoc"], cwd=simulation_project.get_full_path("."), error_message="Disabling SelfDoc feature failed", command_line_logger=_logger)
     make_makefiles(simulation_project=simulation_project)
     if clean:
         clean_project(simulation_project=simulation_project, mode="release")

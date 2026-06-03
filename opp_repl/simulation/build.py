@@ -108,9 +108,9 @@ def generate_makefile(simulation_project=None, **kwargs):
     if simulation_project.opp_env_workspace:
         shell_cmd = "cd " + shlex.quote(cwd) + " && " + shlex.join(args)
         args = ["opp_env", "-l", "WARN", "run", simulation_project.opp_env_project, "-w", simulation_project.opp_env_workspace, "-c", shell_cmd]
-        run_command_with_logging(args, error_message=f"Generating Makefile for {name} failed")
+        run_command_with_logging(args, error_message=f"Generating Makefile for {name} failed", command_line_logger=_logger)
     else:
-        run_command_with_logging(args, cwd=cwd, env=simulation_project.get_env(), error_message=f"Generating Makefile for {name} failed")
+        run_command_with_logging(args, cwd=cwd, env=simulation_project.get_env(), error_message=f"Generating Makefile for {name} failed", command_line_logger=_logger)
     _logger.info(f"Generating Makefile for {name} done")
 
 def make_makefiles(simulation_project=None, **kwargs):
@@ -121,9 +121,9 @@ def make_makefiles(simulation_project=None, **kwargs):
     if simulation_project.opp_env_workspace:
         shell_cmd = "cd " + shlex.quote(cwd) + " && " + shlex.join(args)
         args = ["opp_env", "-l", "WARN", "run", simulation_project.opp_env_project, "-w", simulation_project.opp_env_workspace, "-c", shell_cmd]
-        run_command_with_logging(args, error_message=f"Making {simulation_project.get_name()} makefiles failed")
+        run_command_with_logging(args, error_message=f"Making {simulation_project.get_name()} makefiles failed", command_line_logger=_logger)
     else:
-        run_command_with_logging(args, cwd=cwd, env=simulation_project.get_env(), error_message=f"Making {simulation_project.get_name()} makefiles failed")
+        run_command_with_logging(args, cwd=cwd, env=simulation_project.get_env(), error_message=f"Making {simulation_project.get_name()} makefiles failed", command_line_logger=_logger)
 
 def build_project(build_engine=None, **kwargs):
     """
@@ -215,9 +215,9 @@ def build_project_using_makefile(simulation_project=None, mode="release", **kwar
         if simulation_project.opp_env_workspace:
             shell_cmd = "cd " + shlex.quote(cwd) + " && " + shlex.join(args)
             args = ["opp_env", "-l", "WARN", "run", simulation_project.opp_env_project, "-w", simulation_project.opp_env_workspace, "-c", shell_cmd]
-            run_command_with_logging(args, error_message=f"Building {simulation_project.get_name()} failed")
+            run_command_with_logging(args, error_message=f"Building {simulation_project.get_name()} failed", command_line_logger=_logger)
         else:
-            run_command_with_logging(args, cwd=cwd, env=simulation_project.get_env(), error_message=f"Building {simulation_project.get_name()} failed")
+            run_command_with_logging(args, cwd=cwd, env=simulation_project.get_env(), error_message=f"Building {simulation_project.get_name()} failed", command_line_logger=_logger)
         _logger.info(f"Building {simulation_project.get_name()} in {mode} mode ended")
 
 class MultipleBuildTasks(MultipleTasks):
@@ -931,9 +931,9 @@ def clean_project_using_makefile(simulation_project, mode="release", **kwargs):
     if simulation_project.opp_env_workspace:
         shell_cmd = "cd " + shlex.quote(cwd) + " && " + shlex.join(args)
         args = ["opp_env", "-l", "WARN", "run", simulation_project.opp_env_project, "-w", simulation_project.opp_env_workspace, "-c", shell_cmd]
-        run_command_with_logging(args)
+        run_command_with_logging(args, command_line_logger=_logger)
     else:
-        run_command_with_logging(args, cwd=cwd, env=simulation_project.get_env())
+        run_command_with_logging(args, cwd=cwd, env=simulation_project.get_env(), command_line_logger=_logger)
     _logger.info(f"Cleaning {simulation_project.get_name()} ended")
 
 class CleanFileTask(Task):

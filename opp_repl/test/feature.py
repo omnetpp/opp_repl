@@ -18,10 +18,10 @@ __sphinx_mock__ = True # ignore this module in documentation
 _logger = logging.getLogger(__name__)
 
 def disable_features(feature):
-    run_command_with_logging(["opp_featuretool", "disable", "-f", feature])
+    run_command_with_logging(["opp_featuretool", "disable", "-f", feature], command_line_logger=_logger)
 
 def enable_features(feature):
-    run_command_with_logging(["opp_featuretool", "enable", "-f", feature])
+    run_command_with_logging(["opp_featuretool", "enable", "-f", feature], command_line_logger=_logger)
 
 class FeatureTestTask(TestTask):
     def __init__(self, simulation_project, feature, packages, type="enable", mode="debug", build_engine=None, **kwargs):
@@ -57,7 +57,7 @@ class FeatureTestTask(TestTask):
 
     def run_protected(self, **kwargs):
         if self.type == "default":
-            run_command_with_logging(["opp_featuretool", "reset"])
+            run_command_with_logging(["opp_featuretool", "reset"], command_line_logger=_logger)
         elif self.type == "enable all":
             enable_features("all")
         elif self.type == "disable all":

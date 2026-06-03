@@ -21,4 +21,4 @@ def open_profile_report(simulation_project=None, output_file="perf.data", **kwar
         simulation_project = get_default_simulation_project()
     report_file = generate_profile_report(simulation_project=simulation_project, output_file=output_file, **kwargs)
     args = ["hotspot", simulation_project.get_full_path(report_file)]
-    run_command_with_logging(args)
+    run_command_with_logging(args, command_line_logger=_logger)

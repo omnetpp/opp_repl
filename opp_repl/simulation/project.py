@@ -835,7 +835,7 @@ class SimulationProject:
                     return None
                 default_args = self.get_default_args()
                 args = [executable, *default_args, "-s", "-f", ini_file, "-c", config, "-q", "numruns"]
-            result = run_command_with_logging(args, cwd=working_directory)
+            result = run_command_with_logging(args, cwd=working_directory, command_line_logger=_logger)
             if result.returncode == 0:
                 # KLUDGE: this was added to test source dependency based task result caching
                 result.stdout = re.sub(r"INI dependency: (.*)", "", result.stdout)
@@ -982,6 +982,7 @@ def _get_git_root(path, optional=False):
     result = run_command_with_logging(
         ["git", "rev-parse", "--show-toplevel"],
         cwd=path, error_message="Failed to determine git root",
+        command_line_logger=_logger,
     )
     return os.path.abspath(result.stdout.strip())
 
@@ -998,10 +999,12 @@ def _make_git_worktree(git_root, git_hash):
         run_command_with_logging(
             ["git", "worktree", "prune"],
             cwd=git_root,
+            command_line_logger=_logger,
         )
         run_command_with_logging(
             ["git", "worktree", "add", "--detach", "-q", worktree_path, git_hash],
             cwd=git_root, error_message="Failed to create git worktree",
+            command_line_logger=_logger,
         )
     return worktree_path
 
@@ -1093,12 +1096,14 @@ def remove_worktree_simulation_project(simulation_project):
     if root and os.path.isdir(root):
         result = run_command_with_logging(
             ["git", "rev-parse", "--show-toplevel"], cwd=root,
-            error_message="Failed to locate worktree top")
+            error_message="Failed to locate worktree top",
+            command_line_logger=_logger)
         worktree_top = os.path.abspath(result.stdout.strip())
         run_command_with_logging(
             ["git", "worktree", "remove", "--force", worktree_top],
             cwd=os.path.dirname(worktree_top),
-            error_message=f"Failed to remove git worktree {worktree_top}")
+            error_message=f"Failed to remove git worktree {worktree_top}",
+            command_line_logger=_logger)
     workspace = simulation_project.get_workspace()
     workspace.get_simulation_projects().pop(
         (simulation_project.name, simulation_project.version), None)

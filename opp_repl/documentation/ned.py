@@ -8,4 +8,4 @@ _logger = logging.getLogger(__name__)
 
 def generate_ned_documentation(simulation_project, excludes = []):
     _logger.info("Generating NED documentation")
-    run_command_with_logging(["opp_neddoc", "--no-automatic-hyperlinks", "-x", ','.join(excludes), simulation_project.get_full_path(".")])
+    run_command_with_logging(["opp_neddoc", "--no-automatic-hyperlinks", "-x", ','.join(excludes), simulation_project.get_full_path(".")], command_line_logger=_logger)

@@ -25,8 +25,8 @@ class LongTask(Task):
 class LongExternalTask(Task):
     def run_protected(self, **kwargs):
         _logger.info("Started")
-        run_command_with_logging(["sleep", "10"])
-        run_command_with_logging(["echo", "Hello"])
+        run_command_with_logging(["sleep", "10"], command_line_logger=_logger)
+        run_command_with_logging(["echo", "Hello"], command_line_logger=_logger)
         _logger.info("Finished")
         return Task.run_protected(self, **kwargs)
 

@@ -1336,7 +1336,7 @@ class ConfigureOmnetppTask(Task):
         env["__omnetpp_root_dir"] = root
         env["PATH"] = os.path.join(root, "bin") + os.pathsep + env.get("PATH", "")
         env["PYTHONPATH"] = os.path.join(root, "python") + os.pathsep + env.get("PYTHONPATH", "")
-        run_command_with_logging(["./configure"], cwd=root, env=env, error_message="Configuring OMNeT++ failed")
+        run_command_with_logging(["./configure"], cwd=root, env=env, error_message="Configuring OMNeT++ failed", command_line_logger=_logger)
         return self.task_result_class(task=self, result="DONE")
 
 
@@ -1392,9 +1392,9 @@ def build_omnetpp_using_makefile(omnetpp_project=None, mode="release", **kwargs)
         opp_env_project = omnetpp_project.opp_env_project or omnetpp_project.name
         shell_cmd = "cd " + shlex.quote(root) + " && " + shlex.join(args)
         args = ["opp_env", "-l", "WARN", "run", opp_env_project, "-w", omnetpp_project.opp_env_workspace, "-c", shell_cmd]
-        run_command_with_logging(args, error_message="Building OMNeT++ failed")
+        run_command_with_logging(args, error_message="Building OMNeT++ failed", command_line_logger=_logger)
     else:
-        run_command_with_logging(args, cwd=root, env=env, error_message="Building OMNeT++ failed")
+        run_command_with_logging(args, cwd=root, env=env, error_message="Building OMNeT++ failed", command_line_logger=_logger)
     _logger.info("Building OMNeT++ in %s mode at %s ended", mode, root)
 
 
@@ -1597,9 +1597,9 @@ def clean_omnetpp_using_makefile(omnetpp_project=None, mode="release", **kwargs)
         opp_env_project = omnetpp_project.opp_env_project or omnetpp_project.name
         shell_cmd = "cd " + shlex.quote(root) + " && " + shlex.join(args)
         args = ["opp_env", "-l", "WARN", "run", opp_env_project, "-w", omnetpp_project.opp_env_workspace, "-c", shell_cmd]
-        run_command_with_logging(args)
+        run_command_with_logging(args, command_line_logger=_logger)
     else:
-        run_command_with_logging(args, cwd=root, env=env)
+        run_command_with_logging(args, cwd=root, env=env, command_line_logger=_logger)
     _logger.info("Cleaning OMNeT++ in %s mode at %s ended", mode, root)
 
 

@@ -438,7 +438,7 @@ class SimulationTask(Task):
             if simulation_project.opp_env_workspace:
                 subprocess_result = OppEnvSimulationRunner().run_args(simulation_project, args, cwd=simulation_project.get_full_path(simulation_config.working_directory))
             else:
-                subprocess_result = run_command_with_logging(args, cwd=simulation_project.get_full_path(simulation_config.working_directory), env=simulation_project.get_env())
+                subprocess_result = run_command_with_logging(args, cwd=simulation_project.get_full_path(simulation_config.working_directory), env=simulation_project.get_env(), command_line_logger=_logger)
             match = re.search(r"The simulation wanted to ask a question|The simulation attempted to prompt for user input", subprocess_result.stderr)
             self.interactive = match is not None
         return self.interactive
@@ -463,7 +463,7 @@ class SimulationTask(Task):
         if simulation_project.opp_env_workspace:
             subprocess_result = OppEnvSimulationRunner().run_args(simulation_project, args, cwd=simulation_project.get_full_path(simulation_config.working_directory))
         else:
-            subprocess_result = run_command_with_logging(args, cwd=simulation_project.get_full_path(simulation_config.working_directory), env=simulation_project.get_env())
+            subprocess_result = run_command_with_logging(args, cwd=simulation_project.get_full_path(simulation_config.working_directory), env=simulation_project.get_env(), command_line_logger=_logger)
         return subprocess_result.stdout.strip().strip('"')
 
     def get_expected_result(self):
