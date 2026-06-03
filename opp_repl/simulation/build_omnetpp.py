@@ -1114,14 +1114,14 @@ def _build_component_tasks(omnetpp_project, component, mode, makefile_inc_config
     if generator_tasks:
         component_tasks.append(_RecursiveBuildTasks(
             tasks=generator_tasks,
-            name=f"generate {name}",
+            name=f"{name} generate",
             concurrent=concurrent,
         ))
 
     if compile_tasks:
         component_tasks.append(_RecursiveBuildTasks(
             tasks=compile_tasks,
-            name=f"compile {name}",
+            name=f"{name} compile",
             concurrent=concurrent,
         ))
 
@@ -1154,7 +1154,7 @@ def _build_component_tasks(omnetpp_project, component, mode, makefile_inc_config
         if extra_compile_tasks:
             component_tasks.append(_RecursiveBuildTasks(
                 tasks=extra_compile_tasks,
-                name=f"compile {extra_lib['basename']}",
+                name=f"{extra_lib['basename']} compile",
                 concurrent=concurrent,
             ))
             component_tasks.append(OmnetppProjectLinkTask(
