@@ -151,6 +151,15 @@ class SimulationUpdateTaskResult(UpdateTaskResult):
     def get_subprocess_result(self):
         return self.simulation_task_result.subprocess_result if self.simulation_task_result else None
 
+    def get_scalars(self, **kwargs):
+        return self.simulation_task_result.get_scalars(**kwargs)
+
+    def get_vectors(self, **kwargs):
+        return self.simulation_task_result.get_vectors(**kwargs)
+
+    def get_histograms(self, **kwargs):
+        return self.simulation_task_result.get_histograms(**kwargs)
+
 class SimulationUpdateTask(UpdateTask):
     def __init__(self, simulation_task=None, task_result_class=SimulationUpdateTaskResult, **kwargs):
         super().__init__(task_result_class=task_result_class, **kwargs)
@@ -188,9 +197,22 @@ class SimulationUpdateTask(UpdateTask):
         expected_result = "KEEP" if simulation_task_result.expected_result == "DONE" else simulation_task_result.expected_result
         return self.task_result_class(task=self, simulation_task_result=simulation_task_result, result=result, expected_result=expected_result, reason=simulation_task_result.reason)
 
+class MultipleSimulationUpdateTaskResults(MultipleUpdateTaskResults):
+    def get_scalars(self, **kwargs):
+        import pandas as pd
+        return pd.concat([r.get_scalars(**kwargs) for r in self.results if r.simulation_task_result and r.simulation_task_result.result == "DONE"], ignore_index=True)
+
+    def get_vectors(self, **kwargs):
+        import pandas as pd
+        return pd.concat([r.get_vectors(**kwargs) for r in self.results if r.simulation_task_result and r.simulation_task_result.result == "DONE"], ignore_index=True)
+
+    def get_histograms(self, **kwargs):
+        import pandas as pd
+        return pd.concat([r.get_histograms(**kwargs) for r in self.results if r.simulation_task_result and r.simulation_task_result.result == "DONE"], ignore_index=True)
+
 class MultipleSimulationUpdateTasks(MultipleUpdateTasks):
-    def __init__(self, build=None, build_engine=None, mode="debug", simulation_project=None, **kwargs):
-        super().__init__(simulation_project=simulation_project, **kwargs)
+    def __init__(self, build=None, build_engine=None, mode="debug", simulation_project=None, multiple_task_results_class=MultipleSimulationUpdateTaskResults, **kwargs):
+        super().__init__(simulation_project=simulation_project, multiple_task_results_class=multiple_task_results_class, **kwargs)
         self.locals = locals()
         self.locals.pop("self")
         self.kwargs = kwargs
