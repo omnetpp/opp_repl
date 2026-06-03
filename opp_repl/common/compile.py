@@ -262,6 +262,26 @@ class CopyBinaryTask(BuildTask):
     def get_output_files(self):
         return [self.target_file]
 
+    def is_up_to_date(self):
+        # Accept hardlinked source/target as up-to-date (the upstream makefile
+        # uses `ln` to install the built artifact, so source and target share an
+        # inode and have identical mtimes). The base class uses a strict mtime
+        # comparison (`max(inputs) < min(outputs)`) which would report stale in
+        # that case and trigger a redundant copy on every task-engine run.
+        src = self._resolve(self.source_file)
+        tgt = self._resolve(self.target_file)
+        if src and tgt and os.path.exists(src) and os.path.exists(tgt):
+            try:
+                src_st = os.stat(src)
+                tgt_st = os.stat(tgt)
+                if src_st.st_ino == tgt_st.st_ino and src_st.st_dev == tgt_st.st_dev:
+                    return True
+                if src_st.st_mtime <= tgt_st.st_mtime:
+                    return True
+            except OSError:
+                pass
+        return super().is_up_to_date()
+
     def run_protected(self, **kwargs):
         target_full = self._resolve(self.target_file)
         source_full = self._resolve(self.source_file)

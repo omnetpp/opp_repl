@@ -220,17 +220,12 @@ class MultipleBuildTasks(MultipleTasks):
         return self.simulation_project.get_name() + " " + super().get_description()
 
     def is_up_to_date(self):
-        def get_file_modification_time(file_path):
-            full_file_path = self.simulation_project.get_full_path(file_path)
-            return os.path.getmtime(full_file_path) if os.path.exists(full_file_path) else None
-        def get_file_modification_times(file_paths):
-            return list(map(get_file_modification_time, file_paths))
-        input_file_modification_times = get_file_modification_times(self.get_input_files())
-        output_file_modification_times = get_file_modification_times(self.get_output_files())
-        return input_file_modification_times and output_file_modification_times and \
-               not list(filter(lambda timestamp: timestamp is None, input_file_modification_times)) and \
-               not list(filter(lambda timestamp: timestamp is None, output_file_modification_times)) and \
-               max(input_file_modification_times) < min(output_file_modification_times)
+        # Delegate to children: the wrapper is up-to-date iff each child is.
+        # A flat mtime comparison across the union of all input/output files
+        # would falsely report stale when (e.g.) source and target are
+        # hardlinked or share an mtime — the per-task is_up_to_date implementations
+        # handle those nuances correctly.
+        return all(t.is_up_to_date() for t in self.tasks)
 
     def get_input_files(self):
         input_files = []
@@ -525,7 +520,12 @@ class SimulationProjectLinkTask(LinkTask):
         sp = simulation_project
         cfg = makefile_inc_config
 
-        output_folder = _simulation_project_output_folder(sp, mode, cfg)
+        # Match opp_makemake's $O = $(PROJECT_OUTPUT_DIR)/$(CONFIGNAME)/$(PROJECTRELATIVE_PATH)
+        # where PROJECTRELATIVE_PATH is the directory the Makefile lives in (= cpp_folders[0]).
+        # Without this prefix the task engine's link output is at a different path from make,
+        # so a prior make build leaves the task engine seeing "no library here" and relinking.
+        src_folder_rel = sp.cpp_folders[0] if sp.cpp_folders else "."
+        output_folder = os.path.join(_simulation_project_output_folder(sp, mode, cfg), src_folder_rel)
         output_prefix = "" if build_type == "executable" else (cfg.lib_prefix if cfg else "lib")
         output_suffix = cfg.debug_suffix if cfg else ("_dbg" if mode == "debug" else "")
         if cfg:
@@ -692,7 +692,10 @@ class SimulationProjectCopyBinaryTask(CopyBinaryTask):
         self.mode = mode
         self.makefile_inc_config = makefile_inc_config
 
-        output_folder = _simulation_project_output_folder(simulation_project, mode, makefile_inc_config)
+        # Source path mirrors the link task's output (see SimulationProjectLinkTask
+        # for the same `<src_folder>` join, matching opp_makemake's $O variable).
+        src_folder_rel = simulation_project.cpp_folders[0] if simulation_project.cpp_folders else "."
+        output_folder = os.path.join(_simulation_project_output_folder(simulation_project, mode, makefile_inc_config), src_folder_rel)
         output_prefix, output_suffix, output_ext = _binary_filename_parts(build_type, mode, makefile_inc_config)
         filename = output_prefix + name + output_suffix + output_ext
         target_dir = simulation_project.bin_folder if build_type == "executable" else simulation_project.library_folder
@@ -743,9 +746,18 @@ class BuildSimulationProjectTask(MultipleTasks):
             makefile_inc_config = omnetpp_project.get_makefile_inc_config(self.mode)
 
         # Get feature flags if the project has .oppfeatures
-        from opp_repl.simulation.features import has_features, get_feature_cflags, get_feature_ldflags, generate_features_header, resolve_feature_libraries
+        from opp_repl.simulation.features import has_features, get_feature_ldflags, generate_features_header, resolve_feature_libraries
         if has_features(self.simulation_project):
-            feature_cflags = get_feature_cflags(self.simulation_project)
+            # NOTE: we deliberately do *not* pull `-DPROJECT_WITH_X` flags from
+            # `opp_featuretool options -c` into compile cmdlines. The makefile
+            # build does not pass them either — the `PROJECT_WITH_X` macros come
+            # from the generated `features.h` that we install below, which gets
+            # transitively included via the project's central defines header
+            # (e.g. INETDefs.h). Adding them as cmdline -Ds would (a) break
+            # ccache cross-engine reuse, and (b) expose source-level bugs where
+            # an `#ifdef PROJECT_WITH_X` is checked before `features.h` would
+            # have been included — silently turning the conditional on under the
+            # task engine while it stays off under make.
             feature_ldflags = get_feature_ldflags(self.simulation_project)
             generate_features_header(self.simulation_project)
 
