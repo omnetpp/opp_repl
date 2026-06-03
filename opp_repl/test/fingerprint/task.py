@@ -364,12 +364,15 @@ class FingerprintUpdateTask(SimulationUpdateTask):
     def run_protected(self, ingredients="tplx", sim_time_limit=None, output_stream=sys.stdout, **kwargs):
         simulation_config = self.simulation_task.simulation_config
         correct_fingerprint_store = get_correct_fingerprint_store(simulation_config.simulation_project)
+        # Pin sim_time_limit to the value the simulation will actually run with;
+        # otherwise filter_entries matches every stored sim_time_limit for this
+        # config and the KEEP/UPDATE classification collapses to INSERT.
+        if sim_time_limit is None:
+            sim_time_limit = self.simulation_task.sim_time_limit
         stored_fingerprint_entries = correct_fingerprint_store.filter_entries(ingredients=ingredients, sim_time_limit=sim_time_limit,
                                                                               working_directory=simulation_config.working_directory, ini_file=simulation_config.ini_file, config=simulation_config.config, run_number=self.simulation_task.run_number)
         if len(stored_fingerprint_entries) == 1:
             stored_fingerprint_entry = stored_fingerprint_entries[0]
-            if sim_time_limit is None:
-                sim_time_limit = stored_fingerprint_entry["sim_time_limit"]
             correct_fingerprint = Fingerprint(stored_fingerprint_entry["fingerprint"], stored_fingerprint_entry["ingredients"])
         else:
             correct_fingerprint = None
