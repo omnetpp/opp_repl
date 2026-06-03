@@ -268,7 +268,7 @@ class SimulationProject:
     def __init__(self, name, version=None, git_hash=None, git_diff_hash=None, root_folder_environment_variable=None, root_folder=None, root_folder_environment_variable_relative_folder=".", omnetpp_project=None,
                  bin_folder=".", library_folder=".", executables=None, dynamic_libraries=None, static_libraries=None, build_types=["dynamic library"],
                  ned_folders=["."], ned_exclusions=[], ini_file_folders=["."], python_folders=["python"], image_folders=["."],
-                 include_folders=["."], cpp_folders=["."], cpp_defines=[], msg_folders=["."],
+                 include_folders=["."], cpp_folders=["."], cpp_exclusions=[], cpp_defines=[], msg_folders=["."],
                  media_folder=".", module_image_baseline_folder="media/module_images", statistics_folder=".", fingerprint_store="fingerprint.json", speed_store="speed.json", dependency_store="dependency.json",
                  used_projects=[], external_bin_folders=[], external_library_folders=[], external_libraries=[], external_include_folders=[],
                  dll_symbol=None, feature_libraries=None, pkg_config_libraries=None, opp_defines_file=None, precompiled_header=None, extra_cflags=[], extra_ldflags=[],
@@ -342,6 +342,13 @@ class SimulationProject:
 
             cpp_folders (List of strings):
                 The list of root folder relative directories for C++ source files.
+
+            cpp_exclusions (List of strings):
+                Directories (relative to each ``cpp_folders`` / ``msg_folders``
+                entry) whose ``.cc`` / ``.h`` / ``.msg`` files should be skipped.
+                Mirrors ``opp_makemake -X<dir>`` — use this when the makefile build
+                excludes a feature subtree (e.g. ``inet/applications/voipstream``)
+                so the task-engine globber agrees with what ``make`` actually builds.
 
             cpp_defines (List of strings):
                 The list of C++ macro definitions that are passed to the C++ compiler.
@@ -494,6 +501,7 @@ class SimulationProject:
         self.image_folders = image_folders
         self.include_folders = include_folders
         self.cpp_folders = cpp_folders
+        self.cpp_exclusions = cpp_exclusions
         self.cpp_defines = cpp_defines
         self.msg_folders = msg_folders
         self.media_folder = media_folder
@@ -689,25 +697,51 @@ class SimulationProject:
         ws = self.get_workspace()
         return self.get_direct_msg_folders() + flatten(map(lambda used_project: ws.get_simulation_project(used_project, None).get_direct_msg_folders(), self.used_projects))
 
+    def _is_excluded_by_cpp_exclusions(self, file_path, source_folder):
+        """
+        True if ``file_path`` (relative to project root) lies under any of
+        ``self.cpp_exclusions`` (each given relative to ``source_folder``).
+        Mirrors ``opp_makemake -X<dir>``.
+        """
+        if not self.cpp_exclusions:
+            return False
+        rel = os.path.relpath(file_path, source_folder)
+        for excl in self.cpp_exclusions:
+            if rel == excl or rel.startswith(excl.rstrip("/") + "/"):
+                return True
+        return False
+
     def get_cpp_files(self):
         cpp_files = []
         for cpp_folder in self.cpp_folders:
             file_paths = list(filter(lambda file_path: not re.search(r"_m\.cc", file_path), glob.glob(self.get_full_path(os.path.join(cpp_folder, "**/*.cc")), recursive=True)))
-            cpp_files = cpp_files + list(map(lambda file_path: self.get_relative_path(file_path), file_paths))
+            for file_path in file_paths:
+                rel = self.get_relative_path(file_path)
+                if self._is_excluded_by_cpp_exclusions(rel, cpp_folder):
+                    continue
+                cpp_files.append(rel)
         return cpp_files
 
     def get_header_files(self):
         header_files = []
         for cpp_folder in self.cpp_folders:
             file_paths = list(filter(lambda file_path: not re.search(r"_m\.h", file_path), glob.glob(self.get_full_path(os.path.join(cpp_folder, "**/*.h")), recursive=True)))
-            header_files = header_files + list(map(lambda file_path: self.get_relative_path(file_path), file_paths))
+            for file_path in file_paths:
+                rel = self.get_relative_path(file_path)
+                if self._is_excluded_by_cpp_exclusions(rel, cpp_folder):
+                    continue
+                header_files.append(rel)
         return header_files
 
     def get_msg_files(self):
         msg_files = []
         for msg_folder in self.msg_folders:
             file_paths = glob.glob(self.get_full_path(os.path.join(msg_folder, "**/*.msg")), recursive=True)
-            msg_files = msg_files + list(map(lambda file_path: self.get_relative_path(file_path), file_paths))
+            for file_path in file_paths:
+                rel = self.get_relative_path(file_path)
+                if self._is_excluded_by_cpp_exclusions(rel, msg_folder):
+                    continue
+                msg_files.append(rel)
         return msg_files
 
     def build(self, mode="release", recursive=True, build_engine=None, **kwargs):
