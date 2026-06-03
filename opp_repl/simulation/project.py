@@ -950,6 +950,12 @@ def make_worktree_simulation_project(simulation_project, git_hash):
     :py:class:`OmnetppProject` lives in the same repository, it is similarly
     redirected to the worktree.
 
+    The returned project is registered in the source project's workspace
+    under key ``(name, git_hash)``, so repeated calls with the same hash
+    return the cached project (preserving lazily-populated state such as
+    ``simulation_configs``).  :py:func:`remove_worktree_simulation_project`
+    unregisters it again.
+
     Parameters:
         simulation_project (:py:class:`SimulationProject`):
             The source project whose repository is checked out.
@@ -964,6 +970,11 @@ def make_worktree_simulation_project(simulation_project, git_hash):
         raise RuntimeError("Source project has no root path")
     src_root = os.path.abspath(src_root)
 
+    workspace = getattr(simulation_project, "_workspace", None) or get_default_simulation_workspace()
+    cached = workspace.get_simulation_projects().get((simulation_project.name, git_hash))
+    if cached is not None:
+        return cached
+
     git_root = _get_git_root(src_root, optional=True)
     if git_root is None:
         raise RuntimeError(
@@ -973,10 +984,9 @@ def make_worktree_simulation_project(simulation_project, git_hash):
         )
     worktree_path = _make_git_worktree(git_root, git_hash)
 
-    short_hash = git_hash[:10]
     import copy
     project = copy.copy(simulation_project)
-    project.name = simulation_project.name + "-" + short_hash
+    project.version = git_hash
     rel_path = os.path.relpath(src_root, git_root)
     project.root_folder = worktree_path if rel_path == "." else os.path.join(worktree_path, rel_path)
     project.simulation_configs = None
@@ -998,6 +1008,7 @@ def make_worktree_simulation_project(simulation_project, git_hash):
                 omnetpp_project_copy.root_folder = worktree_path if omnetpp_rel == "." else os.path.join(worktree_path, omnetpp_rel)
                 project.omnetpp_project = omnetpp_project_copy
 
+    workspace.set_simulation_project(simulation_project.name, git_hash, project)
     return project
 
 def remove_worktree_simulation_project(simulation_project):
@@ -1007,23 +1018,26 @@ def remove_worktree_simulation_project(simulation_project):
     is located by asking ``git rev-parse --show-toplevel`` from the project's
     root folder (so sub-directory projects are handled correctly) and removed
     via ``git worktree remove --force``.  If the path no longer exists, the
-    call is a no-op.
+    worktree removal is skipped, but the project is still unregistered from
+    its workspace.
 
     Parameters:
         simulation_project (:py:class:`SimulationProject`):
             A project returned by :py:func:`make_worktree_simulation_project`.
     """
     root = simulation_project.get_root_path()
-    if not root or not os.path.isdir(root):
-        return
-    result = run_command_with_logging(
-        ["git", "rev-parse", "--show-toplevel"], cwd=root,
-        error_message="Failed to locate worktree top")
-    worktree_top = os.path.abspath(result.stdout.strip())
-    run_command_with_logging(
-        ["git", "worktree", "remove", "--force", worktree_top],
-        cwd=os.path.dirname(worktree_top),
-        error_message=f"Failed to remove git worktree {worktree_top}")
+    if root and os.path.isdir(root):
+        result = run_command_with_logging(
+            ["git", "rev-parse", "--show-toplevel"], cwd=root,
+            error_message="Failed to locate worktree top")
+        worktree_top = os.path.abspath(result.stdout.strip())
+        run_command_with_logging(
+            ["git", "worktree", "remove", "--force", worktree_top],
+            cwd=os.path.dirname(worktree_top),
+            error_message=f"Failed to remove git worktree {worktree_top}")
+    workspace = getattr(simulation_project, "_workspace", None) or get_default_simulation_workspace()
+    workspace.get_simulation_projects().pop(
+        (simulation_project.name, simulation_project.version), None)
 
 def create_project(name, path=None, template="executable", namespace=False, omnetpp_project="omnetpp"):
     """
