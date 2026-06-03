@@ -443,7 +443,7 @@ class DebugLevel(LoggerLevel):
     def __init__(self, logger):
         super().__init__(self, logger, logging.DEBUG)
 
-def run_command_with_logging(args, error_message=None, error_message_lines=20, nice=10, wait=True, **kwargs):
+def run_command_with_logging(args, error_message=None, error_message_lines=20, nice=10, wait=True, command_line_logger=_logger, **kwargs):
     logger = logging.getLogger(os.path.basename(args[0]))
     if logger.level == logging.NOTSET:
         logger.setLevel(get_external_command_log_level())
@@ -454,7 +454,7 @@ def run_command_with_logging(args, error_message=None, error_message_lines=20, n
         stream.close()
     stdout_lines = []
     stderr_lines = []
-    _logger.debug(f"Running external command: {' '.join(args)}")
+    command_line_logger.debug(f"Running external command: {' '.join(args)}")
     process = subprocess.Popen(["nice", "-n", str(nice), *args], stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True, **kwargs)
     stdout_thread = threading.Thread(target=log_stream, args=(process.stdout, logger.stdout, stdout_lines))
     stderr_thread = threading.Thread(target=log_stream, args=(process.stderr, logger.stderr, stderr_lines))
