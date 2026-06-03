@@ -184,9 +184,12 @@ class OmnetppProjectCppCompileTask(CppCompileTask):
         input_basename = os.path.relpath(src_abs, component_dir)
 
         # Output and dep paths kept absolute (under the shared out tree).
+        # Preserve any subdir part of input_basename (e.g. parsim/foo.cc) so the
+        # .o lands at out/<configname>/src/<comp>/<subdir>/foo.o, matching the
+        # makefile's `$O/%.o: %.cc` pattern that resolves $O = out/.../src/<comp>.
         output_folder_rel = _omnetpp_output_folder(cfg, component, mode)
         output_folder = os.path.join(omnetpp_root, output_folder_rel)
-        obj_name = re.sub(r"\.(cc|cpp|c\+\+|cxx|c)$", ".o", os.path.basename(source_file))
+        obj_name = re.sub(r"\.(cc|cpp|c\+\+|cxx|c)$", ".o", input_basename)
         output_file = os.path.join(output_folder, obj_name)
         dependency_file = f"{output_file}.d"
 
@@ -842,6 +845,13 @@ _EXCLUDED_CC_FILES = {
     # doesn't compile (uses removed GateIterator::operator(); references
     # cDatarateChannel without including its header).
     ("sim", "parsim", "cadvlinkdelaylookahead.cc"),
+    # rwlock.cc is added to OBJS only under `ifeq ("$(BUILDING_UILIBS)","yes")` in
+    # src/common/Makefile — the task engine never builds uilibs, so skip it.
+    ("common", "", "rwlock.cc"),
+    # Not referenced by any Makefile's OBJS list — globbing picks them up but the
+    # makefile build silently ignores them. Skip so the engines agree.
+    ("eventlog", "", "ichunk.cc"),
+    ("layout", "", "concentrictreeembedding.cc"),
 }
 
 
