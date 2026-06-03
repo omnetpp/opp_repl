@@ -120,6 +120,51 @@ from opp_repl.simulation.build import set_default_build_engine
 set_default_build_engine("task")
 ```
 
+### Cross-engine no-rebuild
+
+The two engines are aligned so a build done by one is considered
+up-to-date by the other. After `make MODE=release`, calling
+`build_project(simulation_project=p)` with `build_engine="task"` is a
+top-level SKIP rather than a full rebuild, and vice versa. This works
+because both engines:
+
+- write to the same `out/<config>/<cpp_folders[0]>/…` layout,
+- pass identical compile and link command lines so `ccache` reuses
+  cached object files across engines,
+- read the same `.oppfeatures` / `.oppfeaturestate` to decide which
+  source folders are part of the build (see the next section), and
+- agree on excluded subtrees via `cpp_exclusions` on the project (the
+  task-engine equivalent of `opp_makemake -X<dir>`).
+
+When the task engine's compile or link command line drifts from what
+`opp_makemake`'s makefile produces, ccache reuse breaks and you may see
+spurious rebuilds. The usual culprit is a missing `cpp_exclusions` entry —
+the makefile silently ignores the folder while the task engine still
+globs source files from it.
+
+## Feature toggles
+
+A project's `.oppfeatures` file declares optional feature subtrees;
+`.oppfeaturestate` records which features are currently enabled.  Both
+build engines parse these files and use them in two places:
+
+1. **Source-set filtering** — `.cc` / `.h` / `.msg` files under
+   folders owned by a disabled feature are excluded from the build set.
+   Mirrors the `-X` exclusions that `opp_makemake` would receive on the
+   Makefile side.  Toggling a feature with `opp_featuretool` changes the
+   compile/link task set on the next build invocation.
+2. **`features.h` generation** — the `WITH_<feature>` preprocessor
+   macros come from the generated `features.h` (transitively included
+   via the project's central defines header, e.g. `INETDefs.h`) rather
+   than from command-line `-D` flags.  This keeps cross-engine ccache
+   reuse working — both engines see the same compile arguments.
+
+`GenerateFeaturesHeaderTask` takes `.oppfeatures` and `.oppfeaturestate`
+as inputs and writes a per-mode stamp file.  Downstream compile tasks
+only re-invalidate via the dep-file chain when a `#define` actually
+flipped, so a no-op `.oppfeaturestate` rewrite does not force a full
+rebuild.
+
 ## Recursive builds
 
 `SimulationProject.build(recursive=True)` walks the dependency graph:
