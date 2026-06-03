@@ -27,6 +27,22 @@ The client then sends `Authorization: Bearer <TOKEN>` with every HTTP
 request.  opp_repl hashes the incoming token and compares it to the
 stored hash (timing-safe).  Requests without a valid token are rejected.
 
+### Disabling the token check explicitly
+
+Outside `opp_sandbox`, authentication is mandatory by default — opp_repl
+refuses to start the MCP server without either `--mcp-token-hash` or
+the sandbox sentinel.  Pass `--mcp-bypass-token-hash-check` to skip
+authentication on purpose, e.g. for local development behind another
+firewall:
+
+```bash
+opp_repl --mcp-port 9966 --mcp-bypass-token-hash-check
+```
+
+This flag is intended for trusted, isolated environments only — any
+process that can connect to the port can execute arbitrary Python in
+the REPL.
+
 ## Running inside opp_sandbox
 
 When opp_repl is launched inside `opp_sandbox` (the bubblewrap-based
