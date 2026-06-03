@@ -908,58 +908,6 @@ def _component_extra_subdirs(component, makefile_inc_config):
     return list(component.get("subdirs", []))
 
 
-def _component_extra_cflags(component, makefile_inc_config):
-    """Per-component extra compile flags (warnings, includes, feature flags)."""
-    cfg = makefile_inc_config
-    name = component["name"]
-    flags = []
-    if name == "common":
-        flags += ["-Wno-unused-function"]
-        if cfg:
-            flags += _split(cfg.libxml_cflags)
-    if name == "nedxml" and cfg:
-        flags += _split(cfg.libxml_cflags)
-    if name == "scave" and cfg:
-        flags += ["-DTHREADED"]
-        flags += _split(cfg.pthread_cflags)
-    if name == "sim":
-        flags += ["-Wno-unused-function"]
-        if cfg:
-            if cfg.with_python:
-                flags += _split(cfg.python_embed_cflags)
-            flags += _split(cfg.akaroa_cflags)
-    if name == "envir" and cfg:
-        flags += _split(cfg.akaroa_cflags)
-        flags += [
-            f'-DSHARED_LIB_SUFFIX="{cfg.shared_lib_suffix}"',
-            f'-DOMNETPP_IMAGE_PATH="{cfg.omnetpp_image_path}"',
-            f'-DLIBSUFFIX="{cfg.debug_suffix}"',
-        ]
-        if cfg.with_parsim:
-            flags += _split(cfg.mpi_cflags)
-    if name == "qtenv" and cfg:
-        flags += _split(cfg.qt_cflags)
-        flags += ["-Wno-deprecated-declarations",
-                  "-Wno-ignored-attributes",
-                  "-Wno-inconsistent-missing-override"]
-    return flags
-
-
-def _component_extra_defines(component, makefile_inc_config):
-    """Per-component extra preprocessor defines (besides the EXPORT macro)."""
-    cfg = makefile_inc_config
-    name = component["name"]
-    defines = []
-    if name == "common" and cfg and cfg.with_backtrace:
-        defines.append("-DWITH_BACKTRACE")
-    if name == "qtenv":
-        defines += ["-DUNICODE", "-DQT_NO_KEYWORDS",
-                    "-DQT_OPENGL_LIB", "-DQT_OPENGLWIDGETS_LIB",
-                    "-DQT_PRINTSUPPORT_LIB", "-DQT_WIDGETS_LIB",
-                    "-DQT_GUI_LIB", "-DQT_CORE_LIB"]
-    return defines
-
-
 # Per-component dependency on previously-built OMNeT++ libraries (mapped to
 # ``-l<lib>$D`` at link time). Mirrors the IMPLIBS lines in each component's
 # Makefile.
@@ -1079,12 +1027,6 @@ def _build_component_tasks(omnetpp_project, component, mode, makefile_inc_config
         if rel not in cc_files:
             cc_files.append(rel)
 
-    extra_cflags = _component_extra_cflags(component, cfg)
-    extra_defines = []
-    if component.get("define"):
-        extra_defines.append(f"-D{component['define']}")
-    extra_defines += _component_extra_defines(component, cfg)
-
     compile_tasks = []
     for cc in cc_files:
         compile_tasks.append(OmnetppProjectCppCompileTask(
@@ -1093,8 +1035,6 @@ def _build_component_tasks(omnetpp_project, component, mode, makefile_inc_config
             source_file=cc,
             mode=mode,
             makefile_inc_config=cfg,
-            extra_cflags=extra_cflags,
-            extra_defines=extra_defines,
         ))
     for c in c_files:
         compile_tasks.append(OmnetppProjectCppCompileTask(
@@ -1103,8 +1043,6 @@ def _build_component_tasks(omnetpp_project, component, mode, makefile_inc_config
             source_file=c,
             mode=mode,
             makefile_inc_config=cfg,
-            extra_cflags=extra_cflags,
-            extra_defines=extra_defines,
             is_c=True,
         ))
 
@@ -1152,8 +1090,6 @@ def _build_component_tasks(omnetpp_project, component, mode, makefile_inc_config
                 source_file=src_rel,
                 mode=mode,
                 makefile_inc_config=cfg,
-                extra_cflags=extra_cflags,
-                extra_defines=extra_defines,
             ))
         if extra_compile_tasks:
             component_tasks.append(_RecursiveBuildTasks(
@@ -1180,8 +1116,6 @@ def _build_component_tasks(omnetpp_project, component, mode, makefile_inc_config
             source_file=tool_src_rel,
             mode=mode,
             makefile_inc_config=cfg,
-            extra_cflags=extra_cflags,
-            extra_defines=extra_defines,
         )
         debug_suffix = cfg.debug_suffix if cfg else ""
         tool_link_libs = [f"-l{library_name}{debug_suffix}"] if library_name else []
@@ -1237,9 +1171,6 @@ def _build_opp_run_tasks(omnetpp_project, mode, cfg, concurrent):
     omnetpp_root = omnetpp_project.get_root_path()
     debug_suffix = cfg.debug_suffix if cfg else ""
 
-    envir_extra_cflags = _component_extra_cflags({"name": "envir"}, cfg)
-    envir_extra_defines = ["-DENVIR_EXPORT", *_component_extra_defines({"name": "envir"}, cfg)]
-
     main_src_rel = os.path.relpath(
         os.path.join(omnetpp_root, "src", "envir", "main.cc"), omnetpp_root)
     compile_task = OmnetppProjectCppCompileTask(
@@ -1248,8 +1179,6 @@ def _build_opp_run_tasks(omnetpp_project, mode, cfg, concurrent):
         source_file=main_src_rel,
         mode=mode,
         makefile_inc_config=cfg,
-        extra_cflags=envir_extra_cflags,
-        extra_defines=envir_extra_defines,
     )
 
     # Link line mirrors src/envir/Makefile: $(ALL_ENV_LIBS) $(IMPLIBS) $(SYS_LIBS)
