@@ -41,7 +41,7 @@ class QtenvMCPClient:
 
     PROTOCOL_VERSION = "2025-06-18"
 
-    def __init__(self, url, request_timeout=30.0):
+    def __init__(self, url, request_timeout=10.0):
         self.url = url
         self.request_timeout = request_timeout
         self._client = None
@@ -208,7 +208,7 @@ def _error_text(call_tool_result):
     return "; ".join(pieces) or "MCP tool call failed"
 
 
-def wait_for_mcp_ready(url, total_timeout=30.0, poll_interval=0.5):
+def wait_for_mcp_ready(url, total_timeout=10.0, poll_interval=0.5):
     """Poll a candidate MCP endpoint until ``list_tools`` succeeds.
 
     Returns an open :class:`QtenvMCPClient` instance on success.  Raises
