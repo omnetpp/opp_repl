@@ -36,6 +36,35 @@ class _RecursiveBuildTasks(MultipleTasks):
         return bool(self.tasks) and all(t.is_up_to_date() for t in self.tasks)
 
 
+class _ToolBuildTasks(_RecursiveBuildTasks):
+    """
+    ``_RecursiveBuildTasks`` for an OMNeT++ tool executable (opp_nedtool,
+    opp_msgtool, opp_eventlogtool, opp_scavetool) where the makefile build
+    uses a *combined compile+link* recipe — so a prior ``make`` run leaves
+    only ``bin/<tool>`` on disk, with no intermediate ``.o`` for the task
+    engine to recognise.
+
+    Overrides ``is_up_to_date()`` to also accept the makefile's artifact:
+    if the installed executable exists and is newer than the source ``.cc``,
+    declare the whole compile→link chain up-to-date so the task engine
+    doesn't redundantly re-compile and re-link.
+    """
+
+    def __init__(self, executable_path=None, source_file=None, **kwargs):
+        super().__init__(**kwargs)
+        self.executable_path = executable_path
+        self.source_file = source_file
+
+    def is_up_to_date(self):
+        if super().is_up_to_date():
+            return True
+        if self.executable_path and self.source_file and \
+                os.path.exists(self.executable_path) and os.path.exists(self.source_file) and \
+                os.path.getmtime(self.executable_path) > os.path.getmtime(self.source_file):
+            return True
+        return False
+
+
 def _omnetpp_output_folder(makefile_inc_config, component, mode):
     if makefile_inc_config and makefile_inc_config.configname:
         return f"out/{makefile_inc_config.configname}/src/{component}"
@@ -270,15 +299,20 @@ class OmnetppProjectCppCompileTask(CppCompileTask):
 class OmnetppProjectLinkTask(LinkTask):
     """
     Links one OMNeT++ library or executable from a set of object files.
+
+    ``library_type`` selects between ``"shared"`` (``.so``, default for
+    non-executables), ``"static"`` (``.a`` via ``ar``), and the implicit
+    ``"executable"`` (when ``is_executable=True``).
     """
 
     def __init__(self, omnetpp_project=None, component=None, library_name=None,
-                 is_executable=False, mode="release", makefile_inc_config=None,
-                 compile_tasks=None, extra_libraries=None, **kwargs):
+                 is_executable=False, library_type="shared", mode="release",
+                 makefile_inc_config=None, compile_tasks=None, extra_libraries=None, **kwargs):
         self.omnetpp_project = omnetpp_project
         self.component = component
         self.library_name = library_name
         self.is_executable = is_executable
+        self.library_type = library_type
         self.mode = mode
         self.makefile_inc_config = makefile_inc_config
         self.compile_tasks = compile_tasks or []
@@ -289,6 +323,7 @@ class OmnetppProjectLinkTask(LinkTask):
         if cfg:
             debug_suffix = cfg.debug_suffix
             shared_ext = cfg.shared_lib_suffix
+            static_ext = getattr(cfg, "a_lib_suffix", ".a") or ".a"
             exe_ext = cfg.exe_suffix
             lib_prefix = cfg.lib_prefix
             lib_dir = cfg.omnetpp_lib_dir
@@ -297,6 +332,7 @@ class OmnetppProjectLinkTask(LinkTask):
         else:
             debug_suffix = "_dbg" if mode == "debug" else ""
             shared_ext = ".so"
+            static_ext = ".a"
             exe_ext = ""
             lib_prefix = "lib"
             lib_dir = os.path.join(omnetpp_root, "lib")
@@ -320,6 +356,19 @@ class OmnetppProjectLinkTask(LinkTask):
                 library_dirs=[lib_dir],
                 rpath_dirs=[lib_dir],
                 type="executable",
+                **kwargs,
+            )
+        elif library_type == "static":
+            output_file = os.path.join(lib_dir, lib_prefix + library_name + debug_suffix + static_ext)
+            ar = _split(cfg.ar) if cfg and getattr(cfg, "ar", None) else ["ar", "cr"]
+            ranlib = _split(cfg.ranlib) if cfg and getattr(cfg, "ranlib", None) else None
+            super().__init__(
+                working_dir=omnetpp_root,
+                input_files=input_files,
+                output_file=output_file,
+                type="static",
+                ar=ar,
+                ranlib=ranlib,
                 **kwargs,
             )
         else:
@@ -532,7 +581,8 @@ OMNETPP_COMPONENTS = [
         "excludes": ["main.cc"],
         "c_files": [],
         "extra_libraries": [
-            {"basename": "oppmain", "source_files": ["main.cc"]},
+            # liboppmain is a static archive in src/envir/Makefile (LIBNAME=$(MAINLIBNAME) → .a).
+            {"basename": "oppmain", "source_files": ["main.cc"], "link_type": "static"},
         ],
         # NOTE: opp_run is *not* listed as a tool here — it must be built
         # after cmdenv and qtenv exist, since the Makefile build links it
@@ -1112,6 +1162,7 @@ def _build_component_tasks(omnetpp_project, component, mode, makefile_inc_config
                 component=name,
                 library_name=extra_lib["basename"],
                 is_executable=False,
+                library_type=extra_lib.get("link_type", "shared"),
                 mode=mode,
                 makefile_inc_config=cfg,
                 compile_tasks=extra_compile_tasks,
@@ -1120,6 +1171,7 @@ def _build_component_tasks(omnetpp_project, component, mode, makefile_inc_config
     # Tool executables
     for tool in component.get("tools", []):
         tool_src_rel = os.path.relpath(os.path.join(omnetpp_root, "src", name, tool["source"]), omnetpp_root)
+        tool_src_abs = os.path.join(omnetpp_root, "src", name, tool["source"])
         tool_compile_task = OmnetppProjectCppCompileTask(
             omnetpp_project=omnetpp_project,
             component=name,
@@ -1131,7 +1183,6 @@ def _build_component_tasks(omnetpp_project, component, mode, makefile_inc_config
         tool_link_libs = [f"-l{library_name}{debug_suffix}"] if library_name else []
         if tool.get("link_with"):
             tool_link_libs.insert(0, f"-l{tool['link_with']}{debug_suffix}")
-        component_tasks.append(tool_compile_task)
         tool_link_task = OmnetppProjectLinkTask(
             omnetpp_project=omnetpp_project,
             component=name,
@@ -1142,7 +1193,10 @@ def _build_component_tasks(omnetpp_project, component, mode, makefile_inc_config
             compile_tasks=[tool_compile_task],
             extra_libraries=tool_link_libs + extra_libraries,
         )
-        component_tasks.append(tool_link_task)
+        # Group compile+link under one wrapper that short-circuits when the
+        # installed binary already exists (makefile build uses combined
+        # compile+link, so no standalone .o is left on disk).
+        tool_chain = [tool_compile_task, tool_link_task]
         # Release-only alias (e.g. bin/opp_run -> bin/opp_run_release), to
         # mirror the envir Makefile's TARGET_EXE_FILES rule for MODE=release.
         release_alias = tool.get("release_alias")
@@ -1152,12 +1206,19 @@ def _build_component_tasks(omnetpp_project, component, mode, makefile_inc_config
                        else os.path.join(omnetpp_root, "bin"))
             source_rel = os.path.relpath(tool_link_task.output_file, omnetpp_root)
             target_rel = os.path.relpath(os.path.join(bin_dir, release_alias + exe_ext), omnetpp_root)
-            component_tasks.append(OmnetppProjectCopyBinaryTask(
+            tool_chain.append(OmnetppProjectCopyBinaryTask(
                 omnetpp_project=omnetpp_project,
                 source_file=source_rel,
                 target_file=target_rel,
                 name=f"{name}: install {release_alias}",
             ))
+        component_tasks.append(_ToolBuildTasks(
+            tasks=tool_chain,
+            name=f"build {tool['basename']}",
+            concurrent=False,
+            executable_path=tool_link_task.output_file,
+            source_file=tool_src_abs,
+        ))
 
     if not component_tasks:
         return None
@@ -1419,6 +1480,7 @@ def _build_component_clean_tasks(omnetpp_project, component, cfg, mode):
 
     debug_suffix = cfg.debug_suffix if cfg else ""
     shared_ext = cfg.shared_lib_suffix if cfg else ".so"
+    static_ext = (getattr(cfg, "a_lib_suffix", ".a") if cfg else ".a") or ".a"
     exe_ext = cfg.exe_suffix if cfg else ""
     lib_prefix = cfg.lib_prefix if cfg else "lib"
     lib_dir = cfg.omnetpp_lib_dir if cfg else os.path.join(omnetpp_root, "lib")
@@ -1463,9 +1525,10 @@ def _build_component_clean_tasks(omnetpp_project, component, cfg, mode):
         lib_file = os.path.join(lib_dir, lib_prefix + library_name + debug_suffix + shared_ext)
         tasks.append(_CleanFileTask(working_dir=omnetpp_root, file_path=lib_file))
 
-    # Extra libraries (e.g. oppmain)
+    # Extra libraries (e.g. oppmain — static archive)
     for extra_lib in component.get("extra_libraries", []):
-        lib_file = os.path.join(lib_dir, lib_prefix + extra_lib["basename"] + debug_suffix + shared_ext)
+        ext = static_ext if extra_lib.get("link_type") == "static" else shared_ext
+        lib_file = os.path.join(lib_dir, lib_prefix + extra_lib["basename"] + debug_suffix + ext)
         tasks.append(_CleanFileTask(working_dir=omnetpp_root, file_path=lib_file))
 
     # Tool executables (opp_nedtool, opp_msgtool, opp_run, ...)
