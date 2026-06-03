@@ -21,8 +21,8 @@ cd opp_repl
 pip install -e .
 ```
 
-Either form pulls in the only mandatory dependency — **IPython** (for
-the interactive shell).
+Either form pulls in the mandatory dependencies — **IPython** (for the
+interactive shell) and **pandas** (used pervasively for result tables).
 
 ## Optional extras
 
@@ -36,10 +36,10 @@ pip install -e ".[cluster]"   # just one group
 
 | Extra | Packages | Purpose |
 |---|---|---|
-| `mcp` | mcp | MCP server for AI assistant integration |
-| `data` | pandas | DataFrame-based inspection of simulation/test results |
+| `mcp` | mcp, httpx | MCP server for AI assistant integration |
 | `optimize` | scipy, optimparallel | Parameter optimization |
 | `chart` | matplotlib, numpy | Chart tests and image export |
+| `diffcharts` | PyQt6 | `opp_diff_charts` GUI for browsing chart and module-image diffs |
 | `cluster` | dask, distributed | SSH cluster execution via Dask |
 | `github` | requests | GitHub API integration |
 | `ide` | py4j | OMNeT++ IDE integration |
