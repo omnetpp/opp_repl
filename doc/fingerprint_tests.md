@@ -140,6 +140,33 @@ When a simulation has fingerprint entries for several ingredient sets, they are
 grouped by `sim_time_limit` and checked in a single simulation run for
 efficiency.
 
+### Testing against a shorter (or longer) stored baseline
+
+The store can hold fingerprints for the same simulation at several
+`sim_time_limit` values.  Pass `select_fingerprint` to pick across them
+instead of matching the limit from the INI file:
+
+```python
+from opp_repl.test.fingerprint.task import (
+    select_fingerprint_with_smallest_sim_time_limit,
+    select_fingerprint_with_largest_sim_time_limit,
+)
+
+# Fast CI run: use whichever stored baseline has the smallest sim_time_limit.
+run_fingerprint_tests(simulation_project=inet_project,
+                      select_fingerprint=select_fingerprint_with_smallest_sim_time_limit)
+
+# Nightly run: use the longest stored baseline.
+run_fingerprint_tests(simulation_project=inet_project,
+                      select_fingerprint=select_fingerprint_with_largest_sim_time_limit)
+```
+
+When `select_fingerprint` is given, the `sim_time_limit` filter is dropped
+and the selected entry's `sim_time_limit` is applied to the simulation run.
+Without `select_fingerprint` the existing behavior is preserved: the
+explicit `sim_time_limit` (or the one from the INI) is matched against the
+store.
+
 ### The fingerprint store
 
 Baselines are persisted in a JSON file (the path is set by the

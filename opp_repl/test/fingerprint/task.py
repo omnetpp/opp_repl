@@ -226,16 +226,24 @@ def select_fingerprint_with_smallest_sim_time_limit(fingerprint_entries):
 def select_fingerprint_with_largest_sim_time_limit(fingerprint_entries):
     return select_fingerprint_by_sim_time_limit(fingerprint_entries, True)
 
-def get_fingerprint_test_task(simulation_task, ingredients="tplx", sim_time_limit=None, select_fingerprint=select_fingerprint_with_smallest_sim_time_limit, baseline_simulation_project=None, **kwargs):
-    # TODO take sim_time_limit into account and also select_fingerprint
-    if sim_time_limit is None:
-        sim_time_limit = simulation_task.sim_time_limit
+def get_fingerprint_test_task(simulation_task, ingredients="tplx", sim_time_limit=None, select_fingerprint=None, baseline_simulation_project=None, **kwargs):
     simulation_config = simulation_task.simulation_config
     baseline_project = baseline_simulation_project or simulation_config.simulation_project
     correct_fingerprint_store = get_correct_fingerprint_store(baseline_project)
-    stored_fingerprint_entries = correct_fingerprint_store.filter_entries(ingredients=ingredients, sim_time_limit=sim_time_limit,
+    # When the caller provides a selector, search across all stored sim_time_limits
+    # and let the selector pick one. Otherwise filter by the explicit sim_time_limit
+    # (defaulting to the one from the simulation task / INI).
+    if select_fingerprint is None:
+        if sim_time_limit is None:
+            sim_time_limit = simulation_task.sim_time_limit
+        filter_sim_time_limit = sim_time_limit
+        effective_select = select_fingerprint_with_smallest_sim_time_limit
+    else:
+        filter_sim_time_limit = None
+        effective_select = select_fingerprint
+    stored_fingerprint_entries = correct_fingerprint_store.filter_entries(ingredients=ingredients, sim_time_limit=filter_sim_time_limit,
                                                                           working_directory=simulation_config.working_directory, ini_file=simulation_config.ini_file, config=simulation_config.config, run_number=simulation_task.run_number)
-    selected_fingerprint_entry = select_fingerprint(stored_fingerprint_entries) if stored_fingerprint_entries else None
+    selected_fingerprint_entry = effective_select(stored_fingerprint_entries) if stored_fingerprint_entries else None
     if selected_fingerprint_entry:
         sim_time_limit = selected_fingerprint_entry["sim_time_limit"]
         fingerprint = selected_fingerprint_entry["fingerprint"]
@@ -243,6 +251,8 @@ def get_fingerprint_test_task(simulation_task, ingredients="tplx", sim_time_limi
         simulation_task.sim_time_limit = sim_time_limit
         return FingerprintTestTask(simulation_task=simulation_task, sim_time_limit=sim_time_limit, ingredients=ingredients, fingerprint=Fingerprint(fingerprint, ingredients), test_result=test_result)
     else:
+        if sim_time_limit is None:
+            sim_time_limit = simulation_task.sim_time_limit
         simulation_task.sim_time_limit = sim_time_limit
         fingerprint_test_task = FingerprintTestTask(simulation_task=simulation_task, sim_time_limit=sim_time_limit, ingredients=ingredients, test_result=None)
     return fingerprint_test_task
@@ -282,7 +292,7 @@ def get_fingerprint_test_tasks(**kwargs):
             fingerprint_test_groups += collect_fingerprint_test_groups(simulation_task, **dict(kwargs, pass_keyboard_interrupt=True))
         return MultipleFingerprintTestTasks(multiple_simulation_tasks=multiple_simulation_tasks, tasks=fingerprint_test_groups, **dict(kwargs, simulation_project=multiple_simulation_tasks.simulation_project))
     return get_tasks(**kwargs)
-get_fingerprint_test_tasks.__signature__ = combine_signatures(get_fingerprint_test_tasks, get_simulation_tasks)
+get_fingerprint_test_tasks.__signature__ = combine_signatures(get_fingerprint_test_tasks, collect_fingerprint_test_groups, get_fingerprint_test_task, get_simulation_tasks)
 
 def run_fingerprint_tests(**kwargs):
     """
