@@ -293,6 +293,7 @@ def get_fingerprint_test_tasks(**kwargs):
         an object that contains a list of :py:class:`FingerprintTestTask` objects matching the provided filter criteria.
         The result can be run (and re-run) without providing additional parameters.
     """
+    kwargs.setdefault("mode", "debug")
     def get_tasks(**kwargs):
         multiple_simulation_tasks = get_simulation_tasks(**kwargs)
         fingerprint_test_groups = []
