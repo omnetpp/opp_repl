@@ -130,7 +130,16 @@ A project tells opp_repl where everything lives through a set of folder
 parameters, all relative to the root:
 
 - **`ned_folders`** — directories containing `.ned` files.
+- **`ned_exclusions`** — subtrees (relative to each `ned_folders` entry)
+  whose `.ned` files should be skipped.
 - **`cpp_folders`** / **`msg_folders`** — C++ and MSG source directories.
+- **`cpp_exclusions`** — subtrees (relative to each `cpp_folders` /
+  `msg_folders` entry) whose `.cc` / `.h` / `.msg` files should be
+  skipped.  Mirrors `opp_makemake -X<dir>` — use this when the makefile
+  build excludes a feature subtree (e.g.
+  `applications/voipstream` in INET) so the task-engine globber agrees
+  with what `make` actually builds.  Required for cross-engine ccache
+  reuse and cross-engine no-rebuild to work correctly.
 - **`ini_file_folders`** — directories scanned recursively for `*.ini`
   files to discover simulation configs.
 - **`bin_folder`** / **`library_folder`** — where built executables and
@@ -283,3 +292,21 @@ p.ini_file_folders    # ['.']
 p.ned_folders         # ['.']
 p.build_types         # ['executable']
 ```
+
+### Resolving the root path
+
+The root of a project is resolved lazily, so projects whose root folder
+is only known via an environment variable can be loaded up-front:
+
+- **`get_root_path()`** — returns the absolute root as a string.  Raises
+  `RuntimeError` (with a self-explanatory message naming the project and
+  the env var to set) when the project has no `root_folder` and the
+  named env var is unset.
+- **`has_root_path()`** — side-effect-free probe.  Returns `True` iff
+  `root_folder` is set or the env var resolves.  Use this when the
+  intent is genuinely "do we have a root yet?", for example when
+  optionally decorating paths.
+
+Helpers that need a root (`get_full_path()`, `get_relative_path()`,
+`get_executable()`) delegate to `get_root_path()` and therefore raise
+the same `RuntimeError` rather than silently propagating `None`.
