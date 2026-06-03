@@ -708,6 +708,79 @@ class SimulationProjectCopyBinaryTask(CopyBinaryTask):
             **kwargs,
         )
 
+def _is_under(file_path, folder):
+    """True if ``file_path`` equals ``folder`` or lies under it."""
+    folder = folder.rstrip("/")
+    return file_path == folder or file_path.startswith(folder + "/")
+
+
+def _filter_feature_excluded(files, excluded_folders):
+    """
+    Drop files that lie under any of ``excluded_folders``. All paths are
+    project-root-relative.
+    """
+    if not excluded_folders:
+        return list(files)
+    return [f for f in files if not any(_is_under(f, d) for d in excluded_folders)]
+
+
+class GenerateFeaturesHeaderTask(BuildTask):
+    """
+    Regenerates ``features.h`` from ``.oppfeatures`` + ``.oppfeaturestate``
+    when either is newer than a stamp file. ``features.h`` itself is rewritten
+    only if its contents change (preserving its mtime when nothing flipped),
+    so downstream cpp tasks recompile via the dep-file chain only when a
+    `#define` actually changed.
+    """
+
+    def __init__(self, simulation_project=None, mode="release", makefile_inc_config=None,
+                 name="generate features.h task", **kwargs):
+        super().__init__(
+            working_dir=simulation_project.get_full_path("."),
+            name=name,
+            **kwargs,
+        )
+        self.simulation_project = simulation_project
+        self.mode = mode
+        self.makefile_inc_config = makefile_inc_config
+
+    def _stamp_path(self):
+        # Stamp lives under out/<configname> so it tracks per-mode state.
+        # ``features.h`` itself is mode-independent; the stamp just records
+        # "we last reconciled state at this point".
+        folder = _simulation_project_output_folder(
+            self.simulation_project, self.mode, self.makefile_inc_config)
+        return os.path.join(folder, ".features-stamp")
+
+    def get_action_string(self, **kwargs):
+        return "Generating"
+
+    def get_parameters_string(self, **kwargs):
+        from opp_repl.simulation.features import _parse_oppfeatures
+        attrs, _ = _parse_oppfeatures(self.simulation_project)
+        return attrs["defines_file"] if attrs else "features.h"
+
+    def get_input_files(self):
+        inputs = [".oppfeatures"]
+        if os.path.exists(self.simulation_project.get_full_path(".oppfeaturestate")):
+            inputs.append(".oppfeaturestate")
+        return inputs
+
+    def get_output_files(self):
+        return [self._stamp_path()]
+
+    def run_protected(self, **kwargs):
+        from opp_repl.simulation.features import generate_features_header
+        generate_features_header(self.simulation_project)
+        stamp = self._resolve(self._stamp_path())
+        os.makedirs(os.path.dirname(stamp), exist_ok=True)
+        # Touch the stamp; advances its mtime past the inputs unconditionally.
+        with open(stamp, "w"):
+            pass
+        os.utime(stamp, None)
+        return self.task_result_class(task=self, result="DONE")
+
+
 class BuildSimulationProjectTask(MultipleTasks):
     """
     Represents a task that builds a simulation project.
@@ -746,7 +819,9 @@ class BuildSimulationProjectTask(MultipleTasks):
             makefile_inc_config = omnetpp_project.get_makefile_inc_config(self.mode)
 
         # Get feature flags if the project has .oppfeatures
-        from opp_repl.simulation.features import has_features, get_feature_ldflags, generate_features_header, resolve_feature_libraries
+        from opp_repl.simulation.features import has_features, get_feature_ldflags, resolve_feature_libraries, get_disabled_feature_folders
+        feature_excluded_folders = []
+        features_header_task = None
         if has_features(self.simulation_project):
             # NOTE: we deliberately do *not* pull `-DPROJECT_WITH_X` flags from
             # `opp_featuretool options -c` into compile cmdlines. The makefile
@@ -759,7 +834,11 @@ class BuildSimulationProjectTask(MultipleTasks):
             # have been included — silently turning the conditional on under the
             # task engine while it stays off under make.
             feature_ldflags = get_feature_ldflags(self.simulation_project)
-            generate_features_header(self.simulation_project)
+            feature_excluded_folders = get_disabled_feature_folders(self.simulation_project)
+            features_header_task = GenerateFeaturesHeaderTask(
+                simulation_project=self.simulation_project,
+                mode=self.mode,
+                makefile_inc_config=makefile_inc_config)
 
         # Resolve feature-conditional libraries (pkg-config, Makefile.inc vars)
         feat_lib_cflags, feat_lib_ldflags = resolve_feature_libraries(self.simulation_project, makefile_inc_config)
@@ -778,10 +857,17 @@ class BuildSimulationProjectTask(MultipleTasks):
         if not os.path.exists(output_folder):
             os.makedirs(output_folder)
 
-        msg_compile_tasks = [SimulationProjectMsgCompileTask(simulation_project=self.simulation_project, file_path=msg_file, mode=self.mode, makefile_inc_config=makefile_inc_config) for msg_file in self.simulation_project.get_msg_files()]
+        # Filter source files against disabled-feature folders (XML-derived).
+        # Mirrors the `-X` exclusions that opp_makemake would receive on the
+        # Makefile side; toggling a feature changes this set, so the task graph
+        # automatically grows or shrinks compile/link tasks on the next build.
+        msg_files = _filter_feature_excluded(self.simulation_project.get_msg_files(), feature_excluded_folders)
+        cpp_files = _filter_feature_excluded(self.simulation_project.get_cpp_files(), feature_excluded_folders)
+
+        msg_compile_tasks = [SimulationProjectMsgCompileTask(simulation_project=self.simulation_project, file_path=msg_file, mode=self.mode, makefile_inc_config=makefile_inc_config) for msg_file in msg_files]
         multiple_msg_compile_tasks = MultipleMsgCompileTasks(simulation_project=self.simulation_project, mode=self.mode, tasks=msg_compile_tasks, concurrent=self.concurrent_child_tasks)
-        msg_cpp_compile_tasks = [SimulationProjectCppCompileTask(simulation_project=self.simulation_project, file_path=re.sub(r"\.msg$", "_m.cc", msg_file), mode=self.mode, makefile_inc_config=makefile_inc_config, feature_cflags=feature_cflags) for msg_file in self.simulation_project.get_msg_files()]
-        cpp_compile_tasks = [SimulationProjectCppCompileTask(simulation_project=self.simulation_project, file_path=cpp_file, mode=self.mode, makefile_inc_config=makefile_inc_config, feature_cflags=feature_cflags) for cpp_file in self.simulation_project.get_cpp_files()]
+        msg_cpp_compile_tasks = [SimulationProjectCppCompileTask(simulation_project=self.simulation_project, file_path=re.sub(r"\.msg$", "_m.cc", msg_file), mode=self.mode, makefile_inc_config=makefile_inc_config, feature_cflags=feature_cflags) for msg_file in msg_files]
+        cpp_compile_tasks = [SimulationProjectCppCompileTask(simulation_project=self.simulation_project, file_path=cpp_file, mode=self.mode, makefile_inc_config=makefile_inc_config, feature_cflags=feature_cflags) for cpp_file in cpp_files]
         all_cpp_compile_tasks = msg_cpp_compile_tasks + cpp_compile_tasks
         multiple_cpp_compile_tasks = MultipleCppCompileTasks(simulation_project=self.simulation_project, mode=self.mode, tasks=all_cpp_compile_tasks, concurrent=self.concurrent_child_tasks)
         link_tasks = flatten([[SimulationProjectLinkTask(simulation_project=self.simulation_project, build_type=build_type, mode=self.mode, compile_tasks=all_cpp_compile_tasks, makefile_inc_config=makefile_inc_config, feature_ldflags=feature_ldflags) for build_type in self.simulation_project.build_types] for _ in self.simulation_project.executables])
@@ -798,6 +884,8 @@ class BuildSimulationProjectTask(MultipleTasks):
                 copy_binary_tasks.append(SimulationProjectCopyBinaryTask(simulation_project=self.simulation_project, build_type=build_type, name=name, mode=self.mode, makefile_inc_config=makefile_inc_config))
         multiple_copy_binary_tasks = MultipleBuildTasks(simulation_project=self.simulation_project, tasks=copy_binary_tasks, name="copy task", concurrent=self.concurrent_child_tasks)
         all_tasks = []
+        if features_header_task is not None:
+            all_tasks.append(features_header_task)
         if multiple_msg_compile_tasks.tasks:
             all_tasks.append(multiple_msg_compile_tasks)
         if multiple_cpp_compile_tasks.tasks:
