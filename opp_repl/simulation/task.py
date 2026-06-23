@@ -572,6 +572,11 @@ class SimulationTask(Task):
             elif simulation_runner == "opp_env":
                 simulation_runner_class = OppEnvSimulationRunner
             elif simulation_runner == "inprocess":
+                # INCOMPLETE: the in-process (cffi) runner is not finished yet. There is no
+                # bundled opp_repl.cffi module, and resolving a project-specific in-process
+                # runner (e.g. inet.cffi.InprocessSimulationRunner) is not implemented.
+                # TODO resolve the in-process runner from the simulation project instead of
+                # hardcoding opp_repl.cffi.
                 import opp_repl.cffi
                 simulation_runner_class = opp_repl.cffi.InprocessSimulationRunner
             elif simulation_runner == "ide":
