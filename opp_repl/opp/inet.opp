@@ -17,6 +17,7 @@ SimulationProject(
     statistics_folder="statistics",
     fingerprint_store="tests/fingerprint/store.json",
     speed_store="tests/speed/store.json",
+    validation_test_runner="inet.test.validation:run_validation_tests",
     external_include_folders=["/usr/include/x86_64-linux-gnu"],
     feature_libraries={
         "VoipStream": {"pkg_config": ["libavcodec", "libavformat", "libavutil", "libswresample"], "defines": ["HAVE_FFMPEG", "HAVE_FFMPEG_SWRESAMPLE"]},

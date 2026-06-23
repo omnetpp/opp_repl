@@ -145,6 +145,9 @@ def run_statistical_tests_main():
 def run_opp_tests_main():
     run_tasks_main(lambda **kwargs: run_opp_tests(test_folder=os.getcwd(), **kwargs), "opp tests")
 
+def run_validation_tests_main():
+    run_tasks_main(run_validation_tests, "validation tests")
+
 def run_all_tests_main():
     run_tasks_main(run_all_tests, "tests")
 

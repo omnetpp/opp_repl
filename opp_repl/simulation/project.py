@@ -271,6 +271,7 @@ class SimulationProject:
                  ned_folders=["."], ned_exclusions=[], ini_file_folders=["."], python_folders=["python"], image_folders=["."],
                  include_folders=["."], cpp_folders=["."], cpp_exclusions=[], cpp_defines=[], msg_folders=["."],
                  media_folder=".", module_image_baseline_folder="media/module_images", statistics_folder=".", fingerprint_store="fingerprint.json", speed_store="speed.json", dependency_store="dependency.json",
+                 validation_test_runner=None,
                  used_projects=[], external_bin_folders=[], external_library_folders=[], external_libraries=[], external_include_folders=[],
                  dll_symbol=None, feature_libraries=None, pkg_config_libraries=None, opp_defines_file=None, precompiled_header=None, extra_cflags=[], extra_ldflags=[],
                  simulation_configs=None, overlay_name=None, overlay_build_root=None, opp_env_workspace=None, opp_env_project=None,
@@ -511,6 +512,11 @@ class SimulationProject:
         self.fingerprint_store = fingerprint_store
         self.speed_store = speed_store
         self.dependency_store = dependency_store
+        # Dotted "module.path:function" reference to the project-specific
+        # validation-test runner (validation tests compare results against
+        # analytical models, so they live in the project, not opp_repl). The
+        # generic opp_repl.test.validation.run_validation_tests resolves it.
+        self.validation_test_runner = validation_test_runner
         self.used_projects = used_projects
         self.external_bin_folders = external_bin_folders
         self.external_library_folders = external_library_folders
