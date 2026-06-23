@@ -277,6 +277,12 @@ def build_project_main():
         args = parse_build_project_arguments()
         kwargs = process_build_project_arguments(args)
         simulation_project = kwargs.pop("simulation_project")
+        # Build against a fully-featured project so every test kind run against
+        # this build sees all NED packages and feature-gated C++. Mirrors what
+        # run_release_tests does; the feature test kind builds in-process and
+        # does not go through this CLI, so it is unaffected.
+        from opp_repl.simulation.features import enable_all_features
+        enable_all_features(simulation_project)
         result = simulation_project.build(**kwargs)
         if result:
             print(result)

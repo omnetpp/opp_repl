@@ -383,3 +383,59 @@ def _run_featuretool_exitcode(simulation_project, args):
         result = subprocess.run(cmd, cwd=cwd, env=env, capture_output=True, text=True)
 
     return result.returncode
+
+
+def _run_featuretool_checked(simulation_project, args):
+    """
+    Like :py:func:`_run_featuretool` but raises on failure instead of warning.
+
+    Used for mutating commands (``enable``/``disable``) where a silent failure
+    would leave the project in the wrong feature state and reintroduce subtle
+    "network not found" / missing-symbol errors at run time.
+    """
+    cwd = simulation_project.get_full_path(".")
+    cmd = ["opp_featuretool"] + args
+    _logger.debug("Running: %s in %s", shlex.join(cmd), cwd)
+    if simulation_project.opp_env_workspace:
+        shell_cmd = "cd " + shlex.quote(cwd) + " && " + shlex.join(cmd)
+        cmd = ["opp_env", "-l", "WARN", "run", simulation_project.opp_env_project,
+               "-w", simulation_project.opp_env_workspace, "-c", shell_cmd]
+        result = subprocess.run(cmd, capture_output=True, text=True)
+    else:
+        env = simulation_project.get_env()
+        result = subprocess.run(cmd, cwd=cwd, env=env, capture_output=True, text=True)
+    if result.returncode != 0:
+        raise Exception(f"opp_featuretool {' '.join(args)} failed "
+                        f"(exit {result.returncode}): {result.stderr.strip()}")
+    return result.stdout
+
+
+def enable_all_features(simulation_project, keep_disabled=("SelfDoc",)):
+    """
+    Enables all of the project's features, then re-disables the ones in
+    ``keep_disabled`` (``SelfDoc`` by default, which must stay off for normal
+    builds).
+
+    This is the policy that ``run_release_tests`` has always applied before
+    building; factoring it out lets the standalone build step apply it too, so
+    every test kind runs against a fully-featured build: each feature's NED
+    packages stay on the NED path (no ``.nedexclusions`` surprises such as the
+    excluded ``inet.validation.tsn`` package) and all feature-gated C++ gets
+    compiled. No-op for projects without an ``.oppfeatures`` file.
+
+    Note: this deliberately must NOT be called on the ``feature`` test-kind
+    path, which toggles individual features on purpose.
+    """
+    if not has_features(simulation_project):
+        return
+    # Only re-disable features that actually exist in this project: the set of
+    # "build-unfriendly" features (e.g. SelfDoc) varies across project versions,
+    # and asking opp_featuretool to disable an unknown feature is a hard error.
+    _, features = _parse_oppfeatures(simulation_project)
+    existing = {f.id for f in features}
+    to_disable = [f for f in keep_disabled if f in existing]
+    _logger.info("Enabling all features (keeping %s disabled) for %s",
+                 ", ".join(to_disable) or "none", simulation_project.get_name())
+    _run_featuretool_checked(simulation_project, ["enable", "all"])
+    for feature_id in to_disable:
+        _run_featuretool_checked(simulation_project, ["disable", feature_id])
