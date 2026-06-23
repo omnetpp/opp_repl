@@ -17,6 +17,10 @@ import os
 import sys
 
 from opp_repl.simulation import *
+# Imported explicitly as well: when this module is loaded as part of the
+# opp_repl.test package, the wildcard import above does not reliably bind this
+# name (import ordering), so reference it directly from its defining module.
+from opp_repl.simulation.workspace import get_default_simulation_project
 
 _logger = logging.getLogger(__name__)
 
@@ -42,15 +46,20 @@ def _resolve_validation_test_runner(simulation_project):
     module = importlib.import_module(module_name)
     return getattr(module, function_name)
 
-def run_validation_tests(**kwargs):
+def run_validation_tests(simulation_project=None, **kwargs):
     """
-    Runs the validation tests of the enclosing simulation project.
+    Runs the validation tests of the given (or default) simulation project.
 
     Validation tests are project-specific, so the actual runner is resolved
-    from the default simulation project's ``validation_test_runner`` (declared
-    in its ``.opp`` definition) and invoked with the given filter criteria.
+    from the simulation project's ``validation_test_runner`` (declared in its
+    ``.opp`` definition) and invoked with the given filter criteria.
 
     Parameters:
+        simulation_project (:py:class:`SimulationProject <opp_repl.simulation.project.SimulationProject>` or None):
+            The simulation project whose validation tests to run. Defaults to
+            the workspace's default simulation project when not specified
+            (mirroring :py:func:`get_simulation_tasks <opp_repl.simulation.task.get_simulation_tasks>`).
+
         kwargs (dict):
             The filter criteria parameters are forwarded to the resolved
             project-specific validation-test runner.
@@ -58,8 +67,9 @@ def run_validation_tests(**kwargs):
     Returns (:py:class:`MultipleTestTaskResults <opp_repl.test.task.MultipleTestTaskResults>`):
         the result of running the matching validation test tasks.
     """
-    simulation_project = get_default_simulation_project()
+    if simulation_project is None:
+        simulation_project = get_default_simulation_project()
     runner = _resolve_validation_test_runner(simulation_project)
     _logger.debug("Resolved validation test runner %r for project %r",
                   simulation_project.validation_test_runner, simulation_project.name)
-    return runner(**kwargs)
+    return runner(simulation_project=simulation_project, **kwargs)
