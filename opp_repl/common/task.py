@@ -355,13 +355,41 @@ class MultipleTaskResults:
         self.color = possible_result_colors[possible_results.index(self.result)]
         self.expected = self.expected_result == self.result
 
+    @property
+    def reason(self):
+        """
+        Short human-readable explanation for the aggregate result, exposing the
+        same ``.reason`` interface as a single :py:class:`TaskResult`. An
+        explicit reason passed at construction (kept in ``kwargs``) takes
+        precedence; otherwise it is summarized from the results that did not
+        meet expectations -- grouped by distinct reason with counts and capped,
+        since a multiple-result may hold hundreds of tasks. Returns None when
+        there is nothing to report.
+        """
+        explicit = self.kwargs.get("reason")
+        if explicit:
+            return explicit
+        counts = {}
+        for result in self.results:
+            if not getattr(result, "expected", True):
+                detail = getattr(result, "reason", None) or result.result
+                counts[detail] = counts.get(detail, 0) + 1
+        if not counts:
+            return None
+        total = sum(counts.values())
+        ranked = sorted(counts.items(), key=lambda kv: kv[1], reverse=True)
+        parts = [f"{n}x {detail}" for detail, n in ranked[:3]]
+        if len(ranked) > 3:
+            parts.append(f"+{len(ranked) - 3} more")
+        return f"{total}/{len(self.results)} unexpected: " + ", ".join(parts)
+
     def __repr__(self):
         past = _past_tense(self.multiple_tasks.action)
         prefix = f"{past} " if past else ""
         name = self.multiple_tasks.name
         if len(self.results) == 0:
             if self.result != self.possible_results[0]:
-                reason = self.kwargs.get("reason", "")
+                reason = self.reason or ""
                 return f"{prefix}{name}: " + self.color + self.result + COLOR_RESET + (f" ({reason})" if reason else "")
             return f"{prefix}{name}: empty"
         elif len(self.results) == 1:
