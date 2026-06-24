@@ -23,7 +23,7 @@ def parse_run_tasks_arguments(task_name, extra_args_fn=None):
     parser = argparse.ArgumentParser(description=description)
     parser.add_argument("--load", action="append", default=[], metavar="OPP_FILE", help="load one or more .opp configuration files or directories at startup, can be specified multiple times and supports glob patterns (e.g. --load '*.opp'); when a directory is given, all *.opp files in it are loaded; use --load @opp to load the bundled .opp files shipped with opp_repl; if not specified, all *.opp files in the current working directory are loaded automatically")
     parser.add_argument("-p", "--simulation-project", default=None, help="name of the simulation project to use (auto-detected from the working directory if not specified)")
-    parser.add_argument("-m", "--mode", choices=["debug", "release"], help="build mode of the simulation binaries (debug or release)")
+    parser.add_argument("-m", "--mode", choices=["debug", "release", "coverage"], help="build mode of the simulation binaries (debug, release, or coverage)")
     parser.add_argument("--build", action="store_true", help="build the simulation executable before running (default: enabled)")
     parser.add_argument("--no-build", dest="build", action="store_false")
     parser.add_argument("--concurrent", action="store_true", help="run tasks in parallel for faster execution (default: enabled)")
@@ -148,6 +148,9 @@ def run_opp_tests_main():
 def run_validation_tests_main():
     run_tasks_main(run_validation_tests, "validation tests")
 
+def run_coverage_tests_main():
+    run_tasks_main(run_coverage_tests, "coverage tests")
+
 def run_all_tests_main():
     run_tasks_main(run_all_tests, "tests")
 
@@ -248,7 +251,7 @@ def parse_build_project_arguments():
     description = "Builds the specified or enclosing simulation project."
     parser = argparse.ArgumentParser(description=description)
     parser.add_argument("-p", "--simulation-project", default=None, help="name of the simulation project to build (auto-detected from the working directory if not specified)")
-    parser.add_argument("-m", "--mode", choices=["debug", "release"], help="build mode of the simulation binaries (debug or release)")
+    parser.add_argument("-m", "--mode", choices=["debug", "release", "coverage"], help="build mode of the simulation binaries (debug, release, or coverage)")
     parser.add_argument("--concurrent", default=True, action=argparse.BooleanOptionalAction, help="build multiple targets in parallel for faster compilation (default: enabled)")
     parser.add_argument("-l", "--log-level", choices=["ERROR", "WARN", "INFO", "DEBUG"], default="WARN", help="controls the verbosity of log messages (default: WARN)")
     parser.add_argument("--external-command-log-level", choices=["ERROR", "WARN", "INFO", "DEBUG"], default="INFO", help="controls the verbosity of log messages from build tools and compilers (default: INFO)")
