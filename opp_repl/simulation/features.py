@@ -410,11 +410,49 @@ def _run_featuretool_checked(simulation_project, args):
     return result.stdout
 
 
+# OMNeT++ build capabilities (Makefile.inc variable) mapped to the project
+# features that require them. "enable all" would turn these features on even
+# when the OMNeT++ build lacks the capability, which then fails the project
+# build (e.g. INET's makefrag aborts with "Please rebuild OMNeT++ with OSG
+# support"). When the capability is absent we re-disable the dependent feature;
+# opp_featuretool cascades that to its own dependents (e.g.
+# VisualizationOsgShowcases). Features not present in a project are ignored.
+_CAPABILITY_GATED_FEATURES = {
+    "WITH_OSG": ("VisualizationOsg",),
+    "WITH_OSGEARTH": ("VisualizationOsgEarth",),
+}
+
+
+def _get_unsupported_capability_features(simulation_project, existing_feature_ids):
+    """
+    Returns the existing feature ids whose required OMNeT++ build capability
+    (``WITH_OSG`` etc., read from the OMNeT++ ``Makefile.inc``) is not available
+    in the OMNeT++ build this project uses. Empty when the capability state
+    cannot be determined (in which case the features are left enabled).
+    """
+    get_omnetpp_project = getattr(simulation_project, "get_omnetpp_project", None)
+    omnetpp_project = get_omnetpp_project() if get_omnetpp_project else None
+    if omnetpp_project is None:
+        return []
+    try:
+        config = omnetpp_project.get_makefile_inc_config()
+    except Exception as e:
+        _logger.warning("Could not read OMNeT++ Makefile.inc to detect build "
+                        "capabilities; leaving capability-gated features enabled: %s", e)
+        return []
+    unsupported = []
+    for capability_var, feature_ids in _CAPABILITY_GATED_FEATURES.items():
+        if config.get(capability_var, "no").strip().lower() != "yes":
+            unsupported += [f for f in feature_ids if f in existing_feature_ids]
+    return unsupported
+
+
 def enable_all_features(simulation_project, keep_disabled=("SelfDoc",)):
     """
-    Enables all of the project's features, then re-disables the ones in
-    ``keep_disabled`` (``SelfDoc`` by default, which must stay off for normal
-    builds).
+    Enables all of the project's features, then re-disables the ones that must
+    stay off: ``keep_disabled`` (``SelfDoc`` by default, which is build-
+    unfriendly) plus any feature whose required OMNeT++ build capability is
+    missing (e.g. ``VisualizationOsg`` when OMNeT++ was built without OSG).
 
     This is the policy that ``run_release_tests`` has always applied before
     building; factoring it out lets the standalone build step apply it too, so
@@ -434,8 +472,12 @@ def enable_all_features(simulation_project, keep_disabled=("SelfDoc",)):
     _, features = _parse_oppfeatures(simulation_project)
     existing = {f.id for f in features}
     to_disable = [f for f in keep_disabled if f in existing]
+    to_disable += _get_unsupported_capability_features(simulation_project, existing)
+    to_disable = list(dict.fromkeys(to_disable))  # de-dup, preserve order
     _logger.info("Enabling all features (keeping %s disabled) for %s",
                  ", ".join(to_disable) or "none", simulation_project.get_name())
-    _run_featuretool_checked(simulation_project, ["enable", "all"])
+    # -f keeps opp_featuretool non-interactive (it otherwise prompts before
+    # disabling a feature that has enabled dependents) and cascades the change.
+    _run_featuretool_checked(simulation_project, ["enable", "-f", "all"])
     for feature_id in to_disable:
-        _run_featuretool_checked(simulation_project, ["disable", feature_id])
+        _run_featuretool_checked(simulation_project, ["disable", "-f", feature_id])
