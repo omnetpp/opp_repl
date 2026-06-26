@@ -22,11 +22,12 @@ class SanitizerTestTask(SimulationTestTask):
                 test_task_result.color = COLOR_YELLOW
         return test_task_result
 
-def get_sanitizer_test_tasks(mode="sanitize", cpu_time_limit="1s", run_number=0, **kwargs):
+def get_sanitizer_test_tasks(mode="sanitize", cpu_time_limit="1s", run_number=None, **kwargs):
     return get_simulation_test_tasks(mode=mode, cpu_time_limit=cpu_time_limit, name="sanitizer test", simulation_test_task_class=SanitizerTestTask, run_number=run_number, **kwargs)
 get_sanitizer_test_tasks.__signature__ = combine_signatures(get_sanitizer_test_tasks, get_simulation_test_tasks, get_simulation_tasks)
 
 def run_sanitizer_tests(**kwargs):
+    kwargs = apply_project_test_defaults("sanitizer", kwargs)
     multiple_test_tasks = get_sanitizer_test_tasks(**kwargs)
     return multiple_test_tasks.run(**kwargs)
 run_sanitizer_tests.__signature__ = combine_signatures(run_sanitizer_tests, get_sanitizer_test_tasks)

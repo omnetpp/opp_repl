@@ -164,6 +164,7 @@ def run_opp_tests(test_folder, **kwargs):
     Returns (:py:class:`MultipleTestTaskResults`):
         an object that contains a list of :py:class:`TestTaskResult` objects. Each object describes the result of running one test task.
     """
+    kwargs = apply_project_test_defaults("opp", kwargs)
     multiple_test_tasks = get_opp_test_tasks(test_folder, **kwargs)
     return multiple_test_tasks.run(**kwargs)
 run_opp_tests.__signature__ = combine_signatures(run_opp_tests, get_opp_test_tasks)

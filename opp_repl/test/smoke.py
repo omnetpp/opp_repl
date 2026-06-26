@@ -20,7 +20,7 @@ class SmokeTestTask(SimulationTestTask):
         # TODO check simulation_task_result.elapsed_cpu_time
         return super().check_simulation_task_result(simulation_task_result, **kwargs)
 
-def get_smoke_test_tasks(cpu_time_limit="1s", run_number=0, **kwargs):
+def get_smoke_test_tasks(cpu_time_limit="1s", run_number=None, **kwargs):
     """
     Returns multiple smoke test tasks matching the provided filter criteria. The returned tasks can be run by calling
     the :py:meth:`run <opp_repl.common.task.MultipleTasks.run>` method.
@@ -45,6 +45,7 @@ def run_smoke_tests(**kwargs):
     Returns (:py:class:`MultipleTestTaskResults <opp_repl.test.task.MultipleTestTaskResults>`):
         an object that contains a list of :py:class:`SimulationTestTaskResult <opp_repl.test.simulation.SimulationTestTaskResult>` objects. Each object describes the result of running one test task.
     """
+    kwargs = apply_project_test_defaults("smoke", kwargs)
     multiple_test_tasks = get_smoke_test_tasks(**kwargs)
     return multiple_test_tasks.run(**kwargs)
 run_smoke_tests.__signature__ = combine_signatures(run_smoke_tests, get_smoke_test_tasks)

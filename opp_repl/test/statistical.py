@@ -247,7 +247,7 @@ class StatisticalTestTask(SimulationTestTask):
 def get_statistical_test_sim_time_limit(simulation_config, run_number=0):
     return simulation_config.sim_time_limit
 
-def get_statistical_test_tasks(sim_time_limit=get_statistical_test_sim_time_limit, run_number=0, **kwargs):
+def get_statistical_test_tasks(sim_time_limit=get_statistical_test_sim_time_limit, run_number=None, **kwargs):
     """
     Returns multiple statistical test tasks matching the provided filter criteria. The returned tasks can be run by
     calling the :py:meth:`run <opp_repl.common.task.MultipleTasks.run>` method.
@@ -275,6 +275,7 @@ def run_statistical_tests(append_args=[], **kwargs):
     Returns (:py:class:`MultipleSimulationTestTaskResults`):
         an object that contains a list of :py:class:`SimulationTestTaskResult` objects. Each object describes the result of running one test task.
     """
+    kwargs = apply_project_test_defaults("statistical", kwargs)
     multiple_statistical_test_tasks = get_statistical_test_tasks(**kwargs)
     return multiple_statistical_test_tasks.run(append_args=append_args + _append_args, **kwargs)
 run_statistical_tests.__signature__ = combine_signatures(run_statistical_tests, get_statistical_test_tasks)

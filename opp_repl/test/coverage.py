@@ -54,7 +54,10 @@ def run_coverage_tests(simulation_project=None, output_dir="coverage", **kwargs)
     Returns (:py:class:`MultipleTaskResults <opp_repl.common.task.MultipleTaskResults>`):
         the results of running the instrumented simulations.
     """
-    return generate_coverage_report(simulation_project=simulation_project, output_dir=output_dir, **kwargs)
+    if simulation_project is not None:
+        kwargs["simulation_project"] = simulation_project
+    kwargs = apply_project_test_defaults("coverage", kwargs)
+    return generate_coverage_report(output_dir=output_dir, **kwargs)
 run_coverage_tests.__signature__ = combine_signatures(run_coverage_tests, generate_coverage_report, run_simulations)
 
 def open_coverage_report(simulation_project=None, output_dir="coverage", **kwargs):

@@ -273,7 +273,12 @@ def get_fingerprint_test_task(simulation_task, ingredients="tplx", sim_time_limi
         fingerprint_test_task = FingerprintTestTask(simulation_task=simulation_task, sim_time_limit=sim_time_limit, ingredients=ingredients, test_result=None)
     return fingerprint_test_task
 
-def collect_fingerprint_test_groups(simulation_task, ingredients_list=["tplx"], sim_time_limit=None, **kwargs):
+def collect_fingerprint_test_groups(simulation_task, ingredients_list=None, sim_time_limit=None, **kwargs):
+    if ingredients_list is None:
+        # No explicit list → check every known ingredient; store-gating in
+        # get_fingerprint_test_task drops the ones the project's store lacks,
+        # so this runs exactly the ingredients the store has entries for.
+        ingredients_list = all_fingerprint_ingredients
     fingerprint_test_tasks = []
     for ingredients in ingredients_list:
         fingerprint_test_task = get_fingerprint_test_task(simulation_task, ingredients=ingredients, sim_time_limit=sim_time_limit, **kwargs)
@@ -322,6 +327,7 @@ def run_fingerprint_tests(**kwargs):
     Returns (:py:class:`MultipleFingerprintTestTaskResults`):
         an object that contains a list of :py:class:`FingerprintTestTaskResult` objects. Each object describes the result of running one test task.
     """
+    kwargs = apply_project_test_defaults("fingerprint", kwargs)
     multiple_fingerprint_test_tasks = get_fingerprint_test_tasks(**kwargs)
     return multiple_fingerprint_test_tasks.run(**kwargs)
 run_fingerprint_tests.__signature__ = combine_signatures(run_fingerprint_tests, get_fingerprint_test_tasks)

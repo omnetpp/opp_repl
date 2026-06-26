@@ -134,6 +134,8 @@ def get_feature_test_tasks(simulation_project=None, filter=".*", full_match=Fals
 get_feature_test_tasks.__signature__ = combine_signatures(get_feature_test_tasks, get_simulation_tasks)
 
 def run_feature_tests(**kwargs):
+    from opp_repl.simulation.project import apply_project_test_defaults  # lazy: avoid test/* import cycle
+    kwargs = apply_project_test_defaults("feature", kwargs)
     multiple_test_tasks = get_feature_test_tasks(**kwargs)
     return multiple_test_tasks.run(**kwargs)
 run_feature_tests.__signature__ = combine_signatures(run_feature_tests, get_feature_test_tasks)

@@ -72,7 +72,7 @@ class SpeedTestTask(SimulationTestTask):
     def run_protected(self, **kwargs):
         return super().run_protected(nice=-10, append_args=_speed_test_append_args, **kwargs)
 
-def get_speed_test_tasks(mode="profile", run_number=0, baseline_simulation_project=None, **kwargs):
+def get_speed_test_tasks(mode="profile", run_number=None, baseline_simulation_project=None, **kwargs):
     multiple_simulation_tasks = get_simulation_tasks(name="speed test", mode=mode, run_number=run_number, **kwargs)
     simulation_project = multiple_simulation_tasks.simulation_project
     baseline_project = baseline_simulation_project or simulation_project
@@ -86,6 +86,7 @@ def get_speed_test_tasks(mode="profile", run_number=0, baseline_simulation_proje
 get_speed_test_tasks.__signature__ = combine_signatures(get_speed_test_tasks, get_simulation_tasks)
 
 def run_speed_tests(**kwargs):
+    kwargs = apply_project_test_defaults("speed", kwargs)
     multiple_test_tasks = get_speed_test_tasks(**kwargs)
     return multiple_test_tasks.run(**kwargs)
 run_speed_tests.__signature__ = combine_signatures(run_speed_tests, get_speed_test_tasks)

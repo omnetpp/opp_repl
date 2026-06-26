@@ -13,11 +13,26 @@ SimulationProject(
     cpp_folders=["src"],
     dll_symbol="INET",
     msg_folders=["src"],
-    media_folder="doc/media",
-    statistics_folder="statistics",
-    fingerprint_store="tests/fingerprint/store.json",
-    speed_store="tests/speed/store.json",
-    validation_test_runner="inet.test.validation:run_validation_tests",
+    # Per-kind test configuration. Only INET-specific aspects are declared here;
+    # opp_repl's generic defaults (run everything, mode=debug, smoke/sanitizer
+    # cpu_time_limit=1s) are not repeated. INET configs have many runs, so the
+    # single-run kinds pin run_number=0. fingerprint ingredients are derived from
+    # the store. Baseline repos (statistical .sca, chart media) are checked out by
+    # opp_ci before those kinds run; `folder` is the mount point and also feeds the
+    # legacy statistics_folder / media_folder attributes.
+    test_parameters={
+        "smoke":       {"defaults": {"run_number": 0}},
+        "sanitizer":   {"defaults": {"run_number": 0}},
+        "statistical": {"defaults": {"run_number": 0},
+                        "baseline": {"repository": "inet-framework/statistics", "folder": "statistics"}},
+        "speed":       {"defaults": {"run_number": 0}, "store": "tests/speed/store.json"},
+        "fingerprint": {"store": "tests/fingerprint/store.json"},
+        # TODO: confirm the chart media-baseline repository; until then `folder`
+        # feeds media_folder and the images are treated as in-repo (no checkout).
+        "chart":       {"defaults": {"filter": "showcases"},
+                        "baseline": {"folder": "doc/media"}},
+        "validation":  {"runner": "inet.test.validation:run_validation_tests"},
+    },
     external_include_folders=["/usr/include/x86_64-linux-gnu"],
     feature_libraries={
         "VoipStream": {"pkg_config": ["libavcodec", "libavformat", "libavutil", "libswresample"], "defines": ["HAVE_FFMPEG", "HAVE_FFMPEG_SWRESAMPLE"]},

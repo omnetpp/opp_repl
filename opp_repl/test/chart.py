@@ -245,6 +245,8 @@ def run_chart_tests(**kwargs):
     Returns (:py:class:`MultipleTestTaskResults`):
         an object that contains a list of :py:class:`TestTaskResult` objects. Each object describes the result of running one test task.
     """
+    from opp_repl.simulation.project import apply_project_test_defaults  # lazy: avoid test/* import cycle
+    kwargs = apply_project_test_defaults("chart", kwargs)
     multiple_chart_test_tasks = get_chart_test_tasks(**kwargs)
     return multiple_chart_test_tasks.run(**kwargs)
 run_chart_tests.__signature__ = combine_signatures(run_chart_tests, get_chart_test_tasks)

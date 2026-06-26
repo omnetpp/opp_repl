@@ -258,6 +258,38 @@ class OmnetppProject:
         from opp_repl.simulation.build_omnetpp import clean_omnetpp
         return clean_omnetpp(omnetpp_project=self, mode=mode, build_engine=build_engine, **kwargs)
 
+# Aspects a project may declare per test kind in its `.opp` `test_parameters`.
+# Each is optional and only the kinds that need it declare it (kinds are
+# heterogeneous: some have a result store, some a baseline repo, some a runner).
+#   defaults  — kwargs merged into run_<kind>_tests as if the caller passed them
+#   store     — expected-values file in the project tree (fingerprint/speed JSON)
+#   baseline  — external repo to check out before the kind runs: {repository, ref, folder}
+#   runner    — dotted "module:function" ref for a project-specific kind (validation)
+RECOGNISED_TEST_ASPECTS = frozenset({"defaults", "store", "baseline", "runner"})
+
+
+def _validate_test_parameters(test_parameters, project_name):
+    for kind, params in test_parameters.items():
+        if not isinstance(params, dict):
+            raise ValueError(f"test_parameters[{kind!r}] for project {project_name!r} must be a dict, "
+                             f"got {type(params).__name__}")
+        unknown = set(params) - RECOGNISED_TEST_ASPECTS
+        if unknown:
+            raise ValueError(f"test_parameters[{kind!r}] for project {project_name!r} has unknown "
+                             f"aspect(s) {sorted(unknown)}; recognised: {sorted(RECOGNISED_TEST_ASPECTS)}")
+
+
+def apply_project_test_defaults(kind, kwargs):
+    """Merge a project's per-kind ``defaults`` (declared in its ``.opp``
+    ``test_parameters``) into *kwargs* as if the caller had passed them; explicit
+    kwargs win. Resolves and pins ``simulation_project`` so downstream code does
+    not re-resolve it. Called at the top of each ``run_<kind>_tests``."""
+    simulation_project = kwargs.get("simulation_project") or get_default_simulation_project()
+    kwargs = {**kwargs, "simulation_project": simulation_project}
+    defaults = simulation_project.test_parameters.get(kind, {}).get("defaults", {})
+    return {**defaults, **kwargs}
+
+
 class SimulationProject:
     """
     Represents a simulation project that usually comes with its own modules and their C++ implementation, and also with
@@ -271,7 +303,7 @@ class SimulationProject:
                  ned_folders=["."], ned_exclusions=[], ini_file_folders=["."], python_folders=["python"], image_folders=["."],
                  include_folders=["."], cpp_folders=["."], cpp_exclusions=[], cpp_defines=[], msg_folders=["."],
                  media_folder=".", module_image_baseline_folder="media/module_images", statistics_folder=".", fingerprint_store="fingerprint.json", speed_store="speed.json", dependency_store="dependency.json",
-                 validation_test_runner=None,
+                 validation_test_runner=None, test_parameters=None,
                  used_projects=[], external_bin_folders=[], external_library_folders=[], external_libraries=[], external_include_folders=[],
                  dll_symbol=None, feature_libraries=None, pkg_config_libraries=None, opp_defines_file=None, precompiled_header=None, extra_cflags=[], extra_ldflags=[],
                  simulation_configs=None, overlay_name=None, overlay_build_root=None, opp_env_workspace=None, opp_env_project=None,
@@ -506,17 +538,25 @@ class SimulationProject:
         self.cpp_exclusions = cpp_exclusions
         self.cpp_defines = cpp_defines
         self.msg_folders = msg_folders
-        self.media_folder = media_folder
+        # Per-kind test configuration declared in the project's `.opp`. A single
+        # untyped dict keyed by test kind; see RECOGNISED_TEST_ASPECTS. The
+        # legacy flat attributes below are derived from it when the kind declares
+        # the matching aspect, so existing call sites (self.fingerprint_store, …)
+        # keep working while a project can instead declare everything here.
+        test_parameters = test_parameters or {}
+        _validate_test_parameters(test_parameters, name)
+        self.test_parameters = test_parameters
         self.module_image_baseline_folder = module_image_baseline_folder
-        self.statistics_folder = statistics_folder
-        self.fingerprint_store = fingerprint_store
-        self.speed_store = speed_store
         self.dependency_store = dependency_store
+        self.media_folder = test_parameters.get("chart", {}).get("baseline", {}).get("folder", media_folder)
+        self.statistics_folder = test_parameters.get("statistical", {}).get("baseline", {}).get("folder", statistics_folder)
+        self.fingerprint_store = test_parameters.get("fingerprint", {}).get("store", fingerprint_store)
+        self.speed_store = test_parameters.get("speed", {}).get("store", speed_store)
         # Dotted "module.path:function" reference to the project-specific
         # validation-test runner (validation tests compare results against
         # analytical models, so they live in the project, not opp_repl). The
         # generic opp_repl.test.validation.run_validation_tests resolves it.
-        self.validation_test_runner = validation_test_runner
+        self.validation_test_runner = test_parameters.get("validation", {}).get("runner", validation_test_runner)
         self.used_projects = used_projects
         self.external_bin_folders = external_bin_folders
         self.external_library_folders = external_library_folders
@@ -550,6 +590,12 @@ class SimulationProject:
 
     def get_name(self):
         return self.name
+
+    def get_test_baseline(self, kind):
+        """Return the ``{repository, ref, folder}`` baseline-repo declaration for a
+        test kind (chart/statistical compare against an external baseline repo that
+        must be checked out before the run), or ``None`` if the kind declares none."""
+        return self.test_parameters.get(kind, {}).get("baseline")
 
     def get_workspace(self):
         """Return the workspace this project belongs to, or the default workspace."""
