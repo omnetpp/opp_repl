@@ -16,10 +16,16 @@ SimulationProject(
     # Per-kind test configuration. Only INET-specific aspects are declared here;
     # opp_repl's generic defaults (run everything, mode=debug, smoke/sanitizer
     # cpu_time_limit=1s) are not repeated. INET configs have many runs, so the
+    # In-tree read paths the statistical/chart tests use to find baselines.
+    # These are NOT the baseline checkout `folder`s below: statistical reads the
+    # cloned repo directly (statistics == checkout), but chart reads via the
+    # committed `doc/media` symlinks (each showcase's doc/media -> ../../../../media/.../doc),
+    # so the read path is `doc/media` while the repo is cloned into `media`.
+    statistics_folder="statistics",
+    media_folder="doc/media",
     # single-run kinds pin run_number=0. fingerprint ingredients are derived from
     # the store. Baseline repos (statistical .sca, chart media) are checked out by
-    # opp_ci into `folder` before those kinds run; `folder` is the mount point and
-    # also feeds the legacy statistics_folder / media_folder attributes.
+    # opp_ci into `folder` (relative to the inet root) before those kinds run.
     test_parameters={
         "smoke":       {"defaults": {"run_number": 0}},
         "sanitizer":   {"defaults": {"run_number": 0}},
