@@ -539,23 +539,26 @@ class SimulationProject:
         self.cpp_defines = cpp_defines
         self.msg_folders = msg_folders
         # Per-kind test configuration declared in the project's `.opp`. A single
-        # untyped dict keyed by test kind; see RECOGNISED_TEST_ASPECTS. A `store`
-        # aspect (an in-tree expected-values file) derives the legacy store attrs
-        # below, so existing call sites (self.fingerprint_store, …) keep working.
+        # untyped dict keyed by test kind; see RECOGNISED_TEST_ASPECTS. The legacy
+        # flat attributes below are derived from it, so existing call sites keep
+        # working and everything stays in test_parameters.
         #
-        # NOTE: media_folder / statistics_folder are the *in-tree read paths* the
-        # chart/statistical tests use, and are NOT the same as a baseline's
-        # checkout `folder` (where opp_ci clones the external baseline repo).
-        # They coincide for statistical (`statistics`) but differ for chart
-        # (clone → `media`, read via the committed `doc/media` symlinks), so they
-        # stay independent project params — do not derive them from baseline.folder.
+        # media_folder / statistics_folder are the in-tree paths the chart/statistical
+        # tests READ baselines from. A baseline declares two folders: `folder` (where
+        # opp_ci clones the repo) and `read_folder` (where the test reads). They
+        # coincide for statistical ("statistics"), so it sets only `folder`; for chart
+        # the repo clones into "media" but the test reads "doc/media" (the committed
+        # per-showcase doc/media symlinks point back into it). `read_folder` defaults
+        # to `folder` when omitted.
         test_parameters = test_parameters or {}
         _validate_test_parameters(test_parameters, name)
         self.test_parameters = test_parameters
         self.module_image_baseline_folder = module_image_baseline_folder
         self.dependency_store = dependency_store
-        self.media_folder = media_folder
-        self.statistics_folder = statistics_folder
+        _chart_baseline = test_parameters.get("chart", {}).get("baseline", {})
+        _stat_baseline = test_parameters.get("statistical", {}).get("baseline", {})
+        self.media_folder = _chart_baseline.get("read_folder", _chart_baseline.get("folder", media_folder))
+        self.statistics_folder = _stat_baseline.get("read_folder", _stat_baseline.get("folder", statistics_folder))
         self.fingerprint_store = test_parameters.get("fingerprint", {}).get("store", fingerprint_store)
         self.speed_store = test_parameters.get("speed", {}).get("store", speed_store)
         # Dotted "module.path:function" reference to the project-specific
