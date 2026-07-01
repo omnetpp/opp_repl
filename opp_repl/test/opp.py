@@ -47,6 +47,15 @@ if importlib.util.find_spec("omnetpp") and importlib.util.find_spec("omnetpp.tes
                 f.write(self.subprocess_result.stderr)
             return self.subprocess_result.returncode
 
+def extract_test_error_message(stdout):
+    # opp_test prints one line per failed test in the form "*** <testname>: ERROR (<reason>)"
+    # (see omnetpp/test.py testerror/testfailed). The reason is on stdout, not stderr, so extract
+    # it here; otherwise the task result would report "<No error message>". Strip any ANSI color
+    # codes first (the debug/IdeOppTest path may embed them before this point).
+    text = re.sub(r"\x1b\[[0-9;]*[mGKH]", "", stdout)
+    messages = re.findall(r"^\*\*\* [^\n]*?: (?:ERROR|FAIL) \((.*)\)[ \t]*$", text, re.MULTILINE)
+    return "\n".join(messages) if messages else None
+
 class OppTestTask(TestTask):
     def __init__(self, simulation_project, working_directory, test_file_name, mode="debug", debug=False, remove_launch=True, **kwargs):
         super().__init__(**kwargs)
@@ -106,7 +115,8 @@ class OppTestTask(TestTask):
         match = re.search(r"Aggregate result: (\w+)", stdout)
         if match:
             result = match.group(1)
-            return self.task_result_class(self, result=match.group(1), stdout=stdout, stderr=stderr)
+            error_message = extract_test_error_message(stdout) if result in ("ERROR", "FAIL") else None
+            return self.task_result_class(self, result=result, stdout=stdout, stderr=stderr, error_message=error_message)
         elif subprocess_result.returncode == signal.SIGINT.value or subprocess_result.returncode == -signal.SIGINT.value:
             return self.task_result_class(self, result="CANCEL", reason="Cancel by user")
         else:
