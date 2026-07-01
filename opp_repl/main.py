@@ -101,7 +101,6 @@ def run_tasks_main(main_function, task_name):
         _logger.debug(f"Calling main function with: {kwargs}")
         result = main_function(**kwargs)
         _logger.debug(f"Main function returned: {result}")
-        print(result)
         if args.result_file:
             if args.result_file == "-":
                 print(json.dumps(result.to_dict(), default=str))
@@ -208,7 +207,6 @@ def _module_image_main(main_function, task_name, output_dir_required):
         if output_dir_required and kwargs.get("output_dir") is None:
             raise Exception("--output-dir is required for this command")
         result = main_function(**kwargs)
-        print(result)
         if args.result_file:
             if args.result_file == "-":
                 print(json.dumps(result.to_dict(), default=str))
