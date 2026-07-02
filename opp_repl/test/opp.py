@@ -247,7 +247,10 @@ def get_binary_test_tasks(test_folder, executable, simulation_project=None, conf
     if simulation_project is None:
         simulation_project = get_default_simulation_project()
     task = BinaryTestTask(simulation_project, test_folder, executable, config=config, ini_file=ini_file, task_result_class=TestTaskResult, **dict(kwargs, pass_keyboard_interrupt=True))
-    return MultipleTestTasks(tasks=[task], concurrent=False, multiple_task_results_class=MultipleTestTaskResults, **kwargs)
+    # dict(kwargs, ...) overrides rather than duplicates keys the caller may also
+    # pass in kwargs (e.g. a default `concurrent`), which would otherwise raise
+    # "got multiple values for keyword argument".
+    return MultipleTestTasks(tasks=[task], **dict(kwargs, concurrent=False, multiple_task_results_class=MultipleTestTaskResults))
 
 def run_opp_tests(test_folder, **kwargs):
     """
