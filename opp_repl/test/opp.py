@@ -154,15 +154,19 @@ class MultipleOppTestTasks(MultipleSimulationTestTasks):
         self.kwargs = kwargs
         self.test_folder = test_folder
 
-    def build_before_run(self, **kwargs):
-        super().build_before_run(**kwargs)
-        test_directory = self.simulation_project.get_full_path(self.test_folder)
-        lib_directory = os.path.join(test_directory, "lib")
-        if os.path.exists(lib_directory) and os.path.isfile(os.path.join(lib_directory, "Makefile")):
+    def run_protected(self, **kwargs):
+        # Build the shared opp_test support lib (<test_folder>/lib -> libtest) up front,
+        # UNCONDITIONALLY — even under --no-build. --no-build only skips rebuilding the
+        # simulation project; each .test case is still compiled here (see OppTestTask)
+        # and links -ltest, so the lib must exist regardless of the project-build flag.
+        # Idempotent: make no-ops when the lib is already up to date.
+        lib_directory = os.path.join(self.simulation_project.get_full_path(self.test_folder), "lib")
+        if os.path.isfile(os.path.join(lib_directory, "Makefile")):
             args = ["make", f"MODE={self.mode}", "-j", str(multiprocessing.cpu_count())]
             subprocess_result = run_command_with_logging(args, cwd=lib_directory, env=self.simulation_project.get_env(), command_line_logger=_logger)
             if subprocess_result.returncode != 0:
-                raise Exception("Cannot build lib")
+                raise Exception(f"Cannot build opp_test support lib in {lib_directory}")
+        return super().run_protected(**kwargs)
 
 def run_opp_tests(test_folder, **kwargs):
     """
