@@ -606,6 +606,14 @@ class SimulationProject:
         must be checked out before the run), or ``None`` if the kind declares none."""
         return self.test_parameters.get(kind, {}).get("baseline")
 
+    def get_test_mode(self, kind):
+        """Return the build/run ``mode`` a test kind is pinned to in its
+        ``defaults`` (e.g. the opp_test suites run ``debug`` to match their
+        expected outputs), or ``None`` when the kind has no intrinsic mode and the
+        mode is chosen by the caller / matrix. opp_ci forces this for both the
+        build and run stages so they agree."""
+        return self.test_parameters.get(kind, {}).get("defaults", {}).get("mode")
+
     def get_workspace(self):
         """Return the workspace this project belongs to, or the default workspace."""
         return self.workspace or get_default_simulation_workspace()

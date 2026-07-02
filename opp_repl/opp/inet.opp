@@ -34,12 +34,15 @@ SimulationProject(
         "validation":  {"runner": "inet.test.validation:run_validation_tests"},
         # opp_test .test suites, split by folder (mirrors INET's unit/module/other
         # GitHub workflows). Each is the generic `opp` kind scoped to its folder.
-        # The `other` badge = packet + queueing + protocol.
-        "unit":        {"defaults": {"test_folder": "tests/unit"}},
-        "module":      {"defaults": {"test_folder": "tests/module"}},
-        "packet":      {"defaults": {"test_folder": "tests/packet"}},
-        "queueing":    {"defaults": {"test_folder": "tests/queueing"}},
-        "protocol":    {"defaults": {"test_folder": "tests/protocol"}},
+        # The `other` badge = packet + queueing + protocol. All run in debug: the
+        # INET workflows pin mode:[debug] (opp_test expected outputs are built for
+        # the debug binaries), so the mode is intrinsic to the kind, not a matrix
+        # axis — opp_ci reads it here and forces it for both build and run.
+        "unit":        {"defaults": {"test_folder": "tests/unit", "mode": "debug"}},
+        "module":      {"defaults": {"test_folder": "tests/module", "mode": "debug"}},
+        "packet":      {"defaults": {"test_folder": "tests/packet", "mode": "debug"}},
+        "queueing":    {"defaults": {"test_folder": "tests/queueing", "mode": "debug"}},
+        "protocol":    {"defaults": {"test_folder": "tests/protocol", "mode": "debug"}},
     },
     external_include_folders=["/usr/include/x86_64-linux-gnu"],
     feature_libraries={
