@@ -32,15 +32,17 @@ SimulationProject(
         "chart":       {"defaults": {"filter": "showcases"},
                         "baseline": {"repository": "inet-framework/media", "folder": "media", "read_folder": "doc/media"}},
         "validation":  {"runner": "inet.test.validation:run_validation_tests"},
-        # opp_test .test suites, split by folder (mirrors INET's unit/module/other
-        # GitHub workflows). Each is the generic `opp` kind scoped to its folder.
-        # The `other` badge = packet + queueing + protocol. All run in debug: the
-        # INET workflows pin mode:[debug] (opp_test expected outputs are built for
-        # the debug binaries), so the mode is intrinsic to the kind, not a matrix
-        # axis — opp_ci reads it here and forces it for both build and run.
+        # INET's unit/module/other GitHub workflows, all pinned to mode:[debug]
+        # (opp_test expected outputs are built for the debug binaries), so mode is
+        # intrinsic to the kind, not a matrix axis — opp_ci reads it here and
+        # forces it for both build and run. The `other` badge = packet + queueing
+        # + protocol. unit/module/queueing/protocol are folder-scoped opp_test
+        # `.test` suites; packet is different — a single self-checking binary
+        # (tests/packet/UnitTest.cc -> packet_test, run with -c UnitTest), so it
+        # declares executable/config and uses the generic binary runner instead.
         "unit":        {"defaults": {"test_folder": "tests/unit", "mode": "debug"}},
         "module":      {"defaults": {"test_folder": "tests/module", "mode": "debug"}},
-        "packet":      {"defaults": {"test_folder": "tests/packet", "mode": "debug"}},
+        "packet":      {"defaults": {"test_folder": "tests/packet", "executable": "packet_test", "config": "UnitTest", "mode": "debug"}},
         "queueing":    {"defaults": {"test_folder": "tests/queueing", "mode": "debug"}},
         "protocol":    {"defaults": {"test_folder": "tests/protocol", "mode": "debug"}},
     },

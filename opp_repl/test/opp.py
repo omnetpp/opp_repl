@@ -194,6 +194,61 @@ class MultipleOppTestTasks(MultipleSimulationTestTasks):
                 raise Exception(f"Cannot build opp_test support lib in {lib_directory}")
         return super().run_protected(**kwargs)
 
+class BinaryTestTask(TestTask):
+    """Run a self-contained test folder that builds its own executable (via its
+    own Makefile) and self-checks by returning a non-zero exit code on failure.
+
+    INET's ``tests/packet`` is the canonical case: ``UnitTest.cc`` compiles to a
+    standalone ``packet_test`` program that asserts internally and exits
+    non-zero if any assertion fails — it is *not* an ``opp_test`` ``.test``
+    suite (the folder contains no ``.test`` files). The task builds the folder,
+    runs ``./<executable>[_dbg] -s -u Cmdenv -c <config>``, and maps exit code 0
+    → PASS. Everything project-specific (``test_folder``/``executable``/
+    ``config``) comes from the project's ``.opp`` ``test_parameters`` defaults,
+    so opp_repl stays generic and the project carries no runner code."""
+    def __init__(self, simulation_project, test_folder, executable, config="UnitTest", ini_file=None, mode="debug", task_result_class=TestTaskResult, **kwargs):
+        super().__init__(task_result_class=task_result_class, **kwargs)
+        self.locals = locals()
+        self.locals.pop("self")
+        self.kwargs = kwargs
+        self.simulation_project = simulation_project
+        self.test_folder = test_folder
+        self.executable = executable
+        self.config = config
+        self.ini_file = ini_file
+        self.mode = mode
+
+    def get_parameters_string(self, **kwargs):
+        return f"{self.test_folder} -c {self.config}"
+
+    def run_protected(self, **kwargs):
+        binary_suffix = "_dbg" if self.mode == "debug" else ""
+        working_directory = self.simulation_project.get_full_path(self.test_folder)
+        env = self.simulation_project.get_env()
+        # Build the folder's own executable (links the already-built project lib).
+        build_args = ["make", "-s", f"MODE={self.mode}", "-j", str(multiprocessing.cpu_count())]
+        subprocess_result = run_command_with_logging(build_args, cwd=working_directory, env=env, command_line_logger=_logger)
+        if subprocess_result.returncode != 0:
+            return self.task_result_class(self, result="ERROR", stderr=subprocess_result.stderr)
+        run_args = [f"./{self.executable}{binary_suffix}", "-s", "-u", "Cmdenv", "-c", self.config]
+        if self.ini_file:
+            run_args += ["-f", self.ini_file]
+        subprocess_result = run_command_with_logging(run_args, cwd=working_directory, env=env, command_line_logger=_logger)
+        if subprocess_result.returncode == 0:
+            return self.task_result_class(self, result="PASS", stdout=subprocess_result.stdout, stderr=subprocess_result.stderr)
+        elif subprocess_result.returncode in (signal.SIGINT.value, -signal.SIGINT.value):
+            return self.task_result_class(self, result="CANCEL", reason="Cancel by user")
+        else:
+            return self.task_result_class(self, result="FAIL", reason=f"Non-zero exit code: {subprocess_result.returncode}", stdout=subprocess_result.stdout, stderr=subprocess_result.stderr)
+
+def get_binary_test_tasks(test_folder, executable, simulation_project=None, config="UnitTest", ini_file=None, filter=".*", full_match=False, **kwargs):
+    """Return the single :py:class:`BinaryTestTask` for *test_folder* wrapped in a
+    ``MultipleTestTasks`` so it runs and reports like every other test kind."""
+    if simulation_project is None:
+        simulation_project = get_default_simulation_project()
+    task = BinaryTestTask(simulation_project, test_folder, executable, config=config, ini_file=ini_file, task_result_class=TestTaskResult, **dict(kwargs, pass_keyboard_interrupt=True))
+    return MultipleTestTasks(tasks=[task], concurrent=False, multiple_task_results_class=MultipleTestTaskResults, **kwargs)
+
 def run_opp_tests(test_folder, **kwargs):
     """
     Runs one or more tests using the :command:`opp_test` command that match the provided filter criteria.
@@ -210,7 +265,7 @@ def run_opp_tests(test_folder, **kwargs):
     return multiple_test_tasks.run(**kwargs)
 
 def _run_folder_opp_tests(kind, **kwargs):
-    """Run the opp ``.test`` suites for a folder-scoped kind (unit/module/packet/…).
+    """Run the opp ``.test`` suites for a folder-scoped kind (unit/module/queueing/…).
 
     These kinds are the generic ``opp`` runner scoped to a project-specific test
     folder (INET splits its opp_test suites into tests/unit, tests/module, …). The
@@ -222,6 +277,18 @@ def _run_folder_opp_tests(kind, **kwargs):
     multiple_test_tasks = get_opp_test_tasks(test_folder, **kwargs)
     return multiple_test_tasks.run(**kwargs)
 
+def run_binary_tests(kind, **kwargs):
+    """Run a project's self-checking binary test folder for *kind* (see
+    :py:class:`BinaryTestTask`). The ``test_folder``/``executable``/``config``
+    come from the project's ``.opp`` ``test_parameters[kind]["defaults"]``."""
+    kwargs = apply_project_test_defaults(kind, kwargs)
+    test_folder = kwargs.pop("test_folder")
+    executable = kwargs.pop("executable")
+    config = kwargs.pop("config", "UnitTest")
+    ini_file = kwargs.pop("ini_file", None)
+    multiple_test_tasks = get_binary_test_tasks(test_folder, executable, config=config, ini_file=ini_file, **kwargs)
+    return multiple_test_tasks.run(**kwargs)
+
 def run_unit_tests(**kwargs):
     return _run_folder_opp_tests("unit", **kwargs)
 
@@ -229,7 +296,8 @@ def run_module_tests(**kwargs):
     return _run_folder_opp_tests("module", **kwargs)
 
 def run_packet_tests(**kwargs):
-    return _run_folder_opp_tests("packet", **kwargs)
+    # INET's tests/packet is a single self-checking binary, not a .test suite.
+    return run_binary_tests("packet", **kwargs)
 
 def run_queueing_tests(**kwargs):
     return _run_folder_opp_tests("queueing", **kwargs)
