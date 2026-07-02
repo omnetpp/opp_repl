@@ -12,6 +12,7 @@ import importlib.util
 import io
 import logging
 import os
+import shutil
 import signal
 import subprocess
 import types
@@ -181,6 +182,17 @@ class MultipleOppTestTasks(MultipleSimulationTestTasks):
         self.test_folder = test_folder
 
     def run_protected(self, **kwargs):
+        # Start each suite run from a clean <test_folder>/work, replicating a fresh
+        # checkout. opp_test extracts and compiles each .test case under work/, and
+        # "meta" tests (e.g. INET's ConvolutionalCoder*/Ieee80211*Domain, which do
+        # `%file: input.test` and run a nested sub-test) leave a nested work/<sub>/
+        # directory behind. On a *reused* workspace the next run's outer simulation
+        # loads NED from '.' recursively, hits that stale nested package.ned, and
+        # dies with a package-mismatch error — a failure that never occurs on a
+        # fresh checkout. Wiping work/ up front removes all such stale artifacts.
+        work_directory = os.path.join(self.simulation_project.get_full_path(self.test_folder), "work")
+        if os.path.isdir(work_directory):
+            shutil.rmtree(work_directory, ignore_errors=True)
         # Build the shared opp_test support lib (<test_folder>/lib -> libtest) up front,
         # UNCONDITIONALLY — even under --no-build. --no-build only skips rebuilding the
         # simulation project; each .test case is still compiled here (see OppTestTask)
