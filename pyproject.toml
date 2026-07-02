@@ -14,7 +14,7 @@ dynamic = ["version"]
 requires-python = ">=3.10"
 dependencies = [
     "ipython",
-    "pandas",
+    "pandas>=1.0.0,<3.0.0",
 ]
 classifiers = [
     "Development Status :: 4 - Beta",
@@ -50,14 +50,14 @@ cluster = [
     "distributed",
 ]
 data = [
-    "pandas",
+    "pandas>=1.0.0,<3.0.0",
 ]
 chart = [
-    "matplotlib",
-    "numpy",
+    "matplotlib>=3.5.2,<4.0.0",
+    "numpy>=2.0.0,<3.0.0",
 ]
 optimize = [
-    "scipy",
+    "scipy>=1.0.0,<2.0.0",
     "optimparallel",
 ]
 github = [
@@ -73,15 +73,15 @@ all = [
     "dask",
     "distributed",
     "httpx",
-    "matplotlib",
+    "matplotlib>=3.5.2,<4.0.0",
     "mcp",
-    "numpy",
+    "numpy>=2.0.0,<3.0.0",
     "optimparallel",
-    "pandas",
+    "pandas>=1.0.0,<3.0.0",
     "py4j",
     "PyQt6",
     "requests",
-    "scipy",
+    "scipy>=1.0.0,<2.0.0",
 ]
 
 [project.scripts]
