@@ -254,7 +254,7 @@ class TaskResult:
     def get_description(self, complete_error_message=True, include_parameters=False, **kwargs):
         return (self.task.get_parameters_string() + " " if include_parameters else "") + \
                 self.color + self.result + COLOR_RESET + \
-                ((COLOR_YELLOW + " (unexpected)" + COLOR_RESET) if not self.expected and self.color != COLOR_GREEN else "") + \
+                ((COLOR_YELLOW + " (unexpected)" + COLOR_RESET) if not self.expected else "") + \
                 ((COLOR_GREEN + " (expected)" + COLOR_RESET) if self.expected and self.color != COLOR_GREEN else "") + \
                (" (" + self.reason + ")" if self.reason else "") + \
                (" " + self.get_error_message(complete_error_message=complete_error_message) if self.result == "ERROR" else "") + \

@@ -73,8 +73,34 @@ class OppTestTask(TestTask):
     def get_parameters_string(self, **kwargs):
         return self.test_file_name
 
+    def get_expected_result(self):
+        """The declared expected result of this test, read from a
+        ``%# expected-result: <PASS|FAIL|ERROR>`` comment line in the .test file.
+
+        opp_test itself ignores ``%#`` comment lines (omnetpp/test.py), so this is a
+        metadata annotation for the wrapper only -- the honest analogue of opp_repl's
+        commented-out ``#expected-result = "..."`` INI key. Defaults to ``PASS``."""
+        if not hasattr(self, "_expected_result"):
+            self._expected_result = "PASS"
+            test_file_path = os.path.join(self.working_directory, self.test_file_name)
+            try:
+                with open(test_file_path) as f:
+                    for line in f:
+                        m = re.match(r"^%#\s*expected-result\s*:\s*(\w+)\s*$", line)
+                        if m:
+                            value = m.group(1).upper()
+                            if value not in ("PASS", "FAIL", "ERROR"):
+                                raise ValueError(f"invalid '%# expected-result: {m.group(1)}' in "
+                                                 f"{self.test_file_name} (allowed: PASS, FAIL, ERROR)")
+                            self._expected_result = value
+                            break
+            except (IOError, OSError):
+                pass
+        return self._expected_result
+
     def run_protected(self, **kwargs):
         binary_suffix = "_dbg" if self.mode == "debug" else ""
+        expected_result = self.get_expected_result()
         test_file_name = os.path.join(self.working_directory, self.test_file_name)
         test_binary_name = re.sub(r"\.test", "", self.test_file_name)
         test_directory = os.path.join(self.working_directory, f"work/{test_binary_name}")
@@ -83,18 +109,18 @@ class OppTestTask(TestTask):
         args = ["opp_test", "gen", "-v", self.test_file_name]
         subprocess_result = run_command_with_logging(args, cwd=self.working_directory, env=self.simulation_project.get_env(), command_line_logger=_logger)
         if subprocess_result.returncode != 0:
-            return self.task_result_class(self, result="ERROR", stderr=subprocess_result.stderr)
+            return self.task_result_class(self, result="ERROR", expected_result=expected_result, stderr=subprocess_result.stderr)
         library_name = self.simulation_project.dynamic_libraries[0]
         library_folder = self.simulation_project.get_library_folder_full_path()
         include_folders = [self.simulation_project.get_full_path(f) for f in self.simulation_project.include_folders]
         args = ["opp_makemake", "-f", "--deep", f"-l{library_name}{binary_suffix}", f"-L{library_folder}", *([f"-ltest{binary_suffix}", "-L../../lib"] if has_lib else []), "-P", test_directory, *[f"-I{d}" for d in include_folders], *(["-I../../lib"] if has_lib else [])]
         subprocess_result = run_command_with_logging(args, cwd=test_directory, env=self.simulation_project.get_env(), command_line_logger=_logger)
         if subprocess_result.returncode != 0:
-            return self.task_result_class(self, result="ERROR", stderr=subprocess_result.stderr)
+            return self.task_result_class(self, result="ERROR", expected_result=expected_result, stderr=subprocess_result.stderr)
         args = ["make", f"MODE={self.mode}", "-j", str(multiprocessing.cpu_count())]
         subprocess_result = run_command_with_logging(args, cwd=test_directory, env=self.simulation_project.get_env(), command_line_logger=_logger)
         if subprocess_result.returncode != 0:
-            return self.task_result_class(self, result="ERROR", stderr=subprocess_result.stderr)
+            return self.task_result_class(self, result="ERROR", expected_result=expected_result, stderr=subprocess_result.stderr)
         test_program = f"{test_binary_name}/{test_binary_name}{binary_suffix}"
         ned_folders = [self.simulation_project.get_full_path(f) for f in self.simulation_project.ned_folders]
         simulation_args = ["--check-signals=false", f"-l{library_name}", "-n", ":".join(ned_folders + ["."] + (["../../lib"] if has_lib else []))]
@@ -117,11 +143,11 @@ class OppTestTask(TestTask):
         if match:
             result = match.group(1)
             error_message = extract_test_error_message(stdout) if result in ("ERROR", "FAIL") else None
-            return self.task_result_class(self, result=result, stdout=stdout, stderr=stderr, error_message=error_message)
+            return self.task_result_class(self, result=result, expected_result=expected_result, stdout=stdout, stderr=stderr, error_message=error_message)
         elif subprocess_result.returncode == signal.SIGINT.value or subprocess_result.returncode == -signal.SIGINT.value:
-            return self.task_result_class(self, result="CANCEL", reason="Cancel by user")
+            return self.task_result_class(self, result="CANCEL", expected_result=expected_result, reason="Cancel by user")
         else:
-            return self.task_result_class(self, result="FAIL", reason=f"Non-zero exit code: {subprocess_result.returncode}", stdout=stdout, stderr=stderr)
+            return self.task_result_class(self, result="FAIL", expected_result=expected_result, reason=f"Non-zero exit code: {subprocess_result.returncode}", stdout=stdout, stderr=stderr)
 
 def get_opp_test_tasks(test_folder, simulation_project=None, filter=".*", full_match=False, **kwargs):
     """
