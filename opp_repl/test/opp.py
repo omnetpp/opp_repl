@@ -167,7 +167,13 @@ def get_opp_test_tasks(test_folder, simulation_project=None, filter=".*", full_m
         return OppTestTask(simulation_project, os.path.dirname(test_file_name), os.path.basename(test_file_name), task_result_class=TestTaskResult, **dict(kwargs, pass_keyboard_interrupt=True))
     if simulation_project is None:
         simulation_project = get_default_simulation_project()
-    test_file_names = list(builtins.filter(lambda test_file_name: matches_filter(test_file_name, filter, None, full_match),
+    # Never discover .test files under a `work/` segment: that is opp_test's
+    # generated scratch (each case is extracted and compiled there, and meta
+    # tests write sub-`.test` files into it). On a reused workspace those copies
+    # from a prior run would otherwise be picked up as phantom tasks. No source
+    # tree keeps real tests under work/, so this is a no-op on a fresh checkout.
+    is_scratch = lambda f: (os.sep + "work" + os.sep) in f
+    test_file_names = list(builtins.filter(lambda test_file_name: not is_scratch(test_file_name) and matches_filter(test_file_name, filter, None, full_match),
                                            glob.glob(os.path.join(simulation_project.get_full_path(test_folder), "**/*.test"), recursive=True)))
     test_tasks = list(map(create_test_task, test_file_names))
     return MultipleOppTestTasks(tasks=test_tasks, simulation_project=simulation_project, test_folder=test_folder, multiple_task_results_class=MultipleTestTaskResults, **kwargs)
