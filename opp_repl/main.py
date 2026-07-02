@@ -144,6 +144,21 @@ def run_statistical_tests_main():
 def run_opp_tests_main():
     run_tasks_main(lambda **kwargs: run_opp_tests(test_folder=os.getcwd(), **kwargs), "opp tests")
 
+def run_unit_tests_main():
+    run_tasks_main(run_unit_tests, "unit tests")
+
+def run_module_tests_main():
+    run_tasks_main(run_module_tests, "module tests")
+
+def run_packet_tests_main():
+    run_tasks_main(run_packet_tests, "packet tests")
+
+def run_queueing_tests_main():
+    run_tasks_main(run_queueing_tests, "queueing tests")
+
+def run_protocol_tests_main():
+    run_tasks_main(run_protocol_tests, "protocol tests")
+
 def run_validation_tests_main():
     run_tasks_main(run_validation_tests, "validation tests")
 

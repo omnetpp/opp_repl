@@ -11,6 +11,7 @@ import glob
 import importlib.util
 import io
 import logging
+import os
 import signal
 import subprocess
 import types
@@ -177,4 +178,32 @@ def run_opp_tests(test_folder, **kwargs):
     kwargs = apply_project_test_defaults("opp", kwargs)
     multiple_test_tasks = get_opp_test_tasks(test_folder, **kwargs)
     return multiple_test_tasks.run(**kwargs)
+
+def _run_folder_opp_tests(kind, **kwargs):
+    """Run the opp ``.test`` suites for a folder-scoped kind (unit/module/packet/…).
+
+    These kinds are the generic ``opp`` runner scoped to a project-specific test
+    folder (INET splits its opp_test suites into tests/unit, tests/module, …). The
+    folder comes from ``test_parameters[kind]["defaults"]["test_folder"]`` in the
+    project's ``.opp``, so opp_ci stays generic and the mapping lives with the
+    project. Falls back to the cwd if the project declares no folder."""
+    kwargs = apply_project_test_defaults(kind, kwargs)
+    test_folder = kwargs.pop("test_folder", os.getcwd())
+    multiple_test_tasks = get_opp_test_tasks(test_folder, **kwargs)
+    return multiple_test_tasks.run(**kwargs)
+
+def run_unit_tests(**kwargs):
+    return _run_folder_opp_tests("unit", **kwargs)
+
+def run_module_tests(**kwargs):
+    return _run_folder_opp_tests("module", **kwargs)
+
+def run_packet_tests(**kwargs):
+    return _run_folder_opp_tests("packet", **kwargs)
+
+def run_queueing_tests(**kwargs):
+    return _run_folder_opp_tests("queueing", **kwargs)
+
+def run_protocol_tests(**kwargs):
+    return _run_folder_opp_tests("protocol", **kwargs)
 run_opp_tests.__signature__ = combine_signatures(run_opp_tests, get_opp_test_tasks)

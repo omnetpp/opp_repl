@@ -32,6 +32,14 @@ SimulationProject(
         "chart":       {"defaults": {"filter": "showcases"},
                         "baseline": {"repository": "inet-framework/media", "folder": "media", "read_folder": "doc/media"}},
         "validation":  {"runner": "inet.test.validation:run_validation_tests"},
+        # opp_test .test suites, split by folder (mirrors INET's unit/module/other
+        # GitHub workflows). Each is the generic `opp` kind scoped to its folder.
+        # The `other` badge = packet + queueing + protocol.
+        "unit":        {"defaults": {"test_folder": "tests/unit"}},
+        "module":      {"defaults": {"test_folder": "tests/module"}},
+        "packet":      {"defaults": {"test_folder": "tests/packet"}},
+        "queueing":    {"defaults": {"test_folder": "tests/queueing"}},
+        "protocol":    {"defaults": {"test_folder": "tests/protocol"}},
     },
     external_include_folders=["/usr/include/x86_64-linux-gnu"],
     feature_libraries={
