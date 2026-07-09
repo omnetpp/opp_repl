@@ -19,10 +19,28 @@ SimulationProject(
     #
     # Unlike INET, Simu5G builds its shared lib without a per-symbol DLL export
     # macro (its makemake has no -P<SYM>_API flag), so `dll_symbol` is intentionally
-    # left unset. Simu5G also ships a single fingerprint test suite; the other test
-    # kinds fall back to opp_repl's generic defaults.
+    # left unset.
+    #
+    # Both the fingerprint and statistical suites are pinned to run 0 only: Simu5G
+    # configs expand into many runs, and recording/comparing every one would be
+    # excessive. Statistical baselines live in the sibling `statistics` git repo
+    # (inet-framework/Simu5G-statistics), checked out into <simu5g_root>/statistics;
+    # `folder` makes that the read/write location for the stored .sca files.
     test_parameters={
-        "fingerprint": {"store": "tests/fingerprint/store.json"},
+        "fingerprint": {"defaults": {"run_number": 0},
+                        "store": "tests/fingerprint/store.json"},
+        # exclude_working_directory_filter drops two groups of configs:
+        #   cars          - require the Simu5G_Cars feature (Veins), off by default,
+        #                   so they cannot run in the standard build anyway
+        #   lte/d2d_multihop - the MultihopD2D configs run 17-34 min each, vs under 1 min
+        #                   for most other configs; too slow for a regression suite.
+        #                   note that these are LTE simulations, there's no nr/dtd_multihop.
+        # NOTE: this default is honored by run_statistical_tests (compare) but NOT by
+        # update_statistical_test_results (record) - the record path does not apply
+        # per-kind defaults, so pass the same filter explicitly when re-recording.
+        "statistical": {"defaults": {"run_number": 0,
+                                     "exclude_working_directory_filter": r"(^|/)(cars|d2d_multihop)(/|$)"},
+                        "baseline": {"repository": "inet-framework/Simu5G-statistics", "folder": "statistics"}},
     },
     used_projects=["inet"],
     github_owner="inet-framework",
