@@ -1,0 +1,33 @@
+SimulationProject(
+    name="simu5g",
+    root_folder_environment_variable="SIMU5G_ROOT",
+    bin_folder="bin",
+    library_folder="src",
+    executables=["simu5g"],
+    dynamic_libraries=["simu5g"],
+    static_libraries=["simu5g"],
+    ned_folders=["src", "simulations", "emulation", "showcases", "tutorials"],
+    ini_file_folders=["simulations", "emulation", "showcases", "tutorials", "tests/fingerprint"],
+    image_folders=["images"],
+    include_folders=["src"],
+    cpp_folders=["src"],
+    msg_folders=["src"],
+    # Simu5G is built on top of INET: it imports INET's NED/msg/include folders and
+    # links against libINET. `used_projects` pulls all of that in transitively, so
+    # nothing INET-specific needs to be repeated here. The feature-gated `cars`
+    # packages listed in .nedexclusions are picked up automatically.
+    #
+    # Unlike INET, Simu5G builds its shared lib without a per-symbol DLL export
+    # macro (its makemake has no -P<SYM>_API flag), so `dll_symbol` is intentionally
+    # left unset. Simu5G also ships a single fingerprint test suite; the other test
+    # kinds fall back to opp_repl's generic defaults.
+    test_parameters={
+        "fingerprint": {"store": "tests/fingerprint/store.json"},
+    },
+    used_projects=["inet"],
+    github_owner="inet-framework",
+    github_repository="Simu5G",
+    github_workflows=[
+        "fingerprint-tests.yml",
+    ],
+)
