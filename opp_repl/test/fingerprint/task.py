@@ -35,7 +35,13 @@ all_fingerprint_ingredients_append_args = {
 
 def get_ingredients_append_args(ingredients):
     global all_fingerprint_ingredients_append_args
-    append_args = ["--fingerprintcalculator-class", "inet::FingerprintCalculator"] if "~" in ingredients else []
+    # Single =-joined token (not two list items): these ingredient args are
+    # deduplicated through a set() by the caller, which would otherwise split the
+    # option from its value and reorder them, leaving "inet::FingerprintCalculator"
+    # as a bare positional that opp_run treats as an ini file ("Cannot open ini
+    # file"). Matches OMNeT++'s own opp_fingerprinttest and the =-joined form of
+    # every other entry in all_fingerprint_ingredients_append_args.
+    append_args = ["--fingerprintcalculator-class=inet::FingerprintCalculator"] if "~" in ingredients else []
     return append_args + list(all_fingerprint_ingredients_append_args[ingredients]) if ingredients in all_fingerprint_ingredients_append_args else []
 
 class FingerprintTestTaskResult(SimulationTestTaskResult):
@@ -171,7 +177,7 @@ class FingerprintTestGroupTask(MultipleTestTasks):
                 simulation_result = simulation_task.run(print_end=" ", sim_time_limit=sim_time_limit or self.sim_time_limit, output_stream=output_stream, append_args=append_args + list(ingredients_append_args), **kwargs)
                 fingerprint_test_group_results = check_fingerprint_test_group(simulation_result, self, **kwargs)
                 fingerprint_test_results += fingerprint_test_group_results.results
-            return MultipleTestResults(self.tasks, fingerprint_test_results)
+            return MultipleTestTaskResults(self.tasks, fingerprint_test_results)
 
 class MultipleFingerprintTestTasks(MultipleSimulationTestTasks):
     def __init__(self, multiple_simulation_tasks=None, name="fingerprint test", **kwargs):
