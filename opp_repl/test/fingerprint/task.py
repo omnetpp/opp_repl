@@ -151,7 +151,7 @@ class FingerprintTestGroupTask(MultipleTestTasks):
             return self.tasks[0].count_progress_steps()
         return super().count_progress_steps()
 
-    def run(self, output_stream=sys.stdout, **kwargs):
+    def run(self, output_stream=sys.stdout, sim_time_limit=None, **kwargs):
         if len(self.tasks) == 1:
             return self.tasks[0].run(output_stream=output_stream, **kwargs)
         else:
