@@ -221,7 +221,7 @@ def check_fingerprint_test_group(simulation_result, fingerprint_test_group, **kw
     fingerprint_test_results = []
     for fingerprint_test_task in fingerprint_test_group.tasks:
         if fingerprint_test_task.fingerprint:
-            fingerprint_test_result = check_fingerprint_test(fingerprint_test_task, simulation_result, **kwargs)
+            fingerprint_test_result = fingerprint_test_task.check_simulation_task_result(simulation_result, **kwargs)
             fingerprint_test_results.append(fingerprint_test_result)
     return MultipleTestTaskResults(fingerprint_test_group.tasks, fingerprint_test_results)
 
@@ -298,12 +298,20 @@ def collect_fingerprint_test_groups(simulation_task, ingredients_list=None, sim_
     grouped_fingerprint_test_tasks = [list(it) for k, it in itertools.groupby(sorted_fingerprint_test_tasks, get_sim_time_limit)]
     return list(map(get_fingerprint_test_group_task, grouped_fingerprint_test_tasks))
 
-def get_fingerprint_test_tasks(**kwargs):
+def get_fingerprint_test_tasks(stored_only=False, **kwargs):
     """
     Returns multiple fingerprint test tasks matching the provided filter criteria. The returned tasks can be run by
     calling the :py:meth:`run <opp_repl.common.task.MultipleTasks.run>` method.
 
     Parameters:
+        stored_only (bool):
+            When True, restrict discovery to the ``(working_directory, ini_file,
+            config, run_number)`` pairs that actually have a stored fingerprint.
+            Without it, every ini run (``0..num_runs-1``) of every fingerprint
+            config is enumerated and then SKIPped when the store has no entry —
+            for INET that is ~93000 tasks of which only ~1500 are real. Projects
+            declare this in their ``.opp`` ``test_parameters["fingerprint"]``.
+
         kwargs (dict):
             The filter criteria parameters are inherited from the :py:meth:`get_simulation_tasks <opp_repl.simulation.task.get_simulation_tasks>` method.
 
@@ -314,9 +322,16 @@ def get_fingerprint_test_tasks(**kwargs):
     kwargs.setdefault("mode", "debug")
     def get_tasks(**kwargs):
         multiple_simulation_tasks = get_simulation_tasks(**kwargs)
+        simulation_tasks = multiple_simulation_tasks.tasks
+        if stored_only:
+            baseline_project = kwargs.get("baseline_simulation_project") or multiple_simulation_tasks.simulation_project
+            stored_keys = {(entry["working_directory"], entry["ini_file"], entry["config"], entry["run_number"])
+                           for entry in get_correct_fingerprint_store(baseline_project).get_entries()}
+            simulation_tasks = [simulation_task for simulation_task in simulation_tasks
+                                if (simulation_task.simulation_config.working_directory, simulation_task.simulation_config.ini_file,
+                                    simulation_task.simulation_config.config, simulation_task.run_number) in stored_keys]
         fingerprint_test_groups = []
-        for simulation_task in multiple_simulation_tasks.tasks:
-            simulation_config = simulation_task.simulation_config
+        for simulation_task in simulation_tasks:
             fingerprint_test_groups += collect_fingerprint_test_groups(simulation_task, **dict(kwargs, pass_keyboard_interrupt=True))
         return MultipleFingerprintTestTasks(multiple_simulation_tasks=multiple_simulation_tasks, tasks=fingerprint_test_groups, **dict(kwargs, simulation_project=multiple_simulation_tasks.simulation_project))
     return get_tasks(**kwargs)
