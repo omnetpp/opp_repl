@@ -279,16 +279,20 @@ def get_fingerprint_test_task(simulation_task, ingredients="tplx", sim_time_limi
         fingerprint_test_task = FingerprintTestTask(simulation_task=simulation_task, sim_time_limit=sim_time_limit, ingredients=ingredients, test_result=None)
     return fingerprint_test_task
 
-def collect_fingerprint_test_groups(simulation_task, ingredients_list=None, sim_time_limit=None, **kwargs):
+def collect_fingerprint_test_groups(simulation_task, ingredients_list=None, sim_time_limit=None, stored_only=False, **kwargs):
     if ingredients_list is None:
-        # No explicit list → check every known ingredient; store-gating in
-        # get_fingerprint_test_task drops the ones the project's store lacks,
-        # so this runs exactly the ingredients the store has entries for.
+        # No explicit list → consider every known ingredient.
         ingredients_list = all_fingerprint_ingredients
     fingerprint_test_tasks = []
     for ingredients in ingredients_list:
         fingerprint_test_task = get_fingerprint_test_task(simulation_task, ingredients=ingredients, sim_time_limit=sim_time_limit, **kwargs)
         if fingerprint_test_task and fingerprint_test_task.sim_time_limit:
+            # get_fingerprint_test_task returns a fingerprint=None (SKIP) task when
+            # this (config, run, ingredient) has no stored fingerprint. Under
+            # stored_only, drop those so we run exactly the stored fingerprints
+            # instead of emitting a SKIP row for every unstored ingredient.
+            if stored_only and not fingerprint_test_task.fingerprint:
+                continue
             fingerprint_test_tasks.append(fingerprint_test_task)
     def get_sim_time_limit(element):
         return element.sim_time_limit
@@ -332,7 +336,7 @@ def get_fingerprint_test_tasks(stored_only=False, **kwargs):
                                     simulation_task.simulation_config.config, simulation_task.run_number) in stored_keys]
         fingerprint_test_groups = []
         for simulation_task in simulation_tasks:
-            fingerprint_test_groups += collect_fingerprint_test_groups(simulation_task, **dict(kwargs, pass_keyboard_interrupt=True))
+            fingerprint_test_groups += collect_fingerprint_test_groups(simulation_task, stored_only=stored_only, **dict(kwargs, pass_keyboard_interrupt=True))
         return MultipleFingerprintTestTasks(multiple_simulation_tasks=multiple_simulation_tasks, tasks=fingerprint_test_groups, **dict(kwargs, simulation_project=multiple_simulation_tasks.simulation_project))
     return get_tasks(**kwargs)
 get_fingerprint_test_tasks.__signature__ = combine_signatures(get_fingerprint_test_tasks, collect_fingerprint_test_groups, get_fingerprint_test_task, get_simulation_tasks)
