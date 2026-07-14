@@ -353,7 +353,16 @@ class MultipleTaskResults:
             if self.num_unexpected[possible_result] != 0:
                 self.result = possible_result
         self.color = possible_result_colors[possible_results.index(self.result)]
-        self.expected = self.expected_result == self.result
+        # An aggregate is "expected" iff NONE of its children were unexpected.
+        # Comparing self.expected_result == self.result is wrong for a group:
+        # expected_result defaults to the type's nominal value (e.g. "PASS"), so
+        # a group whose children are ALL legitimately expected-ERROR (result
+        # aggregates to "ERROR") would compare (PASS == ERROR) and be flagged
+        # unexpected, even though num_unexpected is all zeros. This surfaced with
+        # multi-ingredient fingerprint groups of expected-ERROR configs
+        # (manetrouting DynamicIPv6, mpls/net37); single-child groups escaped it
+        # by short-circuiting to the child result.
+        self.expected = sum(self.num_unexpected.values()) == 0
 
     @property
     def reason(self):
