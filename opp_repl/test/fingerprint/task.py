@@ -334,6 +334,23 @@ def get_fingerprint_test_tasks(stored_only=False, **kwargs):
             simulation_tasks = [simulation_task for simulation_task in simulation_tasks
                                 if (simulation_task.simulation_config.working_directory, simulation_task.simulation_config.ini_file,
                                     simulation_task.simulation_config.config, simulation_task.run_number) in stored_keys]
+            # Iteration-variable run filters (string run_number, e.g. "$datarate==... &&
+            # $repetition==0" parameter studies) are not enumerated by get_simulation_tasks
+            # (which only produces integer runs), so build a task for each straight from
+            # the store: clone an enumerated task of the same config and pass the filter
+            # through as the run spec (SimulationTask emits it as opp_run -r '<filter>').
+            template_by_config = {}
+            for simulation_task in multiple_simulation_tasks.tasks:
+                simulation_config = simulation_task.simulation_config
+                template_by_config.setdefault((simulation_config.working_directory, simulation_config.ini_file, simulation_config.config), simulation_task)
+            for working_directory, ini_file, config, run in stored_keys:
+                if not isinstance(run, str):
+                    continue
+                template = template_by_config.get((working_directory, ini_file, config))
+                if template is not None:
+                    simulation_tasks.append(SimulationTask(simulation_config=template.simulation_config, run_number=run,
+                                                           mode=template.mode, build=template.build, debug=template.debug,
+                                                           cpu_time_limit=template.cpu_time_limit, user_interface=template.user_interface))
         fingerprint_test_groups = []
         for simulation_task in simulation_tasks:
             fingerprint_test_groups += collect_fingerprint_test_groups(simulation_task, stored_only=stored_only, **dict(kwargs, pass_keyboard_interrupt=True))

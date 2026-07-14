@@ -56,11 +56,17 @@ def update_correct_fingerprints_from_csv(csv_file, correct_fingerprints, filter=
                             sim_time_limit = "10s"
                         elif args.ini_file == "ethernet-twohosts.ini":
                             sim_time_limit = "1000s"
+                        # -r may be a run number OR an iteration-variable run filter,
+                        # e.g. "$datarate==10Mbps && ... && $repetition==0" (parameter
+                        # studies). Keep the filter verbatim so it can be passed to
+                        # opp_run -r; only plain integers become an int run_number.
+                        run_spec = args.run.strip()
+                        run_number = int(run_spec) if re.fullmatch(r"-?\d+", run_spec) else run_spec
                         correct_fingerprints.update_fingerprint(fingerprint.fingerprint,
                                                                 working_directory=working_directory,
                                                                 ini_file=args.ini_file,
                                                                 config=args.config,
-                                                                run_number=int(args.run),
+                                                                run_number=run_number,
                                                                 sim_time_limit=sim_time_limit,
                                                                 ingredients=fingerprint.ingredients,
                                                                 test_result=fields[4])
