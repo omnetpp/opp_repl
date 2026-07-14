@@ -155,7 +155,13 @@ class FingerprintTestGroupTask(MultipleTestTasks):
         # does not fire its own ▶/◉ events, so don't count an extra step.
         if len(self.tasks) == 1:
             return self.tasks[0].count_progress_steps()
-        return super().count_progress_steps()
+        # A multi-ingredient group runs ONE simulation for all checked
+        # (fingerprint-present) ingredients — not one per ingredient — plus one
+        # run per skipped (fingerprint-None) task. Summing every ingredient task
+        # (super()) inflated the progress denominator ~Nx.
+        skipped = [t for t in self.tasks if t.fingerprint is None]
+        checked = [t for t in self.tasks if t.fingerprint]
+        return sum(t.count_progress_steps() for t in skipped) + (checked[0].count_progress_steps() if checked else 0)
 
     def run(self, output_stream=sys.stdout, sim_time_limit=None, **kwargs):
         if len(self.tasks) == 1:
