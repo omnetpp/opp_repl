@@ -62,6 +62,9 @@ def update_correct_fingerprints_from_csv(csv_file, correct_fingerprints, filter=
                         # opp_run -r; only plain integers become an int run_number.
                         run_spec = args.run.strip()
                         run_number = int(run_spec) if re.fullmatch(r"-?\d+", run_spec) else run_spec
+                        # an empty CSV limit means "no explicit sim-time-limit" -> store
+                        # None so the runner falls back to the config's omnetpp.ini value
+                        sim_time_limit = sim_time_limit.strip() or None if isinstance(sim_time_limit, str) else sim_time_limit
                         correct_fingerprints.update_fingerprint(fingerprint.fingerprint,
                                                                 working_directory=working_directory,
                                                                 ini_file=args.ini_file,

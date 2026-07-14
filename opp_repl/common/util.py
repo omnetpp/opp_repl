@@ -224,8 +224,13 @@ def coalesce(*values):
 
 def convert_to_seconds(s):
     seconds_per_unit = {"ps": 1E-12, "ns": 1E-9, "us": 1E-6, "ms": 1E-3, "s": 1, "second": 1, "m": 60, "min": 60, "h": 3600, "hour": 3600, "d": 86400, "day": 86400, "w": 604800, "week": 604800}
+    # An empty/None limit means "no explicit sim-time-limit" (the run uses the ini's
+    # value); treat it as unbounded so it never wins a shortest-limit selection but is
+    # still usable when it is the only option.
+    if not s:
+        return float("inf")
     match = re.match(r"(-?[0-9]*\.?[0-9]*) *([a-zA-Z]+)", s)
-    return float(match.group(1)) * seconds_per_unit[match.group(2)]
+    return float(match.group(1)) * seconds_per_unit[match.group(2)] if match else float("inf")
 
 def write_object(file_name, object):
     with open(file_name, "wb") as file:
