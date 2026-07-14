@@ -177,7 +177,7 @@ class FingerprintTestGroupTask(MultipleTestTasks):
                 simulation_result = simulation_task.run(print_end=" ", sim_time_limit=sim_time_limit or self.sim_time_limit, output_stream=output_stream, append_args=append_args + list(ingredients_append_args), **kwargs)
                 fingerprint_test_group_results = check_fingerprint_test_group(simulation_result, self, **kwargs)
                 fingerprint_test_results += fingerprint_test_group_results.results
-            return MultipleTestTaskResults(self.tasks, fingerprint_test_results)
+            return MultipleTestTaskResults(self, fingerprint_test_results)
 
 class MultipleFingerprintTestTasks(MultipleSimulationTestTasks):
     def __init__(self, multiple_simulation_tasks=None, name="fingerprint test", **kwargs):
@@ -223,7 +223,7 @@ def check_fingerprint_test_group(simulation_result, fingerprint_test_group, **kw
         if fingerprint_test_task.fingerprint:
             fingerprint_test_result = fingerprint_test_task.check_simulation_task_result(simulation_result, **kwargs)
             fingerprint_test_results.append(fingerprint_test_result)
-    return MultipleTestTaskResults(fingerprint_test_group.tasks, fingerprint_test_results)
+    return MultipleTestTaskResults(fingerprint_test_group, fingerprint_test_results)
 
 def select_fingerprint_by_sim_time_limit(fingerprint_entries, largest):
     sim_time_limits = list(map(lambda fingerprint_entry: fingerprint_entry["sim_time_limit"], fingerprint_entries))
