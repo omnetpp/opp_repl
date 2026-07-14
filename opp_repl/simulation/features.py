@@ -7,6 +7,7 @@ get compiler/linker flags, folder exclusions, and generate the ``features.h`` he
 
 import logging
 import os
+import re
 import shlex
 import subprocess
 import xml.etree.ElementTree as ET
@@ -100,6 +101,67 @@ def get_disabled_feature_folders(simulation_project):
         for extra in f.extra_source_folders:
             folders.append(extra)
     # Dedup while preserving order
+    seen = set()
+    out = []
+    for p in folders:
+        if p not in seen:
+            seen.add(p)
+            out.append(p)
+    return out
+
+
+def _read_ned_folder_package(simulation_project, ned_folder):
+    """The package declared by ``<ned_folder>/package.ned`` (e.g.
+    ``inet.showcases``), ``""`` if the file exists but declares the root
+    package, or ``None`` if there is no ``package.ned``."""
+    path = simulation_project.get_full_path(os.path.join(ned_folder, "package.ned"))
+    if not os.path.exists(path):
+        return None
+    with open(path, encoding="utf-8") as fh:
+        for line in fh:
+            m = re.match(r"\s*package\s+([\w.]+)\s*;", line)
+            if m:
+                return m.group(1)
+    return ""
+
+
+def get_disabled_feature_config_folders(simulation_project):
+    """
+    Project-root-relative folders whose owning feature is disabled, resolved
+    through the project's NED folders. Unlike :func:`get_disabled_feature_folders`
+    (which expands ``nedPackages`` only under ``cppSourceRoots`` for the C++
+    build), this maps each disabled feature's ``nedPackages`` to their real NED
+    folder -- e.g. ``inet.showcases.visualizer.osg`` -> ``showcases/visualizer/osg``
+    -- so simulation-config collection can drop configs that cannot run because
+    their feature (hence their network's NED) is not built.
+    """
+    _, features = _parse_oppfeatures(simulation_project)
+    if not features:
+        return []
+    state = _parse_oppfeaturestate(simulation_project)
+    disabled_packages = []
+    for f in features:
+        if not state.get(f.id, f.initially_enabled):
+            disabled_packages.extend(f.ned_packages)
+    if not disabled_packages:
+        return []
+    ned_folder_base = {}
+    for ned_folder in simulation_project.ned_folders:
+        pkg = _read_ned_folder_package(simulation_project, ned_folder)
+        if pkg is not None:
+            ned_folder_base[ned_folder] = pkg
+    folders = []
+    for dp in disabled_packages:
+        # Map the package to a folder via the NED folder with the longest
+        # base-package prefix (e.g. "inet.showcases" wins over "inet").
+        best_folder = best_base = None
+        for ned_folder, base in ned_folder_base.items():
+            if dp == base or (base and dp.startswith(base + ".")):
+                if best_base is None or len(base) > len(best_base):
+                    best_folder, best_base = ned_folder, base
+        if best_folder is not None:
+            sub = dp[len(best_base):].lstrip(".").replace(".", "/")
+            folders.append(os.path.join(best_folder, sub) if sub else best_folder)
     seen = set()
     out = []
     for p in folders:

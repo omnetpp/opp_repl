@@ -1004,6 +1004,21 @@ class SimulationProject:
         else:
             result = list(itertools.chain.from_iterable(map(local_collect_ini_file_simulation_configs, ini_paths)))
         result.sort(key=lambda element: (element.working_directory, element.ini_file, element.config))
+        # Drop configs whose owning feature is disabled: their network's NED is
+        # not built, so no simulation (fingerprint, statistical, chart, ...) can
+        # run them -- they would only ERROR. Mirrors the build's feature-folder
+        # exclusion, resolved through the NED folders so example/showcase configs
+        # outside src/ are matched too.
+        from opp_repl.simulation.features import get_disabled_feature_config_folders
+        disabled_folders = get_disabled_feature_config_folders(self)
+        if disabled_folders:
+            def _in_disabled_folder(working_directory):
+                return any(working_directory == d or working_directory.startswith(d + os.sep) for d in disabled_folders)
+            kept = [c for c in result if not _in_disabled_folder(c.working_directory)]
+            num_excluded = len(result) - len(kept)
+            if num_excluded:
+                _logger.info(f"Excluded {num_excluded} {self.name} simulation configs in disabled-feature folders: {disabled_folders}")
+            result = kept
         _logger.info(f"Collecting {self.name} simulation configs ended")
         return result
 
@@ -1015,7 +1030,13 @@ class SimulationProject:
         ini_path_globs = [self.get_full_path(os.path.join(f, "**/*.ini")) for f in self.ini_file_folders]
         ini_paths = sorted(p for g in ini_path_globs for p in glob.glob(g, recursive=True) if os.path.isfile(p))
         mtimes = tuple(os.path.getmtime(p) for p in ini_paths)
-        return (tuple(ini_paths), mtimes)
+        # Feature state decides which configs are collected (disabled-feature
+        # folders are dropped), so a change to it must invalidate the cache.
+        feature_files = tuple(
+            (fp, os.path.getmtime(fp))
+            for fp in (self.get_full_path(".oppfeatures"), self.get_full_path(".oppfeaturestate"))
+            if os.path.exists(fp))
+        return (tuple(ini_paths), mtimes, feature_files)
 
     def get_simulation_configs(self, **kwargs):
         freshness_key = self._compute_simulation_configs_freshness_key()
