@@ -128,7 +128,7 @@ class ChartTestTaskResult(TestTaskResult):
         return new_result
 
 class ChartTestTask(TestTask):
-    def __init__(self, analysis_file_name, id, chart_name, simulation_project=None, baseline_simulation_project=None, name="chart test", task_result_class=ChartTestTaskResult, **kwargs):
+    def __init__(self, analysis_file_name, id, chart_name, simulation_project=None, baseline_simulation_project=None, name="chart test", task_result_class=ChartTestTaskResult, expected_error=False, **kwargs):
         super().__init__(name=name, task_result_class=task_result_class, **kwargs)
         self.locals = locals()
         self.locals.pop("self")
@@ -138,11 +138,32 @@ class ChartTestTask(TestTask):
         self.chart_name = chart_name
         self.simulation_project = simulation_project
         self.baseline_simulation_project = baseline_simulation_project
+        # True when a simulation config in this chart's working directory is marked
+        # #expected-result="ERROR" — such a config errors as expected, so a chart that
+        # draws from it cannot be rendered; its render failure is then expected, not an
+        # unexpected ERROR (see run_protected). Matches GitHub CI, whose chart-tests are
+        # green on exactly these showcases (fragmentation/OnlyPacketSizeHCFfragblockack,
+        # sensornetwork/StatisticLMac).
+        self.expected_error = expected_error
 
     def get_parameters_string(self, **kwargs):
         return self.analysis_file_name + ": " + self.chart_name
 
     def run_protected(self, keep_charts=True, output_stream=sys.stdout, **kwargs):
+        try:
+            return self._render_chart(keep_charts=keep_charts, output_stream=output_stream, **kwargs)
+        except Exception as e:
+            # A chart whose source simulation config is #expected-result="ERROR" cannot be
+            # rendered once that config errors as expected; treat the render failure as
+            # expected rather than an unexpected ERROR. Genuine chart errors still propagate.
+            if getattr(self, "expected_error", False):
+                task_result = self.task_result_class(self, result="ERROR", expected_result="ERROR",
+                    reason=f"Source simulation is expected-ERROR; chart not renderable: {e!r}")
+                task_result.metric = None
+                return task_result
+            raise
+
+    def _render_chart(self, keep_charts=True, output_stream=sys.stdout, **kwargs):
         baseline_project = self.baseline_simulation_project or self.simulation_project
         workspace = omnetpp.scave.analysis.Workspace(get_workspace_path("."), [])
         analysis = omnetpp.scave.analysis.load_anf_file(self.simulation_project.get_full_path(self.analysis_file_name))
@@ -230,7 +251,13 @@ def get_chart_test_tasks(simulation_project=None, baseline_simulation_project=No
                         if not list(builtins.filter(lambda element: element.simulation_config == simulation_task.simulation_config and element.run_number == simulation_task.run_number, simulation_tasks)):
                             simulation_tasks.append(simulation_task)
                 if multiple_simulation_tasks.tasks:
-                    test_tasks.append(ChartTestTask(simulation_project=simulation_project, baseline_simulation_project=baseline_simulation_project, analysis_file_name=analysis_file_name, id=chart.id, chart_name=chart.name))
+                    # A chart in a working directory that has an #expected-result="ERROR"
+                    # config can't be rendered when that config errors as expected; flag it
+                    # so its render failure counts as expected, not unexpected (matches
+                    # GitHub CI). Charts that still render (data present) are unaffected.
+                    expected_error = any(getattr(simulation_task.simulation_config, "expected_result", "DONE") == "ERROR"
+                                         for simulation_task in multiple_simulation_tasks.tasks)
+                    test_tasks.append(ChartTestTask(simulation_project=simulation_project, baseline_simulation_project=baseline_simulation_project, analysis_file_name=analysis_file_name, id=chart.id, chart_name=chart.name, expected_error=expected_error))
     return MultipleChartTestTasks(tasks=test_tasks, multiple_simulation_tasks=MultipleSimulationTasks(tasks=simulation_tasks, simulation_project=simulation_project, **kwargs), **dict(kwargs, scheduler="process"))
 get_chart_test_tasks.__signature__ = combine_signatures(get_chart_test_tasks, get_simulation_tasks)
 
