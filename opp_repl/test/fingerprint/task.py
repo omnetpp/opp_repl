@@ -477,11 +477,13 @@ class MultipleFingerprintUpdateTasks(MultipleSimulationUpdateTasks):
         simulation_project = self.simulation_project or self.multiple_simulation_tasks.simulation_project
         correct_fingerprint_store = get_correct_fingerprint_store(simulation_project)
         for fingerprint_update_result in multiple_fingerprint_update_results.results:
-            fingerprint_update_task = fingerprint_update_result.task
-            simulation_task = fingerprint_update_task.simulation_task
-            simulation_config = simulation_task.simulation_config
-            calculated_fingerprint = fingerprint_update_result.calculated_fingerprint
+            # Skipped tasks and exception-wrapped results (plain SimulationUpdateTaskResult
+            # from the generic ERROR path) have no calculated fingerprint to store.
+            calculated_fingerprint = getattr(fingerprint_update_result, "calculated_fingerprint", None)
             if calculated_fingerprint is not None:
+                fingerprint_update_task = fingerprint_update_result.task
+                simulation_task = fingerprint_update_task.simulation_task
+                simulation_config = simulation_task.simulation_config
                 correct_fingerprint_store.update_fingerprint(calculated_fingerprint.fingerprint, ingredients=calculated_fingerprint.ingredients, test_result="PASS", sim_time_limit=simulation_task.sim_time_limit,
                                                              working_directory=simulation_config.working_directory, ini_file=simulation_config.ini_file, config=simulation_config.config, run_number=simulation_task.run_number)
         correct_fingerprint_store.write()
