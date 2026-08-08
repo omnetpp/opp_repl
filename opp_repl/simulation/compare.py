@@ -734,13 +734,64 @@ class MultipleCompareSimulationsTaskResults(MultipleTaskResults):
                                "re-run with compare_charts=True")
         return _launch_diffcharts_gui(self.staging_dir)
 
+def _get_side_simulation_tasks(simulation_project, simulation_configs, side_kwargs, **kwargs):
+    """Collects one side's simulation tasks in its own simulation project.
+
+    The given simulation configs belong to the project they were collected from, so they only
+    say *which* configs to compare; this side looks the corresponding ones up in its own
+    project and collects its simulation tasks from those.
+    """
+    if simulation_configs is not None:
+        side_kwargs = {**side_kwargs, "simulation_configs": simulation_project.select_simulation_configs(simulation_configs, **kwargs)}
+    return get_simulation_tasks(simulation_project=simulation_project, **side_kwargs, **kwargs)
+
+def _get_comparison_simulation_tasks(**kwargs):
+    """Collects the simulation tasks of both sides of a comparison."""
+    kwargs_1 = {key[:-2]: value for key, value in kwargs.items() if key.endswith('_1')}
+    kwargs_2 = {key[:-2]: value for key, value in kwargs.items() if key.endswith('_2')}
+    simulation_configs = kwargs.pop("simulation_configs", None)
+    simulation_project_1 = kwargs_1.pop("simulation_project", None) or get_default_simulation_project()
+    simulation_project_2 = kwargs_2.pop("simulation_project", None) or get_default_simulation_project()
+    return (_get_side_simulation_tasks(simulation_project_1, simulation_configs, kwargs_1, **kwargs),
+            _get_side_simulation_tasks(simulation_project_2, simulation_configs, kwargs_2, **kwargs))
+
+def _get_simulation_task_key(simulation_task):
+    """Identifies a simulation task independently of the project it runs in."""
+    return (*simulation_task.simulation_config.get_key(), simulation_task.run_number)
+
+def _match_simulation_tasks(multiple_tasks_1, multiple_tasks_2):
+    """Matches the two sides' simulation tasks, and returns the pairs present on both sides.
+
+    The two projects need not agree on the set of simulation configs: a config may be added
+    or removed between two commits, or run a different number of runs. Matching on identity
+    rather than on position keeps such a pair aligned, and reports what is left out instead
+    of comparing a config against an unrelated one.
+    """
+    simulation_tasks_2 = {_get_simulation_task_key(t): t for t in multiple_tasks_2.tasks}
+    matched_simulation_tasks = []
+    unmatched_simulation_tasks = []
+    for simulation_task_1 in multiple_tasks_1.tasks:
+        simulation_task_2 = simulation_tasks_2.pop(_get_simulation_task_key(simulation_task_1), None)
+        if simulation_task_2 is None:
+            unmatched_simulation_tasks.append(simulation_task_1)
+        else:
+            matched_simulation_tasks.append((simulation_task_1, simulation_task_2))
+    unmatched_simulation_tasks += simulation_tasks_2.values()
+    if unmatched_simulation_tasks:
+        def describe(simulation_task):
+            working_directory, ini_file, config, run_number = _get_simulation_task_key(simulation_task)
+            return f"{working_directory}/{ini_file}:{config}:{run_number}"
+        _logger.warning(f"Not comparing {len(unmatched_simulation_tasks)} simulation task(s) present on only one side: "
+                        f"{', '.join(sorted(map(describe, unmatched_simulation_tasks)))}")
+    return matched_simulation_tasks
+
 def get_compare_simulations_tasks(multiple_tasks_1, multiple_tasks_2, build=True,
                                   compare_charts=False, compare_module_images=False,
                                   staging_dir=None, **kwargs):
     if (compare_charts or compare_module_images) and staging_dir is None:
         staging_dir = tempfile.mkdtemp(prefix="opp_diff_charts_")
     simulation_comparison_tasks = []
-    for task_1, task_2 in zip(multiple_tasks_1.tasks, multiple_tasks_2.tasks):
+    for task_1, task_2 in _match_simulation_tasks(multiple_tasks_1, multiple_tasks_2):
         simulation_comparison_task = CompareSimulationsTask(
             multiple_simulation_tasks=MultipleSimulationTasks(tasks=[task_1, task_2], build=False, **kwargs),
             compare_charts=compare_charts, compare_module_images=compare_module_images,
@@ -770,6 +821,13 @@ def compare_simulations(**kwargs):
     arguments accepted by :py:func:`get_simulation_tasks` or
     :py:class:`CompareSimulationsTask` can be used.
 
+    An unsuffixed ``simulation_configs`` applies to both sides like any other
+    unsuffixed argument.  It names which simulation configs to compare; each side
+    selects them from the ones its own project collects (see
+    :py:func:`get_simulation_tasks`).  The two projects need not agree on the set of
+    simulation configs: the sides are matched on identity and only the configs present
+    on both are compared, the rest being reported and left out.
+
     Example::
 
         results = compare_simulations(
@@ -782,10 +840,7 @@ def compare_simulations(**kwargs):
     Returns:
         :py:class:`MultipleCompareSimulationsTaskResults`
     """
-    kwargs_1 = {key[:-2]: value for key, value in kwargs.items() if key.endswith('_1')}
-    kwargs_2 = {key[:-2]: value for key, value in kwargs.items() if key.endswith('_2')}
-    multiple_simulation_tasks_1 = get_simulation_tasks(**kwargs_1, **kwargs)
-    multiple_simulation_tasks_2 = get_simulation_tasks(**kwargs_2, **kwargs)
+    multiple_simulation_tasks_1, multiple_simulation_tasks_2 = _get_comparison_simulation_tasks(**kwargs)
     return compare_simulations_using_multiple_tasks(multiple_simulation_tasks_1, multiple_simulation_tasks_2, **kwargs)
 compare_simulations.__signature__ = combine_signatures(compare_simulations, get_simulation_tasks, CompareSimulationsTask.__init__)
 
@@ -998,12 +1053,13 @@ def compare_simulations_across_commits(simulation_project=None, commits=None,
     kwargs_2 = {k[:-2]: v for k, v in kwargs.items() if k.endswith('_2')}
     kwargs_1.pop("simulation_project", None)
     kwargs_2.pop("simulation_project", None)
+    simulation_configs = kwargs.pop("simulation_configs", None)
 
     try:
         all_compare_tasks = []
         for hash_1, hash_2 in pairs:
-            tasks_1 = get_simulation_tasks(simulation_project=project_for(hash_1), **kwargs_1, **kwargs)
-            tasks_2 = get_simulation_tasks(simulation_project=project_for(hash_2), **kwargs_2, **kwargs)
+            tasks_1 = _get_side_simulation_tasks(project_for(hash_1), simulation_configs, kwargs_1, **kwargs)
+            tasks_2 = _get_side_simulation_tasks(project_for(hash_2), simulation_configs, kwargs_2, **kwargs)
             per_pair = get_compare_simulations_tasks(tasks_1, tasks_2, **kwargs)
             tag = f"[{hash_1[:8]}..{hash_2[:8]}]"
             for t in per_pair.tasks:

@@ -88,6 +88,10 @@ class SimulationConfig:
         self.user_interface = user_interface
         self.description = description
 
+    def get_key(self):
+        """Identifies this simulation config independently of the simulation project it belongs to."""
+        return (self.working_directory, self.ini_file, self.config)
+
     def __repr__(self):
         return repr(self, ["working_directory", "ini_file", "config"])
 

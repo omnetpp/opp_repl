@@ -1046,6 +1046,17 @@ class SimulationProject:
             self._simulation_configs_freshness_key = freshness_key
         return list(builtins.filter(lambda simulation_config: simulation_config.matches_filter(**kwargs), self.simulation_configs))
 
+    def select_simulation_configs(self, simulation_configs, **kwargs):
+        """Returns this project's own simulation configs corresponding to the given ones.
+
+        A simulation config belongs to the project it was collected from, and a simulation task
+        takes its executable, working directory and result paths from that project alone. So a
+        config list collected elsewhere cannot be used as is; it only names which configs are
+        wanted, and this project answers with its own.
+        """
+        keys = {simulation_config.get_key() for simulation_config in simulation_configs}
+        return [c for c in self.get_simulation_configs(**kwargs) if c.get_key() in keys]
+
     def get_binary_simulation_distribution_file_paths(self):
         if self.binary_simulation_distribution_file_paths is None:
             self.binary_simulation_distribution_file_paths = self.collect_binary_simulation_distribution_file_paths()
