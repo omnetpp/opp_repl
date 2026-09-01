@@ -500,6 +500,27 @@ def _pair_renames(kind, removed, added, base_members, head_members):
             still_removed.append(f)
     still_added = [a for a in added if id(a) not in taken]
 
+    # A member renamed in place: same owner, same arguments, different name.  Exact-attribute
+    # pairing cannot find it, because a trivial C++ function shares its attributes with dozens of
+    # others; the owner and the argument list are what make the match unique.
+    if kind == "cpp.function":
+        def shape(f):
+            owner, _, rest = f.id.rpartition("::")
+            return (owner, "(" + rest.split("(", 1)[1] if "(" in rest else "")
+        by_shape = defaultdict(list)
+        for a in still_added:
+            by_shape[shape(a)].append(a)
+        taken3, rest3 = set(), []
+        for f in still_removed:
+            cands = [c for c in by_shape.get(shape(f), []) if id(c) not in taken3]
+            if len(cands) == 1:
+                taken3.add(id(cands[0]))
+                pairs.append((f, cands[0], "same owner and arguments"))
+            else:
+                rest3.append(f)
+        still_removed = rest3
+        still_added = [a for a in still_added if id(a) not in taken3]
+
     # contents pairing, for a kind that owns members
     if kind in CONTAINER_KINDS:
         base_m, head_m = base_members, head_members
