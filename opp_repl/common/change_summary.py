@@ -52,6 +52,7 @@ KINDS = [
     ("msg.enum.value", "message enum values"),
     ("cpp.class",      "C++ classes"),
     ("cpp.function",   "C++ public functions"),
+    ("cpp.hook",       "C++ extension points"),
     ("feature",        "project features"),
     ("folder",         "source folders"),
 ]
@@ -62,7 +63,8 @@ KIND_SINGULAR = {
     "ned.signal": "NED signal", "ned.statistic": "NED statistic", "ned.property": "NED property",
     "msg.type": "message type", "msg.field": "message field",
     "msg.enum.value": "message enum value", "cpp.class": "C++ class",
-    "cpp.function": "C++ public function", "feature": "project feature", "folder": "source folder",
+    "cpp.function": "C++ public function", "cpp.hook": "C++ extension point",
+    "feature": "project feature", "folder": "source folder",
 }
 
 # ---------------------------------------------------------------------------
@@ -258,16 +260,24 @@ def extract_cpp_facts(source_path):
                 a = _ACCESS.match(s)
                 if a:
                     top[1] = a.group(1)
-                elif top[3] and top[1] == "public" and depth == top[2] + 1:
+                elif top[3] and top[1] in ("public", "protected") and depth == top[2] + 1:
                     f = _FUNC.match(s)
+                    virtual = "virtual" in s.split(f.group(1))[0] if f else False
+                    # A protected virtual is the contract between a base class and the classes that
+                    # extend it -- an interface as real as the public one, and the one a new model
+                    # implements.  A protected non-virtual is an implementation detail, and private
+                    # is nobody's business.
+                    if f and top[1] == "protected" and not virtual:
+                        f = None
                     if f and f.group(1) not in _SKIP:
                         args = _normalize_args(f.group(2))
                         owner = "::".join(e[0] for e in stack)
                         # ``const`` is an attribute, not part of the identity: adding it to an
                         # existing function is a change, not a removal plus an addition.
-                        facts.append(Fact("cpp.function", f"{owner}::{f.group(1)}({args})", {
+                        kind = "cpp.function" if top[1] == "public" else "cpp.hook"
+                        facts.append(Fact(kind, f"{owner}::{f.group(1)}({args})", {
                             "const": str(bool(re.search(r"\bconst\b", f.group(3)))),
-                            "virtual": str("virtual" in s.split(f.group(1))[0]),
+                            "virtual": str(virtual),
                             "pure": str(bool(f.group(4))),
                         }, origin))
             opens = s.count("{")
@@ -467,7 +477,7 @@ def _pair_signatures(kind, removed, added):
     A function that gains an argument is one change, not a removal and an unrelated addition a
     hundred lines apart.  Only a kind whose identity carries a call signature qualifies.
     """
-    if kind != "cpp.function":
+    if kind not in ("cpp.function", "cpp.hook"):
         return removed, added, []
     def basename(fact):
         return fact.id.split("(")[0]
@@ -503,7 +513,7 @@ def _pair_renames(kind, removed, added, base_members, head_members):
     # A member renamed in place: same owner, same arguments, different name.  Exact-attribute
     # pairing cannot find it, because a trivial C++ function shares its attributes with dozens of
     # others; the owner and the argument list are what make the match unique.
-    if kind == "cpp.function":
+    if kind in ("cpp.function", "cpp.hook"):
         def shape(f):
             owner, _, rest = f.id.rpartition("::")
             return (owner, "(" + rest.split("(", 1)[1] if "(" in rest else "")
@@ -554,7 +564,7 @@ MEMBER_KINDS = {
     "ned.parameter": "ned.type", "ned.gate": "ned.type",
     "ned.signal": "ned.type", "ned.statistic": "ned.type",
     "msg.field": "msg.type", "msg.enum.value": "msg.type",
-    "cpp.function": "cpp.class",
+    "cpp.function": "cpp.class", "cpp.hook": "cpp.class",
 }
 
 def _member_index(facts):
