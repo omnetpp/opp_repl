@@ -378,6 +378,20 @@ and every one of them would have made the report wrong rather than merely incomp
 | 7 | A function whose **arguments changed** appeared as a removal and an addition 130 lines apart | `_pair_signatures`: same `Class::name`, different arguments, is one *signature changed* row |
 | 8 | `**1 NED signals**` | a singular title per kind |
 
+Three more came from reading the first finished report rather than from running the tool. All three
+are the same mistake: **the report stated a state where the reader wanted a change.**
+
+| # | What it printed | What it prints now |
+| --- | --- | --- |
+| 9 | both full base-class lists, six identical entries and one new one, for the reader to diff by eye | `bases` **+** `public queueing::IPacketQueue::ICallback` |
+| 10 | `const` \| `False` → `True` | `const` \| gained |
+| 11 | both full argument lists of a constructor that gained three arguments | **+** `const IIeee80211Mode *`, `PhyType`, `bool` |
+
+An attribute is now rendered by its shape: a **list** attribute reports what joined and what left, a
+**flag** reports gained or lost, an appended **signature** reports what was appended, and only a
+genuine scalar reports *was* and *now*. A list whose members are unchanged and whose order is not
+reports *reordered*, rather than being silently dropped or shown as a change of everything.
+
 Defect 1 is the instructive one. It is not a parsing mistake; it is the design's own §3 statement —
 *`origin` is the file* — meeting the fact that a worktree has a path. Nothing in the design was
 wrong, and the report was still useless until it was fixed.

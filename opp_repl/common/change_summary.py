@@ -410,12 +410,55 @@ def diff_facts(base_facts, head_facts, pair_renames=True):
         diffs[kind] = d
     return diffs, notes
 
+# Attributes whose value is a list.  A change to one is reported as what joined and what left,
+# never as the whole list twice: a reader must not have to diff two long strings by eye to find
+# the one base class that was added.
+LIST_ATTRS = {"bases", "extends", "like", "record", "requires", "defines", "nedPackages"}
+
+# Attributes whose value is a flag.  ``const: False -> True`` is two words the reader has to
+# assemble; "gained const" is the sentence they were going to write anyway.
+BOOL_ATTRS = {"const", "virtual", "pure", "volatile", "vector", "exported", "is-default", "abstract"}
+
+def _split_list(value):
+    """Split a comma-separated attribute, ignoring commas inside <>, () or []."""
+    out, depth, cur = [], 0, ""
+    for ch in value:
+        if ch in "<([":
+            depth += 1
+        elif ch in ">)]":
+            depth -= 1
+        if ch == "," and depth <= 0:
+            out.append(cur.strip())
+            cur = ""
+        else:
+            cur += ch
+    if cur.strip():
+        out.append(cur.strip())
+    return [x for x in out if x]
+
 def _attr_changes(before, after):
+    """Return (attribute, kind, detail) per changed attribute.
+
+    ``kind`` is ``"scalar"`` — detail is (was, now) — or ``"list"`` — detail is (joined, left) —
+    or ``"order"``, for a list whose members are the same and whose order is not.
+    """
     out = []
     for k in sorted(set(before.attrs) | set(after.attrs)):
         bv, av = str(before.attrs.get(k, "")), str(after.attrs.get(k, ""))
-        if bv != av:
-            out.append((k, bv, av))
+        if bv == av:
+            continue
+        if k in LIST_ATTRS:
+            b, a = _split_list(bv), _split_list(av)
+            joined = [x for x in a if x not in b]
+            left = [x for x in b if x not in a]
+            if joined or left:
+                out.append((k, "list", (joined, left)))
+            else:
+                out.append((k, "order", (a, b)))
+        elif k in BOOL_ATTRS and {bv, av} <= {"True", "False", "true", "false", ""}:
+            out.append((k, "flag", av.lower() == "true"))
+        else:
+            out.append((k, "scalar", (bv, av)))
     return out
 
 def _pair_signatures(kind, removed, added):
@@ -586,17 +629,37 @@ def _fmt_plain(rows):
     return [f"- `{f.id}`" for f in rows]
 
 def _fmt_changed(rows):
-    out = ["| What | Was | Now |", "|---|---|---|"]
+    out = ["| What | Attribute | Change |", "|---|---|---|"]
     for before, after, changes in rows:
-        for k, bv, av in changes:
-            out.append(f"| `{before.id}` — {k} | `{bv or '(empty)'}` | `{av or '(empty)'}` |")
+        for k, how, detail in changes:
+            if how == "list":
+                joined, left = detail
+                bits = [f"**+** `{x}`" for x in joined] + [f"**−** `{x}`" for x in left]
+                out.append(f"| `{before.id}` | {k} | {'<br>'.join(bits)} |")
+            elif how == "flag":
+                verb = "gained" if detail else "lost"
+                out.append(f"| `{before.id}` | {k} | {verb} |")
+            elif how == "order":
+                out.append(f"| `{before.id}` | {k} | reordered, same members |")
+            else:
+                bv, av = detail
+                out.append(f"| `{before.id}` | {k} | `{bv or '(empty)'}` → `{av or '(empty)'}` |")
     return out
 
 def _fmt_resignatured(rows):
-    out = ["| What | Was | Now |", "|---|---|---|"]
+    """An appended argument is shown as what was appended, not as both lists in full."""
+    out = ["| What | Change |", "|---|---|"]
     for before, after in rows:
         name = before.id.split("(")[0]
-        out.append(f"| `{name}` | `({before.id.split('(', 1)[1]}` | `({after.id.split('(', 1)[1]}` |")
+        b = _split_list(before.id.split("(", 1)[1].rstrip(")"))
+        a = _split_list(after.id.split("(", 1)[1].rstrip(")"))
+        if b and a[:len(b)] == b:
+            change = "**+** " + ", ".join(f"`{x}`" for x in a[len(b):])
+        elif a and b[:len(a)] == a:
+            change = "**−** " + ", ".join(f"`{x}`" for x in b[len(a):])
+        else:
+            change = f"`({', '.join(b)})` → `({', '.join(a)})`"
+        out.append(f"| `{name}` | {change} |")
     return out
 
 def _fmt_renamed(rows):
