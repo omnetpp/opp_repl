@@ -71,8 +71,24 @@ KIND_SINGULAR = {
 # Extractors
 # ---------------------------------------------------------------------------
 
+class _Missing:
+    """A stand-in result for a tool that is not installed."""
+    returncode = 127
+    stdout = ""
+    def __init__(self, name):
+        self.stderr = (f"{name} not found in PATH -- source the OMNeT++ setenv, or add its bin "
+                       f"directory to PATH")
+
 def _run(args, cwd=None):
-    return subprocess.run(args, cwd=cwd, capture_output=True, text=True)
+    """Run a tool, and report a missing one instead of raising.
+
+    A missing ``opp_nedtool`` must degrade to a named note in the report, not a traceback: the
+    other extractors still have something to say.
+    """
+    try:
+        return subprocess.run(args, cwd=cwd, capture_output=True, text=True)
+    except FileNotFoundError:
+        return _Missing(args[0])
 
 def _relative(path, source_path):
     """A fact's origin must be relative to the source root.
@@ -279,6 +295,7 @@ def extract_cpp_facts(source_path):
                             "const": str(bool(re.search(r"\bconst\b", f.group(3)))),
                             "virtual": str(virtual),
                             "pure": str(bool(f.group(4))),
+                            "override": str(bool(re.search(r"\boverride\b", f.group(3)))),
                         }, origin))
             opens = s.count("{")
             depth += opens - s.count("}")
@@ -588,6 +605,47 @@ def _member_index(facts):
     return out
 
 # ---------------------------------------------------------------------------
+# Usage: is a new public function called, and is a new virtual overridden?
+# ---------------------------------------------------------------------------
+
+def annotate_usage(diffs, head_dir, paths=("src", "tests")):
+    """For each added function, count the files that use its name; for each added virtual, the
+    files that override it.  Grep by name, so a count of 0 is exact and a count above 0 is only a
+    hint -- ``setReason(`` in another class counts too.  That is the right asymmetry for a review
+    question: "nobody calls this" is checkable, "someone calls this" is not.
+
+    An override is skipped: its visibility is fixed by the base class, and a virtual that fulfils a
+    framework hook is not a new promise.  A constructor or destructor is skipped.
+    """
+    def files(pattern):
+        r = subprocess.run(["git", "-C", head_dir, "grep", "-lE", pattern, "--", *paths],
+                           capture_output=True, text=True)
+        return [f for f in r.stdout.split("\n") if f]
+    def stem(fid):
+        return fid.rpartition("::")[0].split("::")[0]
+    def other(fs, st):
+        return [h for h in fs if os.path.basename(h).rsplit(".", 1)[0] != st]
+    for kind in ("cpp.function", "cpp.hook"):
+        d = diffs.get(kind)
+        if not d:
+            continue
+        for fact in d.added:
+            name = fact.id.rpartition("::")[2].split("(")[0]
+            owner = fact.id.rpartition("::")[0].split("::")[-1]
+            if name.startswith("~") or name == owner or fact.attrs.get("override") == "True":
+                continue
+            st = stem(fact.id)
+            if kind == "cpp.function":
+                fs = other(files(r"\b" + re.escape(name) + r"\s*\("), st)
+                src = sum(1 for h in fs if not h.startswith("tests"))
+                fact.attrs["usage"] = ("uncalled" if not fs else
+                                       "tests only" if src == 0 else f"{src} src, {len(fs) - src} tests")
+            if fact.attrs.get("virtual") == "True":
+                fs = other(files(r"(virtual\s+[^;{]*\b" + re.escape(name) + r"\s*\(|\b" + re.escape(name)
+                                 + r"\s*\([^;{]*\)\s*(const\s*)?override)"), st)
+                fact.attrs["overrides"] = "none" if not fs else str(len(fs))
+
+# ---------------------------------------------------------------------------
 # The report
 # ---------------------------------------------------------------------------
 
@@ -613,6 +671,7 @@ def render_markdown(diffs, notes, header):
         lines += ["## Moved", ""]
         lines += _section(None, diffs, lambda d: d.moved, _fmt_moved, empty="")
 
+    lines += _review_questions(diffs)
     untouched = [KIND_TITLES.get(k, k) for k in sorted(diffs) if diffs[k].is_empty()]
     lines += ["## Not changed", "",
               (" · ".join(untouched) if untouched else "_every kind has a change_"), ""]
@@ -657,7 +716,53 @@ def _section(title, diffs, get, fmt, empty=""):
     return out
 
 def _fmt_plain(rows):
-    return [f"- `{f.id}`" for f in rows]
+    out = []
+    for f in rows:
+        tags = []
+        u, o = f.attrs.get("usage"), f.attrs.get("overrides")
+        if u in ("uncalled", "tests only"):
+            tags.append(f"**{u}**")
+        elif u:
+            tags.append(u)
+        if o == "none":
+            tags.append("**overridden nowhere**")
+        elif o:
+            tags.append(f"{o} override{'s' if o != '1' else ''}")
+        out.append(f"- `{f.id}`" + (f" — {', '.join(tags)}" if tags else ""))
+    return out
+
+def _review_questions(diffs):
+    """The two questions AR-EXT-MINIMAL-SURFACE and AR-EXT-VIRTUAL-IS-A-PROMISE ask of a change."""
+    uncalled, tests_only, unoverridden = [], [], []
+    for kind in ("cpp.function", "cpp.hook"):
+        d = diffs.get(kind)
+        if not d:
+            continue
+        for f in d.added:
+            if f.attrs.get("usage") == "uncalled":
+                uncalled.append(f.id)
+            elif f.attrs.get("usage") == "tests only":
+                tests_only.append(f.id)
+            if f.attrs.get("overrides") == "none":
+                unoverridden.append(f.id)
+    if not (uncalled or tests_only or unoverridden):
+        return []
+    out = ["## Questions for the review", "",
+           "Counted by name over `src/` and `tests/`, so *uncalled* is exact and everything else is a hint. "
+           "An override is not listed: its visibility is fixed by its base, and fulfilling a hook is not a new promise.", ""]
+    if uncalled:
+        out += [f"**{len(uncalled)} new public function(s) that nothing calls** — why public? "
+                "([AR-EXT-MINIMAL-SURFACE](../../../rule/architecture.md#ar-ext-minimal-surface))", ""]
+        out += [f"- `{x}`" for x in uncalled] + [""]
+    if tests_only:
+        out += [f"**{len(tests_only)} new public function(s) called only from tests** — is the test testing behavior, or reaching in? "
+                "([AR-EXT-MINIMAL-SURFACE](../../../rule/architecture.md#ar-ext-minimal-surface))", ""]
+        out += [f"- `{x}`" for x in tests_only] + [""]
+    if unoverridden:
+        out += [f"**{len(unoverridden)} new virtual(s) that nothing overrides** — what would an override do, and does a comment say so? "
+                "([AR-EXT-VIRTUAL-IS-A-PROMISE](../../../rule/architecture.md#ar-ext-virtual-is-a-promise))", ""]
+        out += [f"- `{x}`" for x in unoverridden] + [""]
+    return out
 
 def _fmt_changed(rows):
     out = ["| What | Attribute | Change |", "|---|---|---|"]

@@ -1,0 +1,113 @@
+#!/usr/bin/env python3
+# -*- coding: utf-8 -*-
+#
+# Summarize what a change does to the interface of a simulation project.
+#
+# Usage:
+#   opp_summarize_changes --from <ref> --to <ref> [--output FILE] [--title T] [--base-label L]
+#   opp_summarize_changes --pr 1154 [--output FILE] [--usage]
+#   opp_summarize_changes --base-dir <path> --head-dir <path> [--output FILE]
+#
+# --from/--to and --pr create git worktrees of the two versions and remove them afterwards.
+# --base-dir/--head-dir compare two source trees that already exist.
+#
+# The process is documented in opp_repl/plan/pending/change-summary.md.
+#
+import argparse
+import os
+import subprocess
+import sys
+import tempfile
+import time
+
+from opp_repl.common.change_summary import annotate_usage, diff_facts, extract_all, render_markdown
+
+def git(repo, *args):
+    r = subprocess.run(["git", "-C", repo, *args], capture_output=True, text=True)
+    return r.stdout.strip()
+
+def add_worktree(repo, ref, path):
+    subprocess.run(["git", "-C", repo, "worktree", "add", "--detach", "-q", path, ref], check=True)
+
+def remove_worktree(repo, path):
+    subprocess.run(["git", "-C", repo, "worktree", "remove", "--force", path],
+                   capture_output=True)
+
+def main():
+    p = argparse.ArgumentParser(description="Summarize a change to a project's interface.")
+    p.add_argument("--repo", default=".", help="the git repository (default: the current directory)")
+    p.add_argument("--from", dest="base_ref", help="base commit-ish")
+    p.add_argument("--to", dest="head_ref", default="HEAD", help="head commit-ish")
+    p.add_argument("--pr", type=int, help="a GitHub pull request number; the base is its merge base")
+    p.add_argument("--base-dir", help="compare an existing source tree instead of a ref")
+    p.add_argument("--head-dir", help="compare an existing source tree instead of a ref")
+    p.add_argument("--output", "-o", default="-", help="output file, or - for stdout")
+    p.add_argument("--title", default=None, help="the report title")
+    p.add_argument("--base-label", default="merge base with master",
+                   help="how to describe the base in the header")
+    p.add_argument("--no-renames", action="store_true", help="skip the rename pairing")
+    p.add_argument("--usage", action="store_true",
+                   help="for each added function: is it called, is it overridden -- the two review questions")
+    args = p.parse_args()
+
+    repo = os.path.abspath(args.repo)
+    scratch = tempfile.mkdtemp(prefix="opp-summary-")
+    created = []
+    try:
+        if args.base_dir and args.head_dir:
+            base_dir, head_dir = args.base_dir, args.head_dir
+        else:
+            if args.pr:
+                ref = f"refs/pr/{args.pr}"
+                subprocess.run(["git", "-C", repo, "fetch", "origin",
+                                f"refs/pull/{args.pr}/head:{ref}", "--force"],
+                               capture_output=True, check=True)
+                head_ref = ref
+                base_ref = args.base_ref or git(repo, "merge-base", ref, "origin/master")
+            else:
+                if not args.base_ref:
+                    p.error("give --from, or --pr, or --base-dir with --head-dir")
+                base_ref, head_ref = args.base_ref, args.head_ref
+            base_dir = os.path.join(scratch, "base")
+            head_dir = os.path.join(scratch, "head")
+            add_worktree(repo, base_ref, base_dir); created.append(base_dir)
+            add_worktree(repo, head_ref, head_dir); created.append(head_dir)
+
+        t0 = time.time()
+        base_facts, n1 = extract_all(base_dir, scratch, "base")
+        head_facts, n2 = extract_all(head_dir, scratch, "head")
+        t1 = time.time()
+        diffs, notes = diff_facts(base_facts, head_facts, pair_renames=not args.no_renames)
+        if args.usage:
+            annotate_usage(diffs, head_dir)
+
+        mb = git(base_dir, "rev-parse", "--short", "HEAD")
+        hd = git(head_dir, "rev-parse", "--short", "HEAD")
+        nc = git(head_dir, "rev-list", "--count", f"{mb}..HEAD")
+        stat = git(head_dir, "diff", "--shortstat", f"{mb}..HEAD")
+        title = args.title or (f"INET pull request #{args.pr}" if args.pr else "a change")
+        header = {
+            "title": title,
+            "subtitle": (
+                f"Base `{mb}` ({args.base_label}) to head `{hd}` — {nc} commits, {stat}.\n\n"
+                f"Extracted {time.strftime('%Y-%m-%d')} from the sources in {t1-t0:.1f} seconds; no "
+                f"build was needed. NED and message facts come from `opp_nedtool` and `opp_msgtool`, "
+                f"so they are those parsers' own view of the tree. C++ facts come from the fast "
+                f"header scan and are **indicative**: it joins multi-line declarations and excludes "
+                f"generated `*_m.h`, but it does not expand macros or resolve templates, so a "
+                f"declaration built by a macro is invisible to it."),
+        }
+        md = render_markdown(diffs, notes + n1 + n2, header)
+        if args.output == "-":
+            print(md)
+        else:
+            open(args.output, "w", encoding="utf-8").write(md)
+            print(f"{len(base_facts)} → {len(head_facts)} facts in {t1-t0:.1f}s; "
+                  f"wrote {args.output}, {len(md.splitlines())} lines", file=sys.stderr)
+        return 0
+    finally:
+        for path in created:
+            remove_worktree(repo, path)
+
+if __name__ == "__main__":
+    sys.exit(main())
