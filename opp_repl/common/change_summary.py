@@ -621,8 +621,17 @@ def annotate_usage(diffs, head_dir, paths=("src", "tests")):
         r = subprocess.run(["git", "-C", head_dir, "grep", "-lE", pattern, "--", *paths],
                            capture_output=True, text=True)
         return [f for f in r.stdout.split("\n") if f]
-    def stem(fid):
-        return fid.rpartition("::")[0].split("::")[0]
+    def split_id(fid):
+        """Return (outermost class, owner, bare name) for a function id.
+
+        Split on the ``::`` that comes BEFORE the first ``(``.  A qualified type in the argument
+        list -- ``const physicallayer::IIeee80211Band *`` -- carries its own ``::``, and splitting
+        on the last one names the function ``IIeee80211Band *)``, which matches nothing and reads
+        as "uncalled".  Every such function was a false positive until this was found.
+        """
+        head = fid.split("(", 1)[0]
+        owner, _, name = head.rpartition("::")
+        return (owner.split("::")[0] if owner else "", owner, name)
     def other(fs, st):
         return [h for h in fs if os.path.basename(h).rsplit(".", 1)[0] != st]
     for kind in ("cpp.function", "cpp.hook"):
@@ -630,11 +639,10 @@ def annotate_usage(diffs, head_dir, paths=("src", "tests")):
         if not d:
             continue
         for fact in d.added:
-            name = fact.id.rpartition("::")[2].split("(")[0]
-            owner = fact.id.rpartition("::")[0].split("::")[-1]
-            if name.startswith("~") or name == owner or fact.attrs.get("override") == "True":
+            st, owner_full, name = split_id(fact.id)
+            owner = owner_full.split("::")[-1]
+            if not name or name.startswith("~") or name == owner or fact.attrs.get("override") == "True":
                 continue
-            st = stem(fact.id)
             if kind == "cpp.function":
                 fs = other(files(r"\b" + re.escape(name) + r"\s*\("), st)
                 src = sum(1 for h in fs if not h.startswith("tests"))
