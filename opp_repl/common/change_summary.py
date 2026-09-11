@@ -397,10 +397,12 @@ class KindDiff:
         self.kind = kind
         self.added, self.removed, self.changed = [], [], []
         self.moved, self.renamed, self.resignatured = [], [], []
+        self.reowned, self.relocated, self.split = [], [], []
 
     def is_empty(self):
         return not (self.added or self.removed or self.changed or self.moved
-                    or self.renamed or self.resignatured)
+                    or self.renamed or self.resignatured
+                    or self.reowned or self.relocated or self.split)
 
 def diff_facts(base_facts, head_facts, pair_renames=True):
     """Compare two fact sets, one kind at a time."""
@@ -410,6 +412,7 @@ def diff_facts(base_facts, head_facts, pair_renames=True):
     for f in head_facts:
         by_kind[f.kind][1].append(f)
 
+    _PAIR_ACROSS = True
     base_members = _member_index(base_facts)
     head_members = _member_index(head_facts)
 
@@ -435,6 +438,7 @@ def diff_facts(base_facts, head_facts, pair_renames=True):
                 removed, added, d.renamed = _pair_renames(kind, removed, added, base_members, head_members)
         d.removed, d.added = removed, added
         diffs[kind] = d
+    _pair_across_owners(diffs, head_facts)
     return diffs, notes
 
 # Attributes whose value is a list.  A change to one is reported as what joined and what left,
@@ -462,6 +466,78 @@ def _split_list(value):
     if cur.strip():
         out.append(cur.strip())
     return [x for x in out if x]
+
+# Kinds whose id is "<owner>::<member>" or "<owner>.<member>", so a member can change owner.
+OWNED_KINDS = {
+    "cpp.function": "::", "cpp.hook": "::", "msg.enum.value": "::",
+    "msg.field": ".", "ned.parameter": ".", "ned.gate": ".",
+    "ned.signal": ".", "ned.statistic": ".",
+}
+
+def _member_key(fid, sep):
+    """Split an id into (owner, member+arguments).
+
+    Split before the first "(" so a qualified type in the argument list cannot be mistaken for
+    the separator -- the same fault that made annotate_usage report a wrong name.
+    """
+    head, _, rest = fid.partition("(")
+    owner, _, member = head.rpartition(sep)
+    return owner, member + ("(" + rest if rest else "")
+
+def _pair_across_owners(diffs, head_facts):
+    """Pair a member that left one class and appeared in another.
+
+    A class rename moves every member with it, and a member-by-member comparison sees only a long
+    list of removals beside a long list of additions.  Pairing them needs no similarity score: the
+    member name and its arguments are the key, and the owners are the answer.
+
+    Three relations come out, and they are not the same thing:
+
+      renamed with its owner -- the old owner owns nothing at the head, so the class itself is gone
+      moved to another class -- the old owner still exists, so the member was extracted
+      split across classes   -- one removal, several additions; a redistribution, not a rename
+
+    The discriminator between the first two is whether the old owner survives, which the head fact
+    set answers directly.  No threshold is needed and none is invented.
+    """
+    alive = set()
+    for f in head_facts:
+        sep = OWNED_KINDS.get(f.kind)
+        if sep:
+            alive.add(_member_key(f.id, sep)[0])
+        elif f.kind == "cpp.class":
+            alive.add(f.id)
+    for kind, sep in OWNED_KINDS.items():
+        d = diffs.get(kind)
+        if not d or not d.removed or not d.added:
+            continue
+        rem_by, add_by = defaultdict(list), defaultdict(list)
+        for f in d.removed:
+            rem_by[_member_key(f.id, sep)[1]].append(f)
+        for f in d.added:
+            add_by[_member_key(f.id, sep)[1]].append(f)
+        taken_r, taken_a = set(), set()
+        for key, rs in rem_by.items():
+            as_ = add_by.get(key)
+            if not as_:
+                continue
+            r_owners = {_member_key(f.id, sep)[0] for f in rs}
+            a_owners = {_member_key(f.id, sep)[0] for f in as_}
+            if r_owners == a_owners:
+                continue                       # same owner: a signature or attribute change
+            if len(rs) == 1 and len(as_) == 1:
+                r, a = rs[0], as_[0]
+                ro = _member_key(r.id, sep)[0]
+                bucket = d.relocated if ro in alive else d.reowned
+                bucket.append((r, a))
+                taken_r.add(id(r)); taken_a.add(id(a))
+            elif len(rs) == 1:
+                d.split.append((rs[0], list(as_)))
+                taken_r.add(id(rs[0]))
+                for a in as_:
+                    taken_a.add(id(a))
+        d.removed = [f for f in d.removed if id(f) not in taken_r]
+        d.added = [f for f in d.added if id(f) not in taken_a]
 
 def _attr_changes(before, after):
     """Return (attribute, kind, detail) per changed attribute.
@@ -672,6 +748,13 @@ def render_markdown(diffs, notes, header):
     lines += _section("Signature changed", diffs, lambda d: d.resignatured, _fmt_resignatured,
                       empty="_no signature changed_")
     lines += _section("Renamed", diffs, lambda d: d.renamed, _fmt_renamed, empty="_nothing renamed_")
+    lines += _owner_section("Renamed with their class", diffs, lambda d: d.reowned,
+                            "The old class owns nothing at the head, so the class itself was renamed and its "
+                            "members moved with it. Counted, not guessed: the member name and its arguments are "
+                            "the key.")
+    lines += _owner_section("Moved to another class", diffs, lambda d: d.relocated,
+                            "The old class still exists, so these members were extracted from it.")
+    lines += _split_section(diffs)
     lines += ["## Added", ""]
     lines += _section(None, diffs, lambda d: d.added, _fmt_plain, empty="_nothing added_")
     moved_any = any(diffs[k].moved for k in diffs)
@@ -692,7 +775,11 @@ def _headline(diffs):
     for verb, get in (("added", lambda d: d.added), ("removed", lambda d: d.removed),
                       ("changed", lambda d: d.changed),
                       ("with a changed signature", lambda d: d.resignatured),
-                      ("renamed", lambda d: d.renamed), ("moved", lambda d: d.moved)):
+                      ("renamed", lambda d: d.renamed),
+                      ("renamed with their class", lambda d: d.reowned),
+                      ("moved to another class", lambda d: d.relocated),
+                      ("split across classes", lambda d: d.split),
+                      ("moved", lambda d: d.moved)):
         n = sum(len(get(diffs[k])) for k in diffs)
         if n:
             bits.append(f"**{n}** {verb}")
@@ -789,6 +876,53 @@ def _fmt_changed(rows):
                 bv, av = detail
                 out.append(f"| `{before.id}` | {k} | `{bv or '(empty)'}` → `{av or '(empty)'}` |")
     return out
+
+def _owner_section(title, diffs, get, blurb):
+    """Group member pairs by their owner pair: one row per class, not one per member."""
+    groups = defaultdict(lambda: defaultdict(list))
+    for kind, _ in KINDS:
+        d = diffs.get(kind)
+        if not d:
+            continue
+        for before, after in get(d):
+            sep = OWNED_KINDS.get(kind, "::")
+            ro, rm = _member_key(before.id, sep)
+            ao, _ = _member_key(after.id, sep)
+            groups[(ro, ao)][kind].append(rm.split("(")[0])
+    if not groups:
+        return []
+    out = [f"### {title}", "", blurb, "", "| Was | Now | What moved |", "|---|---|---|"]
+    for (ro, ao), kinds in sorted(groups.items(), key=lambda x: -sum(len(v) for v in x[1].values())):
+        what = []
+        for kind, names in sorted(kinds.items()):
+            uniq = sorted(set(names))
+            shown = ", ".join(f"`{n}`" for n in uniq[:6])
+            more = f" and {len(uniq) - 6} more" if len(uniq) > 6 else ""
+            what.append(f"{len(uniq)} {KIND_TITLES.get(kind, kind)} — {shown}{more}")
+        out.append(f"| `{ro}` | `{ao}` | " + "<br>".join(what) + " |")
+    return out + [""]
+
+def _split_section(diffs):
+    """One member removed from a class and added to several: a redistribution, not a rename."""
+    rows = []
+    for kind, _ in KINDS:
+        d = diffs.get(kind)
+        if not d:
+            continue
+        sep = OWNED_KINDS.get(kind, "::")
+        for before, afters in d.split:
+            ro, rm = _member_key(before.id, sep)
+            aos = sorted({_member_key(a.id, sep)[0] for a in afters})
+            rows.append((rm.split("(")[0], ro, aos))
+    if not rows:
+        return []
+    out = ["### Split across classes", "",
+           "One member left a class and appeared in several. That is a redistribution rather than a "
+           "rename, and it is usually where an architecture changed shape.", "",
+           "| Member | Was in | Now in |", "|---|---|---|"]
+    for name, ro, aos in sorted(rows):
+        out.append(f"| `{name}` | `{ro}` | " + ", ".join(f"`{a}`" for a in aos) + " |")
+    return out + [""]
 
 def _fmt_resignatured(rows):
     """An appended argument is shown as what was appended, not as both lists in full."""
