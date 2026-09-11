@@ -144,11 +144,22 @@ def _extract_ned_members(node, qname, origin, facts):
             # it carries no type.  Only a declaration is part of the module's interface.
             if not pname or not p.get("type"):
                 continue
+            props = {}
+            for pr in p.findall("property"):
+                key = pr.get("name") or ""
+                vals = [l.get("value") or l.get("text") or "" for l in pr.iter("literal")]
+                props[key] = ",".join(v for v in vals if v)
             facts.append(Fact("ned.parameter", f"{qname}.{pname}", {
                 "type": p.get("type") or "",
-                "default": _unparse(p),
+                "unit": props.get("unit", ""),
+                # opp_nedtool gives the default as an attribute of the param itself.  Do not walk
+                # the literals under <param>: they include the ones inside a nested property, so
+                # @unit(s) was read as the default "s", and @examples(...) as a list of flavours
+                # -- which hid the real change of the TCP default from TcpReno to TcpCubic.
+                "default": p.get("value") or _unparse(p),
                 "is-default": p.get("is-default") or "false",
                 "volatile": p.get("is-volatile") or "false",
+                "properties": ";".join(f"{k}={v}" if v else k for k, v in sorted(props.items())),
             }, origin))
         for prop in params.findall("property"):
             _extract_ned_property(prop, qname, origin, facts)
@@ -183,14 +194,24 @@ def _extract_ned_property(prop, qname, origin, facts):
                           {"value": ";".join(f"{k}={v}" for k, v in sorted(keys.items()))}, origin))
 
 def _unparse(node):
-    """Best-effort text of a parameter's default expression."""
+    """Best-effort text of an expression, used only when the node carries no ``value``.
+
+    Skips any nested ``<property>``: a property's literals belong to the property, not to the
+    expression.  Walking them is what made ``@unit(s)`` read as the default ``s``.
+    """
     parts = []
-    for lit in node.iter("literal"):
-        parts.append(lit.get("value") or lit.get("text") or "")
-    for op in node.iter("operator"):
-        parts.append(op.get("name") or "")
-    for idn in node.iter("ident"):
-        parts.append(idn.get("name") or "")
+    def walk(n):
+        for ch in n:
+            if ch.tag == "property":
+                continue
+            if ch.tag == "literal":
+                parts.append(ch.get("value") or ch.get("text") or "")
+            elif ch.tag == "operator":
+                parts.append(ch.get("name") or "")
+            elif ch.tag == "ident":
+                parts.append(ch.get("name") or "")
+            walk(ch)
+    walk(node)
     return " ".join(p for p in parts if p).strip()
 
 def extract_msg_facts(source_path, out_xml):
@@ -444,21 +465,24 @@ def diff_facts(base_facts, head_facts, pair_renames=True):
 # Attributes whose value is a list.  A change to one is reported as what joined and what left,
 # never as the whole list twice: a reader must not have to diff two long strings by eye to find
 # the one base class that was added.
-LIST_ATTRS = {"bases", "extends", "like", "record", "requires", "defines", "nedPackages"}
+# Attribute -> the separator its list uses.  A property list joins with ";" because a single
+# property's values are already comma-joined: @examples("a","b") is one item, not two.
+LIST_ATTRS = {"bases": ",", "extends": ",", "like": ",", "record": ",",
+              "requires": ",", "defines": ",", "nedPackages": ",", "properties": ";"}
 
 # Attributes whose value is a flag.  ``const: False -> True`` is two words the reader has to
 # assemble; "gained const" is the sentence they were going to write anyway.
 BOOL_ATTRS = {"const", "virtual", "pure", "volatile", "vector", "exported", "is-default", "abstract"}
 
-def _split_list(value):
-    """Split a comma-separated attribute, ignoring commas inside <>, () or []."""
+def _split_list(value, sep=","):
+    """Split a separated attribute, ignoring the separator inside <>, () or []."""
     out, depth, cur = [], 0, ""
     for ch in value:
         if ch in "<([":
             depth += 1
         elif ch in ">)]":
             depth -= 1
-        if ch == "," and depth <= 0:
+        if ch == sep and depth <= 0:
             out.append(cur.strip())
             cur = ""
         else:
@@ -551,10 +575,26 @@ def _attr_changes(before, after):
         if bv == av:
             continue
         if k in LIST_ATTRS:
-            b, a = _split_list(bv), _split_list(av)
+            sep = LIST_ATTRS[k]
+            b, a = _split_list(bv, sep), _split_list(av, sep)
             joined = [x for x in a if x not in b]
             left = [x for x in b if x not in a]
-            if joined or left:
+            # A "name=value" item whose value is itself a list: report the inner delta rather
+            # than the whole item twice.  @examples gaining one entry is one word of news.
+            bmap = {x.split("=", 1)[0]: x.split("=", 1)[1] for x in b if "=" in x}
+            amap = {x.split("=", 1)[0]: x.split("=", 1)[1] for x in a if "=" in x}
+            nested = []
+            for name in sorted(set(bmap) & set(amap)):
+                if bmap[name] == amap[name]:
+                    continue
+                bi, ai = _split_list(bmap[name]), _split_list(amap[name])
+                nested.append((name, [x for x in ai if x not in bi], [x for x in bi if x not in ai]))
+            if nested:
+                shared = {n for n, _, _ in nested}
+                joined = [x for x in joined if x.split("=", 1)[0] not in shared]
+                left = [x for x in left if x.split("=", 1)[0] not in shared]
+                out.append((k, "nested", (joined, left, nested)))
+            elif joined or left:
                 out.append((k, "list", (joined, left)))
             else:
                 out.append((k, "order", (a, b)))
@@ -866,6 +906,13 @@ def _fmt_changed(rows):
             if how == "list":
                 joined, left = detail
                 bits = [f"**+** `{x}`" for x in joined] + [f"**−** `{x}`" for x in left]
+                out.append(f"| `{before.id}` | {k} | {'<br>'.join(bits)} |")
+            elif how == "nested":
+                joined, left, nested = detail
+                bits = [f"**+** `{x}`" for x in joined] + [f"**−** `{x}`" for x in left]
+                for name, ni, nl in nested:
+                    inner = [f"**+** `{x}`" for x in ni] + [f"**−** `{x}`" for x in nl]
+                    bits.append(f"`{name}`: " + ", ".join(inner))
                 out.append(f"| `{before.id}` | {k} | {'<br>'.join(bits)} |")
             elif how == "flag":
                 verb = "gained" if detail else "lost"
