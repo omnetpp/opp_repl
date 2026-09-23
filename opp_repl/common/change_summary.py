@@ -13,6 +13,7 @@ is needed, so a summary is available for a branch that does not compile.
 import glob
 import os
 import re
+import shutil
 import subprocess
 import xml.etree.ElementTree as ET
 from collections import defaultdict
@@ -82,13 +83,53 @@ class _Missing:
 def _run(args, cwd=None):
     """Run a tool, and report a missing one instead of raising.
 
-    A missing ``opp_nedtool`` must degrade to a named note in the report, not a traceback: the
-    other extractors still have something to say.
+    A missing ``opp_nedtool`` becomes a failure the caller decides about, not a traceback: by
+    default the caller stops, and a caller that accepts an incomplete report says so at its top.
     """
     try:
         return subprocess.run(args, cwd=cwd, capture_output=True, text=True)
     except FileNotFoundError:
         return _Missing(args[0])
+
+class ParserError(RuntimeError):
+    """A parser that the report names as a source did not read the whole tree."""
+
+PARSERS = ("opp_nedtool", "opp_msgtool")
+
+def parser_provenance(parsers=PARSERS):
+    """Where each parser is and which version it is: ``{name: (path, version)}``.
+
+    A parser that is not on the PATH is absent from the result.  The report names these parsers as
+    the source of its NED and message facts, so a caller checks the result before extraction: a
+    missing parser leaves its facts out of both trees, and the diff of two empty sets is empty,
+    which reads as "nothing changed" rather than as "nothing was read".
+    """
+    found = {}
+    for name in parsers:
+        path = shutil.which(name)
+        if not path:
+            continue
+        r = _run([path, "-h"])
+        m = re.search(r"^Version:\s*([^,\s]+)", (r.stdout or "") + (r.stderr or ""), re.M)
+        found[name] = (path, m.group(1) if m else "of unknown version")
+    return found
+
+def _parser_failure(tool, r, out_xml, source_path):
+    """What went wrong in one parser run, or None if the parser read every file.
+
+    Both parsers write the XML of the files they could read and exit with status 1 for the rest,
+    so an output file proves nothing.  A NED file with a syntax error loses its facts, and the
+    diff reports its types as removed.
+    """
+    if r.returncode == 0 and os.path.exists(out_xml):
+        return None
+    lines = (r.stderr or "").strip().splitlines()
+    for prefix in {os.path.abspath(source_path) + os.sep, source_path.rstrip(os.sep) + os.sep}:
+        lines = [line.replace(prefix, "") for line in lines]
+    detail = "; ".join(lines[:5]) or "no message"
+    if len(lines) > 5:
+        detail += f"; and {len(lines) - 5} more lines"
+    return f"{tool} failed with exit status {r.returncode}: {detail}"
 
 def _relative(path, source_path):
     """A fact's origin must be relative to the source root.
@@ -114,8 +155,9 @@ def extract_ned_facts(source_path, out_xml):
     """Extract NED facts through ``opp_nedtool``, one call for the whole tree."""
     facts = []
     r = _run(["opp_nedtool", "c", "-x", "-m", "-o", out_xml, source_path])
+    failure = _parser_failure("opp_nedtool", r, out_xml, source_path)
     if not os.path.exists(out_xml):
-        return facts, f"opp_nedtool failed: {r.stderr.strip()[:200]}"
+        return facts, failure
     root = ET.parse(out_xml).getroot()
     for ned_file in root.iter("ned-file"):
         origin = _relative(ned_file.get("filename") or "", source_path)
@@ -134,7 +176,7 @@ def extract_ned_facts(source_path, out_xml):
                 facts.append(Fact("ned.type", qname,
                                   {"kind": kind, "extends": extends, "like": like}, origin))
                 _extract_ned_members(node, qname, origin, facts)
-    return facts, None
+    return facts, failure
 
 def _extract_ned_members(node, qname, origin, facts):
     for params in node.findall("parameters"):
@@ -221,8 +263,9 @@ def extract_msg_facts(source_path, out_xml):
     if not files:
         return facts, None
     r = _run(["opp_msgtool", "c", "-x", "-m", "-o", out_xml] + files)
+    failure = _parser_failure("opp_msgtool", r, out_xml, source_path)
     if not os.path.exists(out_xml):
-        return facts, f"opp_msgtool failed: {r.stderr.strip()[:200]}"
+        return facts, failure
     root = ET.parse(out_xml).getroot()
     for msg_file in root.iter("msg-file"):
         origin = _relative(msg_file.get("filename") or "", source_path)
@@ -249,7 +292,7 @@ def extract_msg_facts(source_path, out_xml):
                     if ename:
                         facts.append(Fact("msg.enum.value", f"{name}::{ename}",
                                           {"value": e.get("value") or ""}, origin))
-    return facts, None
+    return facts, failure
 
 # -- the C++ fast tier ------------------------------------------------------
 
@@ -391,9 +434,15 @@ def extract_project_facts(root_path):
                                       os.path.relpath(os.path.join(cur, d), src), {}, None))
     return facts, None
 
-def extract_all(root_path, scratch, label):
-    """Run every extractor over one source tree.  Returns (facts, notes)."""
-    facts, notes = [], []
+def extract_all(root_path, scratch, label, strict=True):
+    """Run every extractor over one source tree.  Returns (facts, notes, failures).
+
+    A failure is a parser that did not read the whole tree.  With ``strict`` it raises
+    ParserError, because a report with a parser's facts missing states things that are false.
+    Without it the facts that were read are kept, and the failures come back separately, for the
+    caller to put where a reader looks first.
+    """
+    facts, notes, failures = [], [], []
     src = os.path.join(root_path, "src")
     source_path = src if os.path.isdir(src) else root_path
     for fn, args in ((extract_ned_facts, (source_path, os.path.join(scratch, label + "-ned.xml"))),
@@ -402,9 +451,50 @@ def extract_all(root_path, scratch, label):
                      (extract_project_facts, (root_path,))):
         f, note = fn(*args)
         facts += f
-        if note:
+        if note and fn in (extract_ned_facts, extract_msg_facts):
+            if strict:
+                raise ParserError(f"{label}: {note}")
+            failures.append(f"{label}: {note}")
+        elif note:
             notes.append(note)
-    return facts, notes
+    return facts, notes, failures
+
+def describe_parsers(provenance, failures):
+    """The report's statement of where its NED and message facts come from.
+
+    It names the parser versions that ran, so a reader can see a parser that did not; and when
+    the report is incomplete it says so first, before any count that the gap makes false.
+    """
+    what = {"opp_nedtool": "NED", "opp_msgtool": "message"}
+    missing = [name for name in PARSERS if name not in provenance]
+    # a missing parser fails on both trees; one line says it better than two
+    failures = [f for f in failures
+                if not any(f": {m} failed with exit status 127:" in f for m in missing)]
+    out = []
+    if missing or failures:
+        out.append("**This report is incomplete.**")
+        out.append("")
+        out += [f"- `{m}` is not on the PATH, so no {what[m]} fact was read from either tree."
+                for m in missing]
+        out += [f"- {f}" for f in failures]
+        out.append("")
+        out.append("The facts of a parser that did not run are absent from both trees, so their "
+                   "kinds are missing from every section below, *Not changed* included. The facts "
+                   "of a file that a parser could not read are absent from one tree, so they read "
+                   "as removed or as added.")
+        out.append("")
+    ran = [(name, provenance[name]) for name in PARSERS if name in provenance]
+    if ran:
+        parts = [f"{what[name]} facts {'come ' if i == 0 else ''}from `{name}` {version}"
+                 for i, (name, (_, version)) in enumerate(ran)]
+        dirs = {os.path.dirname(path) for _, (path, _) in ran}
+        if len(dirs) == 1:
+            where = f"{'both ' if len(ran) > 1 else ''}in `{dirs.pop()}`"
+        else:
+            where = "; ".join(f"`{name}` in `{os.path.dirname(path)}`" for name, (path, _) in ran)
+        whose = "those parsers'" if len(ran) > 1 else "that parser's"
+        out.append(f"The {' and the '.join(parts)}, {where}, so they are {whose} own view of the tree.")
+    return "\n".join(out)
 
 # ---------------------------------------------------------------------------
 # The diff
@@ -805,7 +895,8 @@ def render_markdown(diffs, notes, header):
     lines += _review_questions(diffs)
     untouched = [KIND_TITLES.get(k, k) for k in sorted(diffs) if diffs[k].is_empty()]
     lines += ["## Not changed", "",
-              (" · ".join(untouched) if untouched else "_every kind has a change_"), ""]
+              (" · ".join(untouched) if untouched
+               else "_every kind has a change_" if diffs else "_no fact was extracted from either tree_"), ""]
     if notes:
         lines += ["## Notes", ""] + [f"- {n}" for n in notes] + [""]
     return "\n".join(lines)

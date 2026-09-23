@@ -11,6 +11,11 @@
 # --from/--to and --pr create git worktrees of the two versions and remove them afterwards.
 # --base-dir/--head-dir compare two source trees that already exist.
 #
+# The NED and message facts come from opp_nedtool and opp_msgtool.  If either one is not on the
+# PATH, or does not read every file, the script stops with exit status 2 or 1 -- a report that
+# silently lacks their facts states things that are false.  --allow-incomplete writes the report
+# anyway, and the report then says at its top what it lacks.
+#
 # The process is documented in opp_repl/plan/pending/change-summary.md.
 #
 import argparse
@@ -20,7 +25,9 @@ import sys
 import tempfile
 import time
 
-from opp_repl.common.change_summary import annotate_usage, diff_facts, extract_all, render_markdown
+from opp_repl.common.change_summary import (PARSERS, ParserError, annotate_usage, describe_parsers,
+                                            diff_facts, extract_all, parser_provenance,
+                                            render_markdown)
 
 def git(repo, *args):
     r = subprocess.run(["git", "-C", repo, *args], capture_output=True, text=True)
@@ -48,7 +55,22 @@ def main():
     p.add_argument("--no-renames", action="store_true", help="skip the rename pairing")
     p.add_argument("--usage", action="store_true",
                    help="for each added function: is it called, is it overridden -- the two review questions")
+    p.add_argument("--allow-incomplete", action="store_true",
+                   help="write the report even if opp_nedtool or opp_msgtool is missing or fails; "
+                        "the report says at its top which facts it lacks")
     args = p.parse_args()
+
+    provenance = parser_provenance()
+    missing = [name for name in PARSERS if name not in provenance]
+    if missing and not args.allow_incomplete:
+        kinds = " and ".join({"opp_nedtool": "NED", "opp_msgtool": "message"}[m] for m in missing)
+        print(f"error: {' and '.join(missing)} not found in PATH. The report takes its {kinds} "
+              f"facts from {'these parsers' if len(missing) > 1 else 'this parser'}, and without "
+              f"{'them' if len(missing) > 1 else 'it'} those facts would be missing from both "
+              f"trees and the report would say nothing changed. Source the OMNeT++ setenv, or add "
+              f"its bin directory to PATH; --allow-incomplete writes the report anyway.",
+              file=sys.stderr)
+        return 2
 
     repo = os.path.abspath(args.repo)
     scratch = tempfile.mkdtemp(prefix="opp-summary-")
@@ -74,8 +96,16 @@ def main():
             add_worktree(repo, head_ref, head_dir); created.append(head_dir)
 
         t0 = time.time()
-        base_facts, n1 = extract_all(base_dir, scratch, "base")
-        head_facts, n2 = extract_all(head_dir, scratch, "head")
+        strict = not args.allow_incomplete
+        try:
+            base_facts, n1, f1 = extract_all(base_dir, scratch, "base", strict=strict)
+            head_facts, n2, f2 = extract_all(head_dir, scratch, "head", strict=strict)
+        except ParserError as e:
+            print(f"error: {e}", file=sys.stderr)
+            print("       A report without these facts would state things that are false. Repair "
+                  "the file, or pass --allow-incomplete to write the report anyway.", file=sys.stderr)
+            return 1
+        failures = f1 + f2
         t1 = time.time()
         diffs, notes = diff_facts(base_facts, head_facts, pair_renames=not args.no_renames)
         if args.usage:
@@ -91,11 +121,11 @@ def main():
             "subtitle": (
                 f"Base `{mb}` ({args.base_label}) to head `{hd}` — {nc} commits, {stat}.\n\n"
                 f"Extracted {time.strftime('%Y-%m-%d')} from the sources in {t1-t0:.1f} seconds; no "
-                f"build was needed. NED and message facts come from `opp_nedtool` and `opp_msgtool`, "
-                f"so they are those parsers' own view of the tree. C++ facts come from the fast "
+                f"build was needed. C++ facts come from the fast "
                 f"header scan and are **indicative**: it joins multi-line declarations and excludes "
                 f"generated `*_m.h`, but it does not expand macros or resolve templates, so a "
-                f"declaration built by a macro is invisible to it."),
+                f"declaration built by a macro is invisible to it.\n\n"
+                f"{describe_parsers(provenance, failures)}"),
         }
         md = render_markdown(diffs, notes + n1 + n2, header)
         if args.output == "-":
@@ -104,6 +134,9 @@ def main():
             open(args.output, "w", encoding="utf-8").write(md)
             print(f"{len(base_facts)} → {len(head_facts)} facts in {t1-t0:.1f}s; "
                   f"wrote {args.output}, {len(md.splitlines())} lines", file=sys.stderr)
+        if failures:
+            print(f"warning: the report is incomplete -- {len(failures)} parser failure(s), "
+                  f"stated at its top", file=sys.stderr)
         return 0
     finally:
         for path in created:
