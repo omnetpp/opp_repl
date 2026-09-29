@@ -59,17 +59,38 @@ def extract_test_error_message(stdout):
     return "\n".join(messages) if messages else None
 
 class OppTestTask(TestTask):
-    def __init__(self, simulation_project, working_directory, test_file_name, mode="debug", debug=False, remove_launch=True, **kwargs):
+    def __init__(self, simulation_project, working_directory, test_file_name, mode="debug", debug=False, remove_launch=True, lib_directory=None, lib_name="test", **kwargs):
         super().__init__(**kwargs)
         self.locals = locals()
         self.locals.pop("self")
         self.kwargs = kwargs
         self.simulation_project = simulation_project
+        # the folder the test is generated and run from; test_file_name is relative to it and
+        # may name a subfolder (a test of a suite folder, see get_opp_test_tasks)
         self.working_directory = working_directory
         self.test_file_name = test_file_name
         self.mode = mode
         self.debug = debug
         self.remove_launch = remove_launch
+        # the support library the test links, <working_directory>/lib unless the project names
+        # another one (INET's protocol tests share tests/protocol/lib, libprotocoltest)
+        self.lib_directory = lib_directory or os.path.join(working_directory, "lib")
+        self.lib_name = lib_name
+
+    def has_testprog(self):
+        """A test that names its own program with ``%testprog`` never runs the test binary."""
+        if not hasattr(self, "_has_testprog"):
+            with open(os.path.join(self.working_directory, self.test_file_name), encoding="utf-8", errors="replace") as f:
+                self._has_testprog = re.search(r"^%testprog:", f.read(), re.MULTILINE) is not None
+        return self._has_testprog
+
+    def get_work_directory(self):
+        """The folder opp_test extracts the test into, relative to the working directory: work/ of
+        the working directory, because the ini files of a test may reach shared files by paths
+        relative to it (INET's wifi tests include ../../ini/_b.ini). A %testprog test builds
+        nothing and has no such paths, so it runs in work/ beside its .test file, and two of them
+        with one file name in different subfolders do not share a folder."""
+        return os.path.join(os.path.dirname(self.test_file_name), "work") if self.has_testprog() else "work"
 
     def get_parameters_string(self, **kwargs):
         return self.test_file_name
@@ -103,23 +124,25 @@ class OppTestTask(TestTask):
         binary_suffix = "_dbg" if self.mode == "debug" else ""
         expected_result = self.get_expected_result()
         test_file_name = os.path.join(self.working_directory, self.test_file_name)
-        test_binary_name = re.sub(r"\.test", "", self.test_file_name)
-        test_directory = os.path.join(self.working_directory, f"work/{test_binary_name}")
-        has_lib = os.path.exists(os.path.join(self.working_directory, "lib"))
+        test_binary_name = os.path.basename(re.sub(r"\.test$", "", self.test_file_name))
+        work_directory = self.get_work_directory()
+        test_directory = os.path.join(self.working_directory, work_directory, test_binary_name)
+        has_lib = os.path.exists(self.lib_directory)
+        lib_relative_path = os.path.relpath(self.lib_directory, test_directory)
         os.makedirs(test_directory, exist_ok=True)
-        args = ["opp_test", "gen", "-v", self.test_file_name]
+        args = ["opp_test", "gen", "-v", "-w", work_directory, self.test_file_name]
         subprocess_result = run_command_with_logging(args, cwd=self.working_directory, env=self.simulation_project.get_env(), command_line_logger=_logger)
         if subprocess_result.returncode != 0:
             return self.task_result_class(self, result="ERROR", expected_result=expected_result, stderr=subprocess_result.stderr)
         library_name = self.simulation_project.dynamic_libraries[0]
         library_folder = self.simulation_project.get_library_folder_full_path()
         include_folders = [self.simulation_project.get_full_path(f) for f in self.simulation_project.include_folders]
-        # a test that names its own program with %testprog never runs the test binary, so
-        # building one costs a makefile and a link per test for nothing
-        with open(test_file_name, encoding="utf-8", errors="replace") as f:
-            has_testprog = re.search(r"^%testprog:", f.read(), re.MULTILINE) is not None
-        if not has_testprog:
-            args = ["opp_makemake", "-f", "--deep", f"-l{library_name}{binary_suffix}", f"-L{library_folder}", *([f"-ltest{binary_suffix}", "-L../../lib"] if has_lib else []), "-P", test_directory, *[f"-I{d}" for d in include_folders], *(["-I../../lib"] if has_lib else [])]
+        # a header of the working directory or beside the .test file, such as INET's
+        # tests/protocol/wifi/WifiTestSupport.h and tests/protocol/tcp/rfc/TcpMutations.h
+        include_folders += [self.working_directory, os.path.dirname(test_file_name)]
+        # building a binary for a %testprog test costs a makefile and a link per test for nothing
+        if not self.has_testprog():
+            args = ["opp_makemake", "-f", "--deep", f"-l{library_name}{binary_suffix}", f"-L{library_folder}", *([f"-l{self.lib_name}{binary_suffix}", f"-L{lib_relative_path}"] if has_lib else []), "-P", test_directory, *[f"-I{d}" for d in include_folders], *([f"-I{lib_relative_path}"] if has_lib else [])]
             subprocess_result = run_command_with_logging(args, cwd=test_directory, env=self.simulation_project.get_env(), command_line_logger=_logger)
             if subprocess_result.returncode != 0:
                 return self.task_result_class(self, result="ERROR", expected_result=expected_result, stderr=subprocess_result.stderr)
@@ -129,14 +152,17 @@ class OppTestTask(TestTask):
                 return self.task_result_class(self, result="ERROR", expected_result=expected_result, stderr=subprocess_result.stderr)
         test_program = f"{test_binary_name}/{test_binary_name}{binary_suffix}"
         ned_folders = [self.simulation_project.get_full_path(f) for f in self.simulation_project.ned_folders]
-        simulation_args = ["--check-signals=false", f"-l{library_name}", "-n", ":".join(ned_folders + ["."] + (["../../lib"] if has_lib else []))]
+        # the NED files of the working directory's ned folder, such as tests/protocol/wifi/ned
+        ned_directory = os.path.join(self.working_directory, "ned")
+        ned_folders += ["."] + ([lib_relative_path] if has_lib else []) + ([os.path.relpath(ned_directory, test_directory)] if os.path.isdir(ned_directory) else [])
+        simulation_args = ["--check-signals=false", f"-l{library_name}", "-n", ":".join(ned_folders)]
         if not self.debug:
-            args = ["opp_test", "run", "-v", "-p", test_program, self.test_file_name, "-a", *simulation_args]
+            args = ["opp_test", "run", "-v", "-w", work_directory, "-p", test_program, self.test_file_name, "-a", *simulation_args]
             subprocess_result = run_command_with_logging(args, cwd=self.working_directory, env=self.simulation_project.get_env(), command_line_logger=_logger)
             stdout = subprocess_result.stdout
         else:
             ide_opp_test = IdeOppTest(remove_launch=self.remove_launch)
-            ide_opp_test.args = types.SimpleNamespace(verbose=True, workdir=os.path.join(self.working_directory, "work"), mode="run", testprogram=test_program, extraargs=" ".join(simulation_args), filenames=[test_file_name])
+            ide_opp_test.args = types.SimpleNamespace(verbose=True, workdir=os.path.join(self.working_directory, work_directory), mode="run", testprogram=test_program, extraargs=" ".join(simulation_args), filenames=[test_file_name])
             ide_opp_test.saveOriginalEnv()
             ide_opp_test.parse_testfile(test_file_name)
             ide_opp_test.run_tests()
@@ -160,42 +186,72 @@ class OppTestTask(TestTask):
         else:
             return self.task_result_class(self, result="FAIL", expected_result=expected_result, reason=f"Non-zero exit code: {subprocess_result.returncode}", stdout=stdout, stderr=stderr)
 
-def get_opp_test_tasks(test_folder, simulation_project=None, filter=".*", full_match=False, **kwargs):
+def get_opp_test_tasks(test_folder, simulation_project=None, filter=".*", full_match=False, suite_folders=False, lib_folder=None, lib_name="test", **kwargs):
     """
     Returns multiple opp test tasks matching the provided filter criteria. The returned tasks can be run by
     calling the :py:meth:`run <opp_repl.common.task.MultipleTasks.run>` method.
 
     Parameters:
+        suite_folders (bool):
+            False: a test runs from the folder of its .test file. True: every direct subfolder of
+            the test folder is a suite, and a test runs from its suite folder, at any depth below
+            it, so that it reaches the files the whole suite shares (INET's tests/protocol).
+
+        lib_folder (string or None):
+            The support library that the tests link, relative to the project root. None: the lib
+            folder of a test's working directory, if it exists.
+
+        lib_name (string):
+            The name of the support library, "test" unless the project names another one.
+
         kwargs (dict):
-            TODO
+            ``working_directory_filter`` and ``exclude_working_directory_filter`` select a test by
+            the test folder, its working directory or the folder of its .test file, each relative
+            to the project root; a whole suite or one subfolder of it can be selected.
 
     Returns (:py:class:`MultipleTestTasks`):
         an object that contains a list of :py:class:`OppTestTask` objects matching the provided filter criteria.
         The result can be run (and re-run) without providing additional parameters.
     """
-    def create_test_task(test_file_name):
-        return OppTestTask(simulation_project, os.path.dirname(test_file_name), os.path.basename(test_file_name), task_result_class=TestTaskResult, **dict(kwargs, pass_keyboard_interrupt=True))
     if simulation_project is None:
         simulation_project = get_default_simulation_project()
+    test_folder_path = simulation_project.get_full_path(test_folder)
+    project_folder = simulation_project.get_full_path(".")
+    def get_working_directory(test_file_name):
+        if suite_folders:
+            return os.path.join(test_folder_path, os.path.relpath(test_file_name, test_folder_path).split(os.sep)[0])
+        return os.path.dirname(test_file_name)
+    def create_test_task(test_file_name):
+        working_directory = get_working_directory(test_file_name)
+        return OppTestTask(simulation_project, working_directory, os.path.relpath(test_file_name, working_directory),
+                           lib_directory=simulation_project.get_full_path(lib_folder) if lib_folder else None, lib_name=lib_name,
+                           task_result_class=TestTaskResult, **dict(kwargs, pass_keyboard_interrupt=True))
+    working_directory_filter = kwargs.get("working_directory_filter", None)
+    exclude_working_directory_filter = kwargs.get("exclude_working_directory_filter", None)
+    def matches_working_directory(test_file_name):
+        folders = [os.path.relpath(folder, project_folder) for folder in (test_folder_path, get_working_directory(test_file_name), os.path.dirname(test_file_name))]
+        return (working_directory_filter is None or any(matches_filter(folder, working_directory_filter, None, full_match) for folder in folders)) and \
+               (exclude_working_directory_filter is None or not any(matches_filter(folder, exclude_working_directory_filter, None, full_match) for folder in folders))
     # Never discover .test files under a `work/` segment: that is opp_test's
     # generated scratch (each case is extracted and compiled there, and meta
     # tests write sub-`.test` files into it). On a reused workspace those copies
     # from a prior run would otherwise be picked up as phantom tasks. No source
     # tree keeps real tests under work/, so this is a no-op on a fresh checkout.
     is_scratch = lambda f: (os.sep + "work" + os.sep) in f
-    test_file_names = list(builtins.filter(lambda test_file_name: not is_scratch(test_file_name) and matches_filter(test_file_name, filter, None, full_match),
-                                           glob.glob(os.path.join(simulation_project.get_full_path(test_folder), "**/*.test"), recursive=True)))
+    test_file_names = list(builtins.filter(lambda test_file_name: not is_scratch(test_file_name) and matches_filter(test_file_name, filter, None, full_match) and matches_working_directory(test_file_name),
+                                           glob.glob(os.path.join(test_folder_path, "**/*.test"), recursive=True)))
     test_tasks = list(map(create_test_task, test_file_names))
-    return MultipleOppTestTasks(tasks=test_tasks, simulation_project=simulation_project, test_folder=test_folder, multiple_task_results_class=MultipleTestTaskResults, **kwargs)
+    return MultipleOppTestTasks(tasks=test_tasks, simulation_project=simulation_project, test_folder=test_folder, lib_folder=lib_folder, multiple_task_results_class=MultipleTestTaskResults, **kwargs)
 get_opp_test_tasks.__signature__ = combine_signatures(get_opp_test_tasks, OppTestTask.__init__)
 
 class MultipleOppTestTasks(MultipleSimulationTestTasks):
-    def __init__(self, test_folder=None, **kwargs):
+    def __init__(self, test_folder=None, lib_folder=None, **kwargs):
         super().__init__(**kwargs)
         self.locals = locals()
         self.locals.pop("self")
         self.kwargs = kwargs
         self.test_folder = test_folder
+        self.lib_folder = lib_folder
 
     def run_protected(self, **kwargs):
         # Start each suite run from a clean <test_folder>/work, replicating a fresh
@@ -205,16 +261,19 @@ class MultipleOppTestTasks(MultipleSimulationTestTasks):
         # directory behind. On a *reused* workspace the next run's outer simulation
         # loads NED from '.' recursively, hits that stale nested package.ned, and
         # dies with a package-mismatch error — a failure that never occurs on a
-        # fresh checkout. Wiping work/ up front removes all such stale artifacts.
-        work_directory = os.path.join(self.simulation_project.get_full_path(self.test_folder), "work")
-        if os.path.isdir(work_directory):
-            shutil.rmtree(work_directory, ignore_errors=True)
+        # fresh checkout. Wiping work/ up front removes all such stale artifacts: the work
+        # folder of every test's working directory, and the one beside a %testprog test.
+        work_directories = {os.path.join(self.simulation_project.get_full_path(self.test_folder), "work")}
+        work_directories |= {os.path.join(task.working_directory, task.get_work_directory()) for task in self.tasks if isinstance(task, OppTestTask)}
+        for work_directory in sorted(work_directories):
+            if os.path.isdir(work_directory):
+                shutil.rmtree(work_directory, ignore_errors=True)
         # Build the shared opp_test support lib (<test_folder>/lib -> libtest) up front,
         # UNCONDITIONALLY — even under --no-build. --no-build only skips rebuilding the
         # simulation project; each .test case is still compiled here (see OppTestTask)
         # and links -ltest, so the lib must exist regardless of the project-build flag.
         # Idempotent: make no-ops when the lib is already up to date.
-        lib_directory = os.path.join(self.simulation_project.get_full_path(self.test_folder), "lib")
+        lib_directory = self.simulation_project.get_full_path(self.lib_folder or os.path.join(self.test_folder, "lib"))
         if os.path.isfile(os.path.join(lib_directory, "Makefile")):
             args = ["make", f"MODE={self.mode}", "-j", str(multiprocessing.cpu_count())]
             subprocess_result = run_command_with_logging(args, cwd=lib_directory, env=self.simulation_project.get_env(), command_line_logger=_logger)

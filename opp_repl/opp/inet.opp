@@ -48,7 +48,10 @@ SimulationProject(
         "module":      {"defaults": {"test_folder": "tests/module", "mode": "debug"}},
         "packet":      {"defaults": {"test_folder": "tests/packet", "executable": "packet_test", "config": "UnitTest", "mode": "debug"}},
         "queueing":    {"defaults": {"test_folder": "tests/queueing", "mode": "debug"}},
-        "protocol":    {"defaults": {"test_folder": "tests/protocol", "mode": "debug"}},
+        # every direct subfolder of tests/protocol is a suite: its tests run from the suite
+        # folder, at any depth below it, and link the shared tests/protocol/lib
+        "protocol":    {"defaults": {"test_folder": "tests/protocol", "mode": "debug", "suite_folders": True,
+                                     "lib_folder": "tests/protocol/lib", "lib_name": "protocoltest"}},
     },
     external_include_folders=["/usr/include/x86_64-linux-gnu"],
     feature_libraries={
