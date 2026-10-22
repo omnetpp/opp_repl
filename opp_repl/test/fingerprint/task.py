@@ -23,12 +23,13 @@ all_fingerprint_ingredients_append_args = {
     "~tND": {"--**.checksumMode=\"computed\"",
              "--**.crcMode=\"computed\"",
              "--**.fcsMode=\"computed\""},
+    # the values of INET's former fingerprinttest, which recorded INET's tyf fingerprints
     "tyf" : {"--cmdenv-fake-gui=true",
-             "--cmdenv-fake-gui-before-event-probability=0.1",
-             "--cmdenv-fake-gui-after-event-probability=0.1",
-             "--cmdenv-fake-gui-on-hold-probability=0.1",
+             "--cmdenv-fake-gui-before-event-probability=0.001",
+             "--cmdenv-fake-gui-after-event-probability=0.001",
+             "--cmdenv-fake-gui-on-hold-probability=0.001",
              "--cmdenv-fake-gui-on-hold-numsteps=3",
-             "--cmdenv-fake-gui-on-simtime-probability=0.1",
+             "--cmdenv-fake-gui-on-simtime-probability=0.001",
              "--cmdenv-fake-gui-on-simtime-numsteps=3",
              "--**.fadeOutMode=\"animationTime\"",
              "--**.signalAnimationSpeedChangeTimeMode=\"animationTime\""}}
@@ -42,7 +43,8 @@ def get_ingredients_append_args(ingredients):
     # file"). Matches OMNeT++'s own opp_fingerprinttest and the =-joined form of
     # every other entry in all_fingerprint_ingredients_append_args.
     append_args = ["--fingerprintcalculator-class=inet::FingerprintCalculator"] if "~" in ingredients else []
-    return append_args + list(all_fingerprint_ingredients_append_args[ingredients]) if ingredients in all_fingerprint_ingredients_append_args else []
+    # an ingredient without extra arguments (for example ~tNlb) still needs the calculator
+    return append_args + list(all_fingerprint_ingredients_append_args.get(ingredients, []))
 
 class FingerprintTestTaskResult(SimulationTestTaskResult):
     def __init__(self, expected_fingerprint=None, calculated_fingerprint=None, **kwargs):
