@@ -13,6 +13,17 @@ _logger = logging.getLogger(__name__)
 
 _correct_fingerprint_stores = dict()
 
+_entry_keys = ["working_directory", "ini_file", "config", "run_number", "sim_time_limit", "test_result", "ingredients", "fingerprint", "timestamp", "itervars"]
+
+def _get_entry_sort_key(entry):
+    # run_number is an int or an iteration-variable filter string, and sim_time_limit
+    # can be None, so neither may meet a value of another type in the comparison
+    run_number = entry["run_number"]
+    sim_time_limit = entry["sim_time_limit"]
+    return (entry["working_directory"], entry["ini_file"], entry["config"],
+            (0, run_number, "") if isinstance(run_number, int) else (1, 0, str(run_number)),
+            entry["ingredients"], (sim_time_limit is not None, sim_time_limit or ""))
+
 class FingerprintStore:
     def __init__(self, simulation_project, file_name):
         self.simulation_project = simulation_project
@@ -26,10 +37,11 @@ class FingerprintStore:
         file.close()
 
     def write(self):
-        self.get_entries().sort(key=lambda element: (element["working_directory"], element["ini_file"], element["config"], element["run_number"], element["ingredients"], element["sim_time_limit"]))
+        # a total sort order and a fixed key order: the same entries always give the same file
+        self.get_entries().sort(key=_get_entry_sort_key)
         _logger.info(f"Writing fingerprints to {self.file_name}")
         file = open(self.file_name, "w")
-        json.dump(self.entries, file, indent=True)
+        json.dump([{**{key: entry[key] for key in _entry_keys if key in entry}, **entry} for entry in self.entries], file, indent=True)
         file.close()
 
     def ensure(self):
@@ -73,7 +85,7 @@ class FingerprintStore:
             latest_entries = new_latest_entries
             if not found:
                 new_latest_entries.append(entry)
-        latest_entries.sort(key=lambda element: (element["working_directory"], element["ini_file"], element["config"], element["run_number"], element["ingredients"], element["sim_time_limit"]))
+        latest_entries.sort(key=_get_entry_sort_key)
         return latest_entries
     
     def find_entry(self, **kwargs):
@@ -108,7 +120,7 @@ class FingerprintStore:
     def set_fingerprint(self, fingerprint, **kwargs):
         self.get_entry(**kwargs)["fingerprint"] = fingerprint
 
-    def insert_fingerprint(self, fingerprint, ingredients="tplx", test_result=None, working_directory=os.getcwd(), ini_file="omnetpp.ini", config="General", run_number=0, sim_time_limit=None, itervars="$repetition==0"):
+    def insert_fingerprint(self, fingerprint, ingredients="tplx", test_result=None, working_directory=os.getcwd(), ini_file="omnetpp.ini", config="General", run_number=0, sim_time_limit=None, itervars="$repetition==0", timestamp=None):
         # assert test_result == "ERROR" or sim_time_limit is not None
         self.get_entries().append({"working_directory": working_directory,
                                    "ini_file": ini_file,
@@ -118,15 +130,19 @@ class FingerprintStore:
                                    "test_result": test_result,
                                    "ingredients": ingredients,
                                    "fingerprint": fingerprint,
-                                   "timestamp": time.time(),
+                                   "timestamp": time.time() if timestamp is None else timestamp,
                                    "itervars": itervars})
 
-    def update_fingerprint(self, fingerprint, **kwargs):
+    def update_fingerprint(self, fingerprint, timestamp=None, **kwargs):
         entry = self.find_entry(**kwargs)
         if entry:
-            entry["fingerprint"] = fingerprint
+            # the timestamp tells when the value last changed, so an unchanged value
+            # leaves the entry as it is
+            if entry["fingerprint"] != fingerprint:
+                entry["fingerprint"] = fingerprint
+                entry["timestamp"] = time.time() if timestamp is None else timestamp
         else:
-            self.insert_fingerprint(fingerprint, **kwargs)
+            self.insert_fingerprint(fingerprint, timestamp=timestamp, **kwargs)
 
     def remove_fingerprints(self, **kwargs):
         list(map(lambda element: self.entries.remove(element), self.filter_entries(**kwargs)))
