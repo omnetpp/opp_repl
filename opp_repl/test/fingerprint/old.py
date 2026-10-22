@@ -21,6 +21,15 @@ def update_correct_fingerprints_from_csv(csv_file, correct_fingerprints, filter=
         p = re.compile(" *#.*$")
         for line in csv_data:
             yield p.sub("",line.decode("utf-8"))
+    ini_sim_time_limits = None
+    def get_ini_sim_time_limit(working_directory, ini_file, config):
+        # an empty CSV limit means the limit of the config in its ini file; the store
+        # always names the limit, because the runner cannot run an entry without one
+        nonlocal ini_sim_time_limits
+        if ini_sim_time_limits is None:
+            simulation_configs = correct_fingerprints.simulation_project.get_simulation_configs(simulation_config_filter=lambda simulation_config: True)
+            ini_sim_time_limits = {(c.working_directory, c.ini_file, c.config): c.sim_time_limit for c in simulation_configs}
+        return ini_sim_time_limits.get((working_directory, ini_file, config))
     entries = []
     f = open(csv_file, "rb")
     csvReader = csv.reader(commentRemover(f), delimiter=str(","), quotechar=str("'"), skipinitialspace=True)
@@ -43,28 +52,17 @@ def update_correct_fingerprints_from_csv(csv_file, correct_fingerprints, filter=
                 if working_directory[-1] == '/':
                     working_directory = working_directory[:-1]
                 _logger.info("Updating correct fingerprint: " + working_directory + " -f " + args.ini_file + " -c " + args.config + " -r " + args.run)
+                # -r may be a run number OR an iteration-variable run filter,
+                # e.g. "$datarate==10Mbps && ... && $repetition==0" (parameter
+                # studies). Keep the filter verbatim so it can be passed to
+                # opp_run -r; only plain integers become an int run_number.
+                run_spec = args.run.strip()
+                run_number = int(run_spec) if re.fullmatch(r"-?\d+", run_spec) else run_spec
+                sim_time_limit = fields[2].strip() or get_ini_sim_time_limit(working_directory, args.ini_file, args.config)
+                if sim_time_limit is None:
+                    _logger.warn(csv_file + " Line " + str(csvReader.line_num) + ": no sim-time-limit in the row or in the ini file")
                 for fingerprint in fingerprints:
                     try:
-                        sim_time_limit = fields[2]
-                        if args.ini_file == "ethernet-bus-reconnect.ini":
-                            sim_time_limit = "5.2s"
-                        elif args.ini_file == "ethernet-hub-reconnect.ini":
-                            sim_time_limit = "5.2s"
-                        elif args.ini_file == "ethernet-hub.ini":
-                            sim_time_limit = "100s"
-                        elif args.ini_file == "ethernet-switch.ini":
-                            sim_time_limit = "10s"
-                        elif args.ini_file == "ethernet-twohosts.ini":
-                            sim_time_limit = "1000s"
-                        # -r may be a run number OR an iteration-variable run filter,
-                        # e.g. "$datarate==10Mbps && ... && $repetition==0" (parameter
-                        # studies). Keep the filter verbatim so it can be passed to
-                        # opp_run -r; only plain integers become an int run_number.
-                        run_spec = args.run.strip()
-                        run_number = int(run_spec) if re.fullmatch(r"-?\d+", run_spec) else run_spec
-                        # an empty CSV limit means "no explicit sim-time-limit" -> store
-                        # None so the runner falls back to the config's omnetpp.ini value
-                        sim_time_limit = sim_time_limit.strip() or None if isinstance(sim_time_limit, str) else sim_time_limit
                         correct_fingerprints.update_fingerprint(fingerprint.fingerprint,
                                                                 working_directory=working_directory,
                                                                 ini_file=args.ini_file,
