@@ -43,6 +43,8 @@ def parse_run_tasks_arguments(task_name, extra_args_fn=None):
     parser.add_argument("--exclude-config-filter", default=None, help="exclude simulations with config names matching this regular expression")
     parser.add_argument("-r", "--run-number-filter", default=None, help="only include the specified run numbers (e.g. 0, 0..3, 0,2,4)")
     parser.add_argument("--exclude-run-number-filter", default=None, help="exclude the specified run numbers")
+    parser.add_argument("--split-count", type=int, default=None, help="divide the tasks into this many slices and run only one of them, for example to spread a long test over several CI machines; use with --split-index")
+    parser.add_argument("--split-index", type=int, default=None, help="the slice to run, from 0 to --split-count minus 1; the slice holds every N-th task from this index")
     parser.add_argument("--scheduler", choices=["process", "thread", "cluster"], default="thread", help="how to run concurrent tasks: thread (default), process, or cluster for distributed execution")
     parser.add_argument("--simulation-runner", choices=["subprocess", "inprocess"], default="subprocess", help="how to run each simulation: subprocess (default) or inprocess for running within the Python process")
     parser.add_argument("--hosts", default="localhost", help="comma-separated list of hostnames for cluster execution (default: localhost)")

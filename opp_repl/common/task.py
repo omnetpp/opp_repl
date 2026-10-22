@@ -774,17 +774,36 @@ class MultipleTasks:
         for task in self.tasks:
             task.log_structure(indent=indent + 1)
 
-    def run(self, context=None, progress=None, index=0, count=1, **kwargs):
+    def run(self, context=None, progress=None, index=0, count=1, split_count=None, split_index=None, **kwargs):
         self.run_kwargs = kwargs
         """
         Runs all tasks sequentially or concurrently.
 
         Parameters:
+            split_count (integer or None):
+                Run only one slice of the tasks: the tasks are divided into this many slices.
+
+            split_index (integer or None):
+                The slice to run, from 0 to split_count - 1. The slice holds every split_count-th task from this
+                index, so that the slow tasks spread over the slices.
+
             kwargs (dict): Additional  parameters are inherited from :py:meth:`Task.run`.
 
         Returns (:py:class:`MultipleTaskResults`):
             The task results.
         """
+        if split_count is not None:
+            if split_index is None or not 0 <= split_index < split_count:
+                raise ValueError(f"split_index must be between 0 and {split_count - 1}, but it is {split_index}")
+            # Only this outermost list is split: the split arguments are not passed on to
+            # the tasks, so a nested task list runs completely. MultipleTasks.run is called
+            # directly, because an override in a subclass already runs around this call.
+            all_tasks = self.tasks
+            self.tasks = all_tasks[split_index::split_count]
+            try:
+                return MultipleTasks.run(self, context=context, progress=progress, index=index, count=count, **kwargs)
+            finally:
+                self.tasks = all_tasks
         if self.is_up_to_date():
             return self.multiple_task_results_class(multiple_tasks=self, results=[], expected_result="SKIP", reason="Up-to-date")
         def run_internal(context=None, progress=None, output_stream=sys.stdout, **kwargs):

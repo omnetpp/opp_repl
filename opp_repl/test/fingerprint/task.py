@@ -356,9 +356,9 @@ def get_stored_simulation_tasks(multiple_simulation_tasks, correct_fingerprint_s
     for simulation_task in multiple_simulation_tasks.tasks:
         simulation_config = simulation_task.simulation_config
         template_by_config.setdefault((simulation_config.working_directory, simulation_config.ini_file, simulation_config.config), simulation_task)
-    for working_directory, ini_file, config, run in stored_keys:
-        if not isinstance(run, str):
-            continue
+    # sorted, because the order of a set changes between processes, and a split of
+    # the task list must give the same slices in each process
+    for working_directory, ini_file, config, run in sorted((key for key in stored_keys if isinstance(key[3], str))):
         template = template_by_config.get((working_directory, ini_file, config))
         if template is not None:
             simulation_tasks.append(copy_simulation_task(template, run_number=run, sim_time_limit=None))
