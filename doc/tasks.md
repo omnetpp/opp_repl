@@ -218,6 +218,13 @@ controlled:
 - `randomize=True` — shuffles execution order.
 - `build=True` — builds the project before the first task (enabled by
   default).
+- `split_count` and `split_index` (arguments of `run()`, and
+  `--split-count` and `--split-index` of every `opp_run_*` command) — run
+  only one slice of the tasks.  The slice holds every `split_count`-th
+  task from `split_index`, so the slow tasks spread over the slices.  A CI
+  matrix uses this to divide a long test over several machines.  Only the
+  outermost task list is split: a nested list, such as the ingredients of
+  one fingerprint simulation, runs completely.
 
 Pressing **Ctrl-C** during execution cancels the remaining tasks; results
 collected so far are still available in the returned object.
