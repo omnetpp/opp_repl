@@ -220,15 +220,17 @@ class FingerprintTrajectoryTestTaskResult(TestTaskResult):
 def get_calculated_fingerprint(simulation_result, ingredients):
     stdout = simulation_result.subprocess_result.stdout
     stderr = simulation_result.subprocess_result.stderr
-    match = re.search(r"Fingerprint successfully verified:.*? ([0-9a-f]{4}-[0-9a-f]{4})/" + ingredients, stdout)
+    # the whole ingredient string: ~tNl must not match the value of ~tNlb in the same run
+    ingredients_pattern = re.escape(ingredients) + r"(?![\w~])"
+    match = re.search(r"Fingerprint successfully verified:.*? ([0-9a-f]{4}-[0-9a-f]{4})/" + ingredients_pattern, stdout)
     if match:
         value = match.groups()[0]
     else:
-        match = re.search(r"Fingerprint mismatch! calculated:.*? ([0-9a-f]{4}-[0-9a-f]{4})/" + ingredients + ".*expected", stdout)
+        match = re.search(r"Fingerprint mismatch! calculated:.*? ([0-9a-f]{4}-[0-9a-f]{4})/" + ingredients_pattern + ".*expected", stdout)
         if match:
             value = match.groups()[0]
         else:
-            match = re.search(r"Fingerprint mismatch! calculated:.*? ([0-9a-f]{4}-[0-9a-f]{4})/" + ingredients + ".*expected", stderr)
+            match = re.search(r"Fingerprint mismatch! calculated:.*? ([0-9a-f]{4}-[0-9a-f]{4})/" + ingredients_pattern + ".*expected", stderr)
             if match:
                 value = match.groups()[0]
             else:
@@ -328,6 +330,40 @@ def collect_fingerprint_test_groups(simulation_task, ingredients_list=None, sim_
     grouped_fingerprint_test_tasks = [list(it) for k, it in itertools.groupby(sorted_fingerprint_test_tasks, get_sim_time_limit)]
     return list(map(get_fingerprint_test_group_task, grouped_fingerprint_test_tasks))
 
+def copy_simulation_task(simulation_task, **kwargs):
+    return SimulationTask(**{**dict(simulation_config=simulation_task.simulation_config, run_number=simulation_task.run_number,
+                                    mode=simulation_task.mode, build=simulation_task.build, debug=simulation_task.debug,
+                                    sim_time_limit=simulation_task.sim_time_limit, cpu_time_limit=simulation_task.cpu_time_limit,
+                                    user_interface=simulation_task.user_interface), **kwargs})
+
+def get_stored_simulation_tasks(multiple_simulation_tasks, correct_fingerprint_store):
+    """
+    Returns the simulation tasks of the runs that have a stored fingerprint: the tasks of multiple_simulation_tasks
+    whose ``(working_directory, ini_file, config, run_number)`` is in the store, and one task for each stored
+    iteration-variable run filter of a config in multiple_simulation_tasks.
+    """
+    stored_keys = {(entry["working_directory"], entry["ini_file"], entry["config"], entry["run_number"])
+                   for entry in correct_fingerprint_store.get_entries()}
+    simulation_tasks = [simulation_task for simulation_task in multiple_simulation_tasks.tasks
+                        if (simulation_task.simulation_config.working_directory, simulation_task.simulation_config.ini_file,
+                            simulation_task.simulation_config.config, simulation_task.run_number) in stored_keys]
+    # Iteration-variable run filters (string run_number, e.g. "$datarate==... &&
+    # $repetition==0" parameter studies) are not enumerated by get_simulation_tasks
+    # (which only produces integer runs), so build a task for each straight from
+    # the store: clone an enumerated task of the same config and pass the filter
+    # through as the run spec (SimulationTask emits it as opp_run -r '<filter>').
+    template_by_config = {}
+    for simulation_task in multiple_simulation_tasks.tasks:
+        simulation_config = simulation_task.simulation_config
+        template_by_config.setdefault((simulation_config.working_directory, simulation_config.ini_file, simulation_config.config), simulation_task)
+    for working_directory, ini_file, config, run in stored_keys:
+        if not isinstance(run, str):
+            continue
+        template = template_by_config.get((working_directory, ini_file, config))
+        if template is not None:
+            simulation_tasks.append(copy_simulation_task(template, run_number=run, sim_time_limit=None))
+    return simulation_tasks
+
 def get_fingerprint_test_tasks(stored_only=False, **kwargs):
     """
     Returns multiple fingerprint test tasks matching the provided filter criteria. The returned tasks can be run by
@@ -355,28 +391,7 @@ def get_fingerprint_test_tasks(stored_only=False, **kwargs):
         simulation_tasks = multiple_simulation_tasks.tasks
         if stored_only:
             baseline_project = kwargs.get("baseline_simulation_project") or multiple_simulation_tasks.simulation_project
-            stored_keys = {(entry["working_directory"], entry["ini_file"], entry["config"], entry["run_number"])
-                           for entry in get_correct_fingerprint_store(baseline_project).get_entries()}
-            simulation_tasks = [simulation_task for simulation_task in simulation_tasks
-                                if (simulation_task.simulation_config.working_directory, simulation_task.simulation_config.ini_file,
-                                    simulation_task.simulation_config.config, simulation_task.run_number) in stored_keys]
-            # Iteration-variable run filters (string run_number, e.g. "$datarate==... &&
-            # $repetition==0" parameter studies) are not enumerated by get_simulation_tasks
-            # (which only produces integer runs), so build a task for each straight from
-            # the store: clone an enumerated task of the same config and pass the filter
-            # through as the run spec (SimulationTask emits it as opp_run -r '<filter>').
-            template_by_config = {}
-            for simulation_task in multiple_simulation_tasks.tasks:
-                simulation_config = simulation_task.simulation_config
-                template_by_config.setdefault((simulation_config.working_directory, simulation_config.ini_file, simulation_config.config), simulation_task)
-            for working_directory, ini_file, config, run in stored_keys:
-                if not isinstance(run, str):
-                    continue
-                template = template_by_config.get((working_directory, ini_file, config))
-                if template is not None:
-                    simulation_tasks.append(SimulationTask(simulation_config=template.simulation_config, run_number=run,
-                                                           mode=template.mode, build=template.build, debug=template.debug,
-                                                           cpu_time_limit=template.cpu_time_limit, user_interface=template.user_interface))
+            simulation_tasks = get_stored_simulation_tasks(multiple_simulation_tasks, get_correct_fingerprint_store(baseline_project))
         fingerprint_test_groups = []
         for simulation_task in simulation_tasks:
             fingerprint_test_groups += collect_fingerprint_test_groups(simulation_task, stored_only=stored_only, **dict(kwargs, pass_keyboard_interrupt=True))
@@ -446,34 +461,39 @@ def insert_missing_correct_fingerprints(source_ingredients, target_ingredients, 
                 correct_fingerprint_store.insert_fingerprint("0000-0000/" + target_ingredients, ingredients=target_ingredients, working_directory=working_directory, ini_file=ini_file, config=config, run_number=run_number, sim_time_limit=sim_time_limit, test_result=source_entry["test_result"])
 
 class FingerprintUpdateTask(SimulationUpdateTask):
-    def __init__(self, action="Updating fingerprint", **kwargs):
+    """
+    Records the fingerprints of one run at one sim_time_limit with one simulation: the simulation_task carries the
+    run and the limit, and ingredients_list names the ingredients to record.
+    """
+    def __init__(self, ingredients_list=["tplx"], expected_error=False, action="Updating fingerprint", **kwargs):
         super().__init__(action=action, **kwargs)
         self.locals = locals()
         self.locals.pop("self")
         self.kwargs = kwargs
+        self.ingredients_list = ingredients_list
+        self.expected_error = expected_error
 
-    def run_protected(self, ingredients="tplx", sim_time_limit=None, output_stream=sys.stdout, **kwargs):
+    def get_stored_fingerprint_entry(self, ingredients):
         simulation_config = self.simulation_task.simulation_config
         correct_fingerprint_store = get_correct_fingerprint_store(simulation_config.simulation_project)
-        # Pin sim_time_limit to the value the simulation will actually run with;
-        # otherwise filter_entries matches every stored sim_time_limit for this
-        # config and the KEEP/UPDATE classification collapses to INSERT.
-        if sim_time_limit is None:
-            sim_time_limit = self.simulation_task.sim_time_limit
-        stored_fingerprint_entries = correct_fingerprint_store.filter_entries(ingredients=ingredients, sim_time_limit=sim_time_limit,
-                                                                              working_directory=simulation_config.working_directory, ini_file=simulation_config.ini_file, config=simulation_config.config, run_number=self.simulation_task.run_number)
-        if len(stored_fingerprint_entries) == 1:
-            stored_fingerprint_entry = stored_fingerprint_entries[0]
-            correct_fingerprint = Fingerprint(stored_fingerprint_entry["fingerprint"], stored_fingerprint_entry["ingredients"])
-        else:
-            correct_fingerprint = None
-        fingerprint_arg = "0000-0000/" + ingredients
-        append_args = ["--fingerprint", fingerprint_arg, "--vector-recording", "false", "--scalar-recording", "false"] + get_ingredients_append_args(ingredients)
-        if sim_time_limit is not None:
-            self.simulation_task.sim_time_limit = sim_time_limit
-        simulation_task_result = self.simulation_task.run_protected(sim_time_limit=sim_time_limit, output_stream=output_stream, append_args=append_args, **kwargs)
-        calculated_fingerprint = get_calculated_fingerprint(simulation_task_result, ingredients)
-        return FingerprintUpdateTaskResult(task=self, simulation_task_result=simulation_task_result, correct_fingerprint=correct_fingerprint, calculated_fingerprint=calculated_fingerprint)
+        return correct_fingerprint_store.find_entry(ingredients=ingredients, sim_time_limit=self.simulation_task.sim_time_limit,
+                                                    working_directory=simulation_config.working_directory, ini_file=simulation_config.ini_file, config=simulation_config.config, run_number=self.simulation_task.run_number)
+
+    def run_protected(self, append_args=[], output_stream=sys.stdout, **kwargs):
+        expected_result = "ERROR" if self.expected_error else "KEEP"
+        if self.simulation_task.sim_time_limit is None:
+            return FingerprintUpdateTaskResult(task=self, result="ERROR", expected_result=expected_result, reason="No sim-time-limit in the fingerprint store or in the ini file")
+        fingerprint_arg = ",".join(map(lambda ingredients: "0000-0000/" + ingredients, self.ingredients_list))
+        ingredients_append_args = set()
+        for ingredients in self.ingredients_list:
+            ingredients_append_args = ingredients_append_args.union(get_ingredients_append_args(ingredients))
+        fingerprint_append_args = ["--fingerprint", fingerprint_arg, "--vector-recording", "false", "--scalar-recording", "false"] + sorted(ingredients_append_args)
+        simulation_task_result = self.simulation_task.run_protected(output_stream=output_stream, append_args=fingerprint_append_args + append_args, **kwargs)
+        ingredient_updates = []
+        for ingredients in self.ingredients_list:
+            stored_fingerprint_entry = self.get_stored_fingerprint_entry(ingredients)
+            ingredient_updates.append((ingredients, stored_fingerprint_entry, get_calculated_fingerprint(simulation_task_result, ingredients)))
+        return FingerprintUpdateTaskResult(task=self, simulation_task_result=simulation_task_result, ingredient_updates=ingredient_updates, expected_result=expected_result)
 
 class MultipleFingerprintUpdateTasks(MultipleSimulationUpdateTasks):
     def __init__(self, multiple_simulation_tasks=None, name="update fingerprint", **kwargs):
@@ -497,48 +517,56 @@ class MultipleFingerprintUpdateTasks(MultipleSimulationUpdateTasks):
         simulation_project = self.simulation_project or self.multiple_simulation_tasks.simulation_project
         correct_fingerprint_store = get_correct_fingerprint_store(simulation_project)
         for fingerprint_update_result in multiple_fingerprint_update_results.results:
-            # Skipped tasks and exception-wrapped results (plain SimulationUpdateTaskResult
-            # from the generic ERROR path) have no calculated fingerprint to store.
-            calculated_fingerprint = getattr(fingerprint_update_result, "calculated_fingerprint", None)
-            if calculated_fingerprint is not None:
-                fingerprint_update_task = fingerprint_update_result.task
-                simulation_task = fingerprint_update_task.simulation_task
+            # An ERROR result changes nothing. Skipped tasks and exception-wrapped results
+            # (plain SimulationUpdateTaskResult from the generic ERROR path) have no updates.
+            if fingerprint_update_result.result == "ERROR":
+                continue
+            for ingredients, _, calculated_fingerprint in getattr(fingerprint_update_result, "ingredient_updates", []):
+                # look the entry up by its key: a result from another process carries a copy
+                simulation_task = fingerprint_update_result.task.simulation_task
                 simulation_config = simulation_task.simulation_config
-                correct_fingerprint_store.update_fingerprint(calculated_fingerprint.fingerprint, ingredients=calculated_fingerprint.ingredients, test_result="PASS", sim_time_limit=simulation_task.sim_time_limit,
-                                                             working_directory=simulation_config.working_directory, ini_file=simulation_config.ini_file, config=simulation_config.config, run_number=simulation_task.run_number)
+                key = dict(ingredients=ingredients, sim_time_limit=simulation_task.sim_time_limit, working_directory=simulation_config.working_directory,
+                           ini_file=simulation_config.ini_file, config=simulation_config.config, run_number=simulation_task.run_number)
+                stored_fingerprint_entry = correct_fingerprint_store.find_entry(**key)
+                if stored_fingerprint_entry is None:
+                    correct_fingerprint_store.insert_fingerprint(calculated_fingerprint.fingerprint, test_result="PASS", **key)
+                else:
+                    # the simulation finished, so an entry that expected another result now expects PASS
+                    stored_fingerprint_entry["test_result"] = "PASS"
+                    correct_fingerprint_store.update_fingerprint(calculated_fingerprint.fingerprint, **key)
         correct_fingerprint_store.write()
         return multiple_fingerprint_update_results
 
 class FingerprintUpdateTaskResult(SimulationUpdateTaskResult):
-    def __init__(self, correct_fingerprint=None, calculated_fingerprint=None, reason=None, **kwargs):
-        super().__init__(**kwargs)
+    """
+    The result of one FingerprintUpdateTask. ingredient_updates holds an (ingredients, stored entry or None,
+    calculated Fingerprint or None) tuple for each recorded ingredient. The result is ERROR if a value was not
+    calculated, else UPDATE if a stored value or expected result changes, else INSERT if a value is new, else KEEP.
+    """
+    def __init__(self, ingredient_updates=[], result=None, reason=None, **kwargs):
+        if result is None:
+            if not ingredient_updates or any(calculated_fingerprint is None for _, _, calculated_fingerprint in ingredient_updates):
+                result = "ERROR"
+                reason = reason or "Calculated fingerprint not found"
+            elif any(entry is not None and (entry["fingerprint"] != calculated_fingerprint.fingerprint or entry["test_result"] != "PASS") for _, entry, calculated_fingerprint in ingredient_updates):
+                result = "UPDATE"
+            elif any(entry is None for _, entry, _ in ingredient_updates):
+                result = "INSERT"
+            else:
+                result = "KEEP"
+        super().__init__(result=result, reason=reason, **kwargs)
         self.locals = locals()
         self.locals.pop("self")
         self.kwargs = kwargs
-        self.calculated_fingerprint = calculated_fingerprint
-        if calculated_fingerprint is None:
-            self.result = "ERROR"
-            self.reason = reason or "Calculated fingerprint not found"
-            self.color = COLOR_RED
-        elif correct_fingerprint is None:
-            self.result = "INSERT"
-            self.reason = None
-            self.color = COLOR_YELLOW
-        elif calculated_fingerprint != correct_fingerprint:
-            self.result = "UPDATE" if calculated_fingerprint else "ERROR"
-            self.reason = None
-            self.color = COLOR_YELLOW
-        else:
-            self.result = "KEEP"
-            self.reason = None
-            self.color = COLOR_GREEN
-        self.expected = self.result == self.expected_result
+        self.ingredient_updates = ingredient_updates
 
     def get_description(self, complete_error_message=True, include_parameters=False, **kwargs):
-        return (self.task.simulation_task.get_parameters_string() + " " if include_parameters else "") + \
-               self.color + self.result + COLOR_RESET + " " + str(self.calculated_fingerprint) + \
-               ((" " + self.simulation_task_result.get_error_message(complete_error_message=complete_error_message)) if self.simulation_task_result and self.simulation_task_result.result == "ERROR" else "") + \
-               (" (" + self.reason + ")" if self.reason else "")
+        changes = []
+        for ingredients, entry, calculated_fingerprint in self.ingredient_updates:
+            if calculated_fingerprint is not None and (entry is None or entry["fingerprint"] != calculated_fingerprint.fingerprint):
+                changes.append(str(calculated_fingerprint) + ("" if entry is None else " (was " + entry["fingerprint"] + ")"))
+        return super().get_description(complete_error_message=complete_error_message, include_parameters=include_parameters, **kwargs) + \
+               ("" if not changes else " " + ", ".join(changes))
 
     def __repr__(self):
         return "Fingerprint update result: " + self.get_description(include_parameters=True)
@@ -609,12 +637,25 @@ class MultipleFingerprintUpdateTaskResults(MultipleUpdateTaskResults):
             texts.append(simulation_result.get_description(**kwargs))
         return "  " + separator.join(texts)
 
-def get_update_correct_fingerprint_tasks(**kwargs):
+def get_update_correct_fingerprint_tasks(ingredients_list=None, sim_time_limit=None, stored_only=False, **kwargs):
     """
     Returns multiple fingerprint update tasks matching the provided filter criteria. The returned tasks can be run by
-    calling the :py:meth:`run <opp_repl.common.task.MultipleTasks.run>` method.
+    calling the :py:meth:`run <opp_repl.common.task.MultipleTasks.run>` method. Each task records the ingredients
+    of one run at one sim_time_limit with one simulation.
 
     Parameters:
+        ingredients_list (List of string or None):
+            The ingredients to record. None means every known ingredient.
+
+        sim_time_limit (string or None):
+            Record at this limit only. None means the stored limits of each run, or the limit of the ini file for
+            a run without a stored fingerprint.
+
+        stored_only (bool):
+            When True, record only what the store holds: each stored run (iteration-variable run filters too) at
+            each of its stored limits, for the ingredients that the store holds at that limit. When False, record
+            every ingredient for every selected run, and insert the values that the store does not hold yet.
+
         kwargs (dict):
             The filter criteria parameters are inherited from the :py:meth:`get_simulation_tasks <opp_repl.simulation.task.get_simulation_tasks>` method.
 
@@ -623,11 +664,30 @@ def get_update_correct_fingerprint_tasks(**kwargs):
         The result can be run (and re-run) without providing additional parameters.
     """
     kwargs.setdefault("mode", "debug")
-    fingerprint_update_tasks = []
+    if ingredients_list is None:
+        ingredients_list = all_fingerprint_ingredients
     multiple_simulation_tasks = get_simulation_tasks(**kwargs)
-    for simulation_task in multiple_simulation_tasks.tasks:
-        fingerprint_update_task = FingerprintUpdateTask(simulation_task=simulation_task, **kwargs)
-        fingerprint_update_tasks.append(fingerprint_update_task)
+    correct_fingerprint_store = get_correct_fingerprint_store(multiple_simulation_tasks.simulation_project)
+    simulation_tasks = get_stored_simulation_tasks(multiple_simulation_tasks, correct_fingerprint_store) if stored_only else multiple_simulation_tasks.tasks
+    fingerprint_update_tasks = []
+    for simulation_task in simulation_tasks:
+        simulation_config = simulation_task.simulation_config
+        entries = [entry for entry in correct_fingerprint_store.filter_entries(ingredients=None, working_directory=simulation_config.working_directory, ini_file=simulation_config.ini_file,
+                                                                               config=simulation_config.config, run_number=simulation_task.run_number)
+                   if entry["ingredients"] in ingredients_list]
+        if sim_time_limit is not None:
+            sim_time_limits = [sim_time_limit]
+        elif entries:
+            sim_time_limits = sorted({entry["sim_time_limit"] for entry in entries}, key=lambda limit: (limit is not None, limit or ""))
+        else:
+            sim_time_limits = [simulation_task.sim_time_limit]
+        for task_sim_time_limit in sim_time_limits:
+            limit_entries = [entry for entry in entries if entry["sim_time_limit"] == task_sim_time_limit]
+            task_ingredients_list = [ingredients for ingredients in ingredients_list if not stored_only or any(entry["ingredients"] == ingredients for entry in limit_entries)]
+            if task_ingredients_list:
+                expected_error = bool(limit_entries) and all(entry["test_result"] == "ERROR" for entry in limit_entries)
+                fingerprint_update_tasks.append(FingerprintUpdateTask(simulation_task=copy_simulation_task(simulation_task, sim_time_limit=task_sim_time_limit),
+                                                                      ingredients_list=task_ingredients_list, expected_error=expected_error))
     return MultipleFingerprintUpdateTasks(multiple_simulation_tasks, tasks=fingerprint_update_tasks, **kwargs)
 get_update_correct_fingerprint_tasks.__signature__ = combine_signatures(get_update_correct_fingerprint_tasks, get_simulation_tasks)
 
@@ -643,6 +703,7 @@ def update_fingerprint_test_results(**kwargs):
     Returns (:py:class:`MultipleFingerprintUpdateTaskResults`):
         an object that contains a list of :py:class:`FingerprintUpdateTaskResult` objects. Each object describes the result of running one update task.
     """
+    kwargs = apply_project_test_defaults("fingerprint", kwargs)
     multiple_fingerprint_update_tasks = get_update_correct_fingerprint_tasks(**kwargs)
     return multiple_fingerprint_update_tasks.run(**kwargs)
 update_fingerprint_test_results.__signature__ = combine_signatures(update_fingerprint_test_results, get_update_correct_fingerprint_tasks)
