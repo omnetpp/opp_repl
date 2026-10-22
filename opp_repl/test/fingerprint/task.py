@@ -107,7 +107,7 @@ class FingerprintTestTask(SimulationTestTask):
         hasher.update(self.ingredients.encode("utf-8"))
         return hasher.digest()
 
-    def run(self, test_result_filter=None, exclude_test_result_filter="SKIP", output_stream=sys.stdout, **kwargs):
+    def run(self, test_result_filter=None, exclude_test_result_filter="SKIP", append_args=[], output_stream=sys.stdout, **kwargs):
         if self.fingerprint and self.sim_time_limit is None:
             # a stored fingerprint without its limit cannot be reproduced: report the
             # store defect instead of running an unbounded simulation or dropping it
@@ -116,7 +116,7 @@ class FingerprintTestTask(SimulationTestTask):
             return FingerprintTestTaskResult(task=self, result="ERROR", expected_result="PASS", reason="No sim-time-limit in the fingerprint store")
         elif self.fingerprint and matches_filter(self.test_result, test_result_filter, exclude_test_result_filter, True):
             simulation_project = self.simulation_task.simulation_config.simulation_project
-            return super().run(append_args=self.get_append_args(simulation_project, str(self.fingerprint)) + get_ingredients_append_args(self.ingredients), output_stream=output_stream, **kwargs)
+            return super().run(append_args=self.get_append_args(simulation_project, str(self.fingerprint)) + get_ingredients_append_args(self.ingredients) + append_args, output_stream=output_stream, **kwargs)
         else:
             if matches_filter("SKIP", test_result_filter, exclude_test_result_filter, True):
                 print("Running " + self.simulation_task.get_parameters_string(**kwargs), end=" ", file=output_stream)
@@ -172,12 +172,12 @@ class FingerprintTestGroupTask(MultipleTestTasks):
         checked = [t for t in self.tasks if t.fingerprint]
         return sum(t.count_progress_steps() for t in skipped) + (checked[0].count_progress_steps() if checked else 0)
 
-    def run(self, output_stream=sys.stdout, sim_time_limit=None, **kwargs):
+    def run(self, output_stream=sys.stdout, sim_time_limit=None, append_args=[], **kwargs):
         if len(self.tasks) == 1:
-            return self.tasks[0].run(output_stream=output_stream, **kwargs)
+            return self.tasks[0].run(output_stream=output_stream, append_args=append_args, **kwargs)
         elif self.sim_time_limit is None:
             # each task reports the absent limit itself, see FingerprintTestTask.run
-            return MultipleTestTaskResults(self, [task.run(output_stream=output_stream, **kwargs) for task in self.tasks])
+            return MultipleTestTaskResults(self, [task.run(output_stream=output_stream, append_args=append_args, **kwargs) for task in self.tasks])
         else:
             fingerprint_test_results = []
             skipped_fingerprint_test_tasks = list(filter(lambda fingerprint_test_task: fingerprint_test_task.fingerprint is None, self.tasks))
@@ -188,11 +188,11 @@ class FingerprintTestGroupTask(MultipleTestTasks):
                 simulation_task = checked_fingerprint_test_tasks[0].simulation_task
                 simulation_project = simulation_task.simulation_config.simulation_project
                 fingerprint_arg = ",".join(map(lambda e: str(e.fingerprint), checked_fingerprint_test_tasks))
-                append_args = checked_fingerprint_test_tasks[0].get_append_args(simulation_project, fingerprint_arg)
+                fingerprint_append_args = checked_fingerprint_test_tasks[0].get_append_args(simulation_project, fingerprint_arg)
                 ingredients_append_args = set()
                 for checked_fingerprint_test_task in checked_fingerprint_test_tasks:
                     ingredients_append_args = ingredients_append_args.union(get_ingredients_append_args(checked_fingerprint_test_task.ingredients))
-                simulation_result = simulation_task.run(print_end=" ", sim_time_limit=sim_time_limit or self.sim_time_limit, output_stream=output_stream, append_args=append_args + list(ingredients_append_args), **kwargs)
+                simulation_result = simulation_task.run(print_end=" ", sim_time_limit=sim_time_limit or self.sim_time_limit, output_stream=output_stream, append_args=fingerprint_append_args + list(ingredients_append_args) + append_args, **kwargs)
                 fingerprint_test_group_results = check_fingerprint_test_group(simulation_result, self, **kwargs)
                 fingerprint_test_results += fingerprint_test_group_results.results
             return MultipleTestTaskResults(self, fingerprint_test_results)

@@ -94,9 +94,9 @@ def process_run_tasks_arguments(args):
         kwargs["cluster"] = cluster
     return kwargs
 
-def run_tasks_main(main_function, task_name):
+def run_tasks_main(main_function, task_name, extra_args_fn=None):
     try:
-        args = parse_run_tasks_arguments(task_name)
+        args = parse_run_tasks_arguments(task_name, extra_args_fn=extra_args_fn)
         initialize_logging(args.log_level, args.external_command_log_level, args.log_file)
         _logger.debug(f"Processing command line arguments: {args}")
         kwargs = process_run_tasks_arguments(args)
@@ -125,8 +125,14 @@ def run_simulations_main():
 def run_smoke_tests_main():
     run_tasks_main(run_smoke_tests, "smoke tests")
 
+def _fingerprint_extra_args(parser):
+    parser.add_argument("--ingredients", action="append", dest="ingredients_list", default=None, metavar="INGREDIENTS", help="the fingerprint ingredients to use, for example tplx or ~tND; can be specified multiple times (default: the project's ingredients, else all known ones)")
+    parser.add_argument("--stored-only", action="store_true", default=None, help="use only the runs that have a stored fingerprint (the default of most projects)")
+    parser.add_argument("--no-stored-only", dest="stored_only", action="store_false", help="use every selected run; an update inserts the fingerprints that the store does not hold")
+    parser.add_argument("--append-args", nargs=argparse.REMAINDER, default=None, metavar="ARGS", help="pass all following arguments to opp_run, for example --append-args --fingerprint-modules='**.host[0].**'; must be the last option")
+
 def run_fingerprint_tests_main():
-    run_tasks_main(run_fingerprint_tests, "fingerprint tests")
+    run_tasks_main(run_fingerprint_tests, "fingerprint tests", extra_args_fn=_fingerprint_extra_args)
 
 def run_chart_tests_main():
     run_tasks_main(run_chart_tests, "chart tests")
@@ -174,7 +180,7 @@ def run_release_tests_main():
     run_tasks_main(run_release_tests, "release tests")
 
 def update_fingerprint_test_results_main():
-    run_tasks_main(update_fingerprint_test_results, "update fingerprint test results")
+    run_tasks_main(update_fingerprint_test_results, "update fingerprint test results", extra_args_fn=_fingerprint_extra_args)
 
 def update_chart_test_results_main():
     run_tasks_main(update_chart_test_results, "update chart test results")
