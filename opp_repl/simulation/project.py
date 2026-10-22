@@ -957,7 +957,9 @@ class SimulationProject:
             set_first(config_dict, line, "emulation", r"(\w+)", bool, allow_comment=True)
             set_first(config_dict, line, "expected_result", r"\"(\w+)\"", allow_comment=True)
             set_first(config_dict, line, "bounded", r"(\w+)", lambda s: s.lower() == "true", allow_comment=True)
-            line = re.sub(r"(.*)#.*", "//1", line).strip()
+            # remove the comment, but not a '#' inside a quoted value: an even number of
+            # quotes follows a '#' that starts a comment
+            line = re.sub(r'#(?=(?:[^"]*"[^"]*")*[^"]*$).*', "", line).strip()
             set_first(config_dict, line, "extends", r"(\w+)")
             set_first(config_dict, line, "user_interface", r"\"*(\w+)\"")
             set_first(config_dict, line, "description", r"\"(.*)\"")
