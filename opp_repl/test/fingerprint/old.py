@@ -16,7 +16,7 @@ __sphinx_mock__ = True # ignore this module in documentation
 
 _logger = logging.getLogger(__name__)
 
-def update_correct_fingerprints_from_csv(csv_file, correct_fingerprints, filter=None, exclude_filter=None, full_match=False):
+def update_correct_fingerprints_from_csv(csv_file, correct_fingerprints, filter=None, exclude_filter=None, full_match=False, timestamp=None):
     def commentRemover(csv_data):
         p = re.compile(" *#.*$")
         for line in csv_data:
@@ -64,6 +64,7 @@ def update_correct_fingerprints_from_csv(csv_file, correct_fingerprints, filter=
                 for fingerprint in fingerprints:
                     try:
                         correct_fingerprints.update_fingerprint(fingerprint.fingerprint,
+                                                                timestamp=timestamp,
                                                                 working_directory=working_directory,
                                                                 ini_file=args.ini_file,
                                                                 config=args.config,
@@ -82,6 +83,7 @@ def update_correct_fingerprints_from_csv(csv_file, correct_fingerprints, filter=
 
 def update_correct_fingerprints_from_csvs(simulation_project, **kwargs):
     correct_fingerprints = get_correct_fingerprint_store(simulation_project)
-    for csv_file in glob.glob(simulation_project.get_full_path("tests/fingerprint/*.csv"), recursive=True):
+    # a fixed file order and a fixed timestamp: the same CSV files give the same store
+    for csv_file in sorted(glob.glob(simulation_project.get_full_path("tests/fingerprint/*.csv"), recursive=True)):
         update_correct_fingerprints_from_csv(csv_file, correct_fingerprints, **kwargs)
     correct_fingerprints.write()
