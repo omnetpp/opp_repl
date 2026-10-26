@@ -173,6 +173,33 @@ def run_validation_tests_main():
 def run_coverage_tests_main():
     run_tasks_main(run_coverage_tests, "coverage tests")
 
+def parse_export_coverage_arguments():
+    description = "Merges the profiles that the processes of a coverage build wrote, and writes the coverage of the project's C++ sources as an lcov file. Run the tests in coverage mode (-m coverage) first."
+    parser = argparse.ArgumentParser(description=description)
+    parser.add_argument("--load", action="append", default=[], metavar="OPP_FILE", help="load one or more .opp configuration files or directories at startup, can be specified multiple times and supports glob patterns (e.g. --load '*.opp'); when a directory is given, all *.opp files in it are loaded; use --load @opp to load the bundled .opp files shipped with opp_repl; if not specified, all *.opp files in the current working directory are loaded automatically")
+    parser.add_argument("-p", "--simulation-project", default=None, help="name of the simulation project (auto-detected from the working directory if not specified)")
+    parser.add_argument("-o", "--output-file", default="coverage.lcov", help="path of the lcov file (default: coverage.lcov)")
+    parser.add_argument("-t", "--test-name", default=None, help="name of the test suite, written as the lcov test name of each record, so that a report of several lcov files gives the coverage of each suite")
+    parser.add_argument("-l", "--log-level", choices=["ERROR", "WARN", "INFO", "DEBUG"], default="WARN", help="controls the verbosity of log messages (default: WARN)")
+    parser.add_argument("-L", "--external-command-log-level", choices=["ERROR", "WARN", "INFO", "DEBUG"], default="INFO", help="controls the verbosity of log messages from llvm-profdata (default: INFO)")
+    parser.add_argument("--log-file", default=None, help="write all log messages to this file (disabled by default)")
+    parser.add_argument("--handle-exception", default=True, action=argparse.BooleanOptionalAction, help="when enabled, errors are displayed as short messages; use --no-handle-exception to show full stack traces for debugging (default: enabled)")
+    return parser.parse_args(sys.argv[1:])
+
+def export_coverage_main():
+    args = parse_export_coverage_arguments()
+    try:
+        kwargs = process_build_project_arguments(args)
+        print(export_coverage(simulation_project=kwargs["simulation_project"], output_file=args.output_file, test_name=args.test_name))
+    except KeyboardInterrupt:
+        _logger.warn("Program interrupted by user")
+    except Exception as e:
+        if args.handle_exception:
+            _logger.error(str(e))
+            sys.exit(1)
+        else:
+            raise e
+
 def run_all_tests_main():
     run_tasks_main(run_all_tests, "tests")
 

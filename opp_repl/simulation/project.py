@@ -265,7 +265,8 @@ class OmnetppProject:
 #   store     — expected-values file in the project tree (fingerprint/speed JSON)
 #   baseline  — external repo to check out before the kind runs: {repository, ref, folder}
 #   runner    — dotted "module:function" ref for a project-specific kind (validation)
-RECOGNISED_TEST_ASPECTS = frozenset({"defaults", "store", "baseline", "runner"})
+#   report    — settings of the kind's report (coverage: exclude, areas; see the Coverage guide)
+RECOGNISED_TEST_ASPECTS = frozenset({"defaults", "store", "baseline", "runner", "report"})
 
 
 def _validate_test_parameters(test_parameters, project_name):
