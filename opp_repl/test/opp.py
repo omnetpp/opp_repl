@@ -121,7 +121,7 @@ class OppTestTask(TestTask):
         return self._expected_result
 
     def run_protected(self, **kwargs):
-        binary_suffix = "_dbg" if self.mode == "debug" else ""
+        binary_suffix = "" if self.mode == "release" else self.simulation_project.get_omnetpp_project().get_library_suffix(mode=self.mode)
         expected_result = self.get_expected_result()
         test_file_name = os.path.join(self.working_directory, self.test_file_name)
         test_binary_name = os.path.basename(re.sub(r"\.test$", "", self.test_file_name))
@@ -291,8 +291,8 @@ class BinaryTestTask(TestTask):
     standalone ``packet_test`` program that asserts internally and exits
     non-zero if any assertion fails — it is *not* an ``opp_test`` ``.test``
     suite (the folder contains no ``.test`` files). The task builds the folder,
-    runs ``./<executable>[_dbg] -s -u Cmdenv -c <config>``, and maps exit code 0
-    → PASS. Everything project-specific (``test_folder``/``executable``/
+    runs ``./<executable><suffix> -s -u Cmdenv -c <config>`` (the suffix of the mode:
+    ``_dbg``, ``_coverage`` and so on, none in release), and maps exit code 0 → PASS. Everything project-specific (``test_folder``/``executable``/
     ``config``) comes from the project's ``.opp`` ``test_parameters`` defaults,
     so opp_repl stays generic and the project carries no runner code."""
     def __init__(self, simulation_project, test_folder, executable, config="UnitTest", ini_file=None, mode="debug", task_result_class=TestTaskResult, **kwargs):
@@ -311,7 +311,7 @@ class BinaryTestTask(TestTask):
         return f"{self.test_folder} -c {self.config}"
 
     def run_protected(self, **kwargs):
-        binary_suffix = "_dbg" if self.mode == "debug" else ""
+        binary_suffix = "" if self.mode == "release" else self.simulation_project.get_omnetpp_project().get_library_suffix(mode=self.mode)
         working_directory = self.simulation_project.get_full_path(self.test_folder)
         env = self.simulation_project.get_env(mode=self.mode)
         # Build the folder's own executable (links the already-built project lib).
