@@ -36,7 +36,9 @@ class FeatureTestTask(TestTask):
         self.build_engine = build_engine
         self.cpu_time_limit = cpu_time_limit
         self.packages = packages
-        self.multiple_simulation_tasks = self.get_multiple_simulation_tasks()
+        # collected in run_protected after the build of this case: the collection counts the runs of a
+        # config with the built library, and it leaves out the configs of the disabled features
+        self.multiple_simulation_tasks = None
 
     def get_multiple_simulation_tasks(self):
         if len(self.packages) != 0:
@@ -74,6 +76,7 @@ class FeatureTestTask(TestTask):
         make_makefiles(simulation_project=self.simulation_project)
         clean_project(simulation_project=self.simulation_project, mode=self.mode, build_engine=self.build_engine)
         build_project(simulation_project=self.simulation_project, mode=self.mode, build_engine=self.build_engine)
+        self.multiple_simulation_tasks = self.get_multiple_simulation_tasks()
         multiple_simulation_tasks_result = self.multiple_simulation_tasks.run(**kwargs)
         result="PASS" if multiple_simulation_tasks_result.result == "DONE" else "FAIL" if multiple_simulation_tasks_result.result == "FAIL" else "ERROR"
         return self.task_result_class(self, result=result)
@@ -92,7 +95,8 @@ class MultipleFeatureTestTasks(MultipleTestTasks):
     def get_total_simulation_task_count(self):
         count = 0
         for task in self.tasks:
-            count += len(list(filter(lambda task: task.simulation_config.working_directory != "examples/empty", task.multiple_simulation_tasks.tasks)))
+            if task.multiple_simulation_tasks is not None:
+                count += len(list(filter(lambda task: task.simulation_config.working_directory != "examples/empty", task.multiple_simulation_tasks.tasks)))
         return count
 
     def build_before_run(self, **kwargs):
@@ -108,7 +112,6 @@ class MultipleFeatureTestTasks(MultipleTestTasks):
         if will_build:
             self.build_before_run(**kwargs)
             kwargs["build"] = False
-        _logger.info("Collected " + str(self.get_total_simulation_task_count()) + " simulations in total")
         multiple_test_tasks_result = super().run_protected(**kwargs)
         _logger.info("Run " + str(self.get_total_simulation_task_count()) + " simulations in total")
         enable_features("all")
