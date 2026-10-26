@@ -24,7 +24,7 @@ def enable_features(feature):
     run_command_with_logging(["opp_featuretool", "enable", "-f", feature], command_line_logger=_logger)
 
 class FeatureTestTask(TestTask):
-    def __init__(self, simulation_project, feature, packages, type="enable", mode="debug", build_engine=None, **kwargs):
+    def __init__(self, simulation_project, feature, packages, type="enable", mode="debug", build_engine=None, cpu_time_limit=None, **kwargs):
         super().__init__(**kwargs)
         self.locals = locals()
         self.locals.pop("self")
@@ -34,6 +34,7 @@ class FeatureTestTask(TestTask):
         self.type = type
         self.mode = mode
         self.build_engine = build_engine
+        self.cpu_time_limit = cpu_time_limit
         self.packages = packages
         self.multiple_simulation_tasks = self.get_multiple_simulation_tasks()
 
@@ -45,11 +46,11 @@ class FeatureTestTask(TestTask):
                  folders.append(folder)
                  folders.append(folder + "/.*")
             working_directory_filter = "|".join(folders)
-            multiple_simulation_tasks = get_simulation_tasks(working_directory_filter=working_directory_filter, full_match=True, run_number=0, mode=self.mode, build=False)
+            multiple_simulation_tasks = get_simulation_tasks(working_directory_filter=working_directory_filter, full_match=True, run_number=0, mode=self.mode, cpu_time_limit=self.cpu_time_limit, build=False)
         else:
             multiple_simulation_tasks = MultipleSimulationTasks(mode=self.mode, build=False)
         if len(multiple_simulation_tasks.tasks) == 0:
-            multiple_simulation_tasks = get_simulation_tasks(working_directory_filter="examples/empty", full_match=True, run_number=0, mode=self.mode, build=False)
+            multiple_simulation_tasks = get_simulation_tasks(working_directory_filter="examples/empty", full_match=True, run_number=0, mode=self.mode, cpu_time_limit=self.cpu_time_limit, build=False)
         return multiple_simulation_tasks
 
     def get_parameters_string(self, **kwargs):
@@ -114,18 +115,23 @@ class MultipleFeatureTestTasks(MultipleTestTasks):
         return multiple_test_tasks_result
 
 
-def get_feature_test_tasks(simulation_project=None, filter=".*", full_match=False, **kwargs):
+def get_feature_test_tasks(simulation_project=None, filter=".*", full_match=False, cpu_time_limit="1s", **kwargs):
+    # the simulations only show that the feature combination builds and sets up, so a short
+    # CPU time limit is enough, as for the smoke tests
     kwargs.setdefault("mode", "debug")
+    kwargs["cpu_time_limit"] = cpu_time_limit
     if simulation_project is None:
         simulation_project = get_default_simulation_project()
     oppfeatures = read_xml_file(simulation_project.get_full_path(".oppfeatures"))
     features = get_features(oppfeatures)
     feature_to_packages = get_feature_to_packages(oppfeatures)
-    def create_test_tasks(feature):
-        return [FeatureTestTask(simulation_project, feature, feature_to_packages[feature], type="enable", task_result_class=TestTaskResult, **kwargs),
-                FeatureTestTask(simulation_project, feature, [], type="disable", task_result_class=TestTaskResult, **kwargs)]
+    def create_test_task(feature, type):
+        packages = feature_to_packages[feature] if type == "enable" else []
+        return FeatureTestTask(simulation_project, feature, packages, type=type, task_result_class=TestTaskResult, **kwargs)
     test_features = list(builtins.filter(lambda feature: matches_filter(feature, filter, None, full_match), features))
-    test_tasks = list(itertools.chain.from_iterable(map(create_test_tasks, test_features)))
+    # all enable cases first and then all disable cases, so that each slice of --split-count gets
+    # both the small builds of the enable cases and the almost full builds of the disable cases
+    test_tasks = [create_test_task(feature, type) for type in ["enable", "disable"] for feature in test_features]
     if filter == ".*":
         test_tasks = test_tasks + [FeatureTestTask(simulation_project, None, [], type="default", task_result_class=TestTaskResult, **kwargs),
                                    FeatureTestTask(simulation_project, None, [], type="enable all", task_result_class=TestTaskResult, **kwargs),
@@ -152,18 +158,15 @@ def read_xml_file(filename, repair_hint=None):
         fail("Cannot parse XML file '{}': {}".format(filename, e), repair_hint)
 
 def get_package_folder(package):
-    if re.search(r"opp_repl.examples", package):
-        return re.sub(r"inet/", "", re.sub(r"\.", "/", package))
-    elif re.search(r"opp_repl.showcases", package):
-        return re.sub(r"inet/", "", re.sub(r"\.", "/", package))
-    elif re.search(r"opp_repl.tutorials", package):
-        return re.sub(r"inet/", "", re.sub(r"\.", "/", package))
-    elif re.search(r"opp_repl.tests", package):
-        return re.sub(r"inet/", "", re.sub(r"\.", "/", package))
-    elif re.search(r"opp_repl.validation", package):
-        return re.sub(r"inet/", "tests/", re.sub(r"\.", "/", package))
+    # below the root package, the examples, showcases, tutorials and tests packages lie in the
+    # folder of the same name, the validation packages in tests/validation, and the others in src
+    folder = re.sub(r"\.", "/", package)
+    if re.match(r"\w+/(examples|showcases|tutorials|tests)\b", folder):
+        return re.sub(r"^\w+/", "", folder)
+    elif re.match(r"\w+/validation\b", folder):
+        return re.sub(r"^\w+/", "tests/", folder)
     else:
-        return "src/" + re.sub(r"\.", "/", package)
+        return "src/" + folder
 
 def get_features(oppfeatures):
     result = []
@@ -194,7 +197,9 @@ def get_package_to_defined_types(simulation_project, packages):
     result = dict()
     for package in packages:
         folder = get_package_folder(package)
-        modules = list(map(lambda module: "opp_repl." + module, collect_modules(simulation_project, folder)))
+        # collect_modules leaves out the root package
+        root_package = package.split(".")[0]
+        modules = list(map(lambda module: root_package + "." + module, collect_modules(simulation_project, folder)))
         chunks = list(map(lambda chunk: package + "." + chunk, collect_chunks(simulation_project, folder)))
         tags = list(map(lambda tag: package + "." + tag, collect_tags(simulation_project, folder)))
         result[package] = sorted(modules + chunks + tags)
