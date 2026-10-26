@@ -61,10 +61,13 @@ concurrency options, cancellation, and `get_simulation_tasks()`.
 
 ## Command Line
 
-When no `--load` option is given, all `*.opp` files in the current working
-directory are loaded automatically.  This means you can simply `cd` into a
-project directory that contains `.opp` files and run simulations without any
-extra arguments:
+When no `--load` option is given, the `*.opp` files of the current working
+directory are loaded automatically.  If the directory has none, the files of
+its nearest parent directory that has some are loaded, as git finds the
+repository of a subdirectory.  This means you can simply `cd` into a project
+directory, or into any directory below the one that contains the `.opp` files,
+and run simulations without any extra arguments.  In a subdirectory, a command
+without a filter runs only the simulations of that subdirectory:
 
 ```bash
 # Run all simulations from the fifo sample project (*.opp files loaded from CWD)

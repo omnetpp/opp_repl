@@ -510,6 +510,22 @@ def load_opp_file(path):
     """
     return get_default_simulation_workspace().load_opp_file(path)
 
+def find_opp_files(folder=None):
+    """Return the ``*.opp`` files that a command loads when it gets no ``--load`` option.
+
+    These are the ``*.opp`` files of *folder* (default: the current working
+    directory) or, if it has none, of its nearest parent folder that has some.
+    So a command works anywhere in the tree of a project that keeps its
+    ``.opp`` file at its root, as git finds the repository of a subfolder.
+    """
+    folder = os.path.abspath(folder or os.getcwd())
+    while True:
+        opp_files = sorted(glob.glob(os.path.join(folder, "*.opp")))
+        parent_folder = os.path.dirname(folder)
+        if opp_files or parent_folder == folder:
+            return opp_files
+        folder = parent_folder
+
 def _sanitize_name(name):
     """Replace characters that are not valid in Python identifiers with underscores."""
     return re.sub(r'[^A-Za-z0-9_]', '_', name)

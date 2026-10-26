@@ -21,7 +21,7 @@ _logger = logging.getLogger(__name__)
 def parse_run_tasks_arguments(task_name, extra_args_fn=None):
     description = "Runs all " + task_name + " concurrently in the enclosing project, recursively from the current working directory, as separate processes on localhost."
     parser = argparse.ArgumentParser(description=description)
-    parser.add_argument("--load", action="append", default=[], metavar="OPP_FILE", help="load one or more .opp configuration files or directories at startup, can be specified multiple times and supports glob patterns (e.g. --load '*.opp'); when a directory is given, all *.opp files in it are loaded; use --load @opp to load the bundled .opp files shipped with opp_repl; if not specified, all *.opp files in the current working directory are loaded automatically")
+    parser.add_argument("--load", action="append", default=[], metavar="OPP_FILE", help="load one or more .opp configuration files or directories at startup, can be specified multiple times and supports glob patterns (e.g. --load '*.opp'); when a directory is given, all *.opp files in it are loaded; use --load @opp to load the bundled .opp files shipped with opp_repl; if not specified, the *.opp files of the current working directory, or else of its nearest parent directory that has any, are loaded automatically")
     parser.add_argument("-p", "--simulation-project", default=None, help="name of the simulation project to use (auto-detected from the working directory if not specified)")
     parser.add_argument("-m", "--mode", choices=["debug", "release", "coverage", "sanitize", "profile"], help="build mode of the simulation binaries (debug, release, coverage, sanitize, or profile)")
     parser.add_argument("--build", action="store_true", help="build the simulation executable before running (default: enabled)")
@@ -67,7 +67,7 @@ def process_run_tasks_arguments(args):
         for opp_file in args.load:
             load_opp_file(opp_file)
     else:
-        for opp_file in sorted(glob.glob(os.path.join(os.getcwd(), "*.opp"))):
+        for opp_file in find_opp_files():
             load_opp_file(opp_file)
     simulation_project = determine_default_simulation_project(name=args.simulation_project)
     kwargs = {k: v for k, v in vars(args).items() if v is not None}
@@ -176,7 +176,7 @@ def run_coverage_tests_main():
 def parse_export_coverage_arguments():
     description = "Merges the profiles that the processes of a coverage build wrote, and writes the coverage of the project's C++ sources as an lcov file. Run the tests in coverage mode (-m coverage) first."
     parser = argparse.ArgumentParser(description=description)
-    parser.add_argument("--load", action="append", default=[], metavar="OPP_FILE", help="load one or more .opp configuration files or directories at startup, can be specified multiple times and supports glob patterns (e.g. --load '*.opp'); when a directory is given, all *.opp files in it are loaded; use --load @opp to load the bundled .opp files shipped with opp_repl; if not specified, all *.opp files in the current working directory are loaded automatically")
+    parser.add_argument("--load", action="append", default=[], metavar="OPP_FILE", help="load one or more .opp configuration files or directories at startup, can be specified multiple times and supports glob patterns (e.g. --load '*.opp'); when a directory is given, all *.opp files in it are loaded; use --load @opp to load the bundled .opp files shipped with opp_repl; if not specified, the *.opp files of the current working directory, or else of its nearest parent directory that has any, are loaded automatically")
     parser.add_argument("-p", "--simulation-project", default=None, help="name of the simulation project (auto-detected from the working directory if not specified)")
     parser.add_argument("-o", "--output-file", default="coverage.lcov", help="path of the lcov file (default: coverage.lcov)")
     parser.add_argument("-t", "--test-name", default=None, help="name of the test suite, written as the lcov test name of each record, so that a report of several lcov files gives the coverage of each suite")
@@ -209,7 +209,7 @@ def parse_coverage_report_arguments():
     parser.add_argument("--html", action="store_true", help="also write the HTML report of genhtml into the html folder of the output folder")
     parser.add_argument("--commit", default=None, help="the commit of the report, recorded in the summary")
     parser.add_argument("--date", default=None, help="the date of that commit, recorded in the summary")
-    parser.add_argument("--load", action="append", default=[], metavar="OPP_FILE", help="load one or more .opp configuration files or directories at startup, can be specified multiple times and supports glob patterns (e.g. --load '*.opp'); when a directory is given, all *.opp files in it are loaded; use --load @opp to load the bundled .opp files shipped with opp_repl; if not specified, all *.opp files in the current working directory are loaded automatically")
+    parser.add_argument("--load", action="append", default=[], metavar="OPP_FILE", help="load one or more .opp configuration files or directories at startup, can be specified multiple times and supports glob patterns (e.g. --load '*.opp'); when a directory is given, all *.opp files in it are loaded; use --load @opp to load the bundled .opp files shipped with opp_repl; if not specified, the *.opp files of the current working directory, or else of its nearest parent directory that has any, are loaded automatically")
     parser.add_argument("-p", "--simulation-project", default=None, help="name of the simulation project that gives the areas of the summary and the sources of the HTML report (auto-detected from the working directory if not specified; the report works without a project too)")
     parser.add_argument("-l", "--log-level", choices=["ERROR", "WARN", "INFO", "DEBUG"], default="WARN", help="controls the verbosity of log messages (default: WARN)")
     parser.add_argument("-L", "--external-command-log-level", choices=["ERROR", "WARN", "INFO", "DEBUG"], default="INFO", help="controls the verbosity of log messages from genhtml (default: INFO)")
@@ -221,7 +221,7 @@ def coverage_report_main():
     args = parse_coverage_report_arguments()
     try:
         initialize_logging(args.log_level, args.external_command_log_level, args.log_file)
-        for opp_file in args.load or sorted(glob.glob(os.path.join(os.getcwd(), "*.opp"))):
+        for opp_file in args.load or find_opp_files():
             load_opp_file(opp_file)
         try:
             simulation_project = determine_default_simulation_project(name=args.simulation_project)
@@ -347,7 +347,7 @@ def parse_build_project_arguments():
     parser.add_argument("--log-file", default=None, help="write all log messages to this file (disabled by default)")
     parser.add_argument("-b", "--build-engine", choices=["makefile", "task"], default="makefile", help="build engine: makefile uses opp_makemake-generated Makefiles, task uses the built-in task system (default: makefile)")
     parser.add_argument("--handle-exception", default=True, action=argparse.BooleanOptionalAction, help="when enabled, errors are displayed as short messages; use --no-handle-exception to show full stack traces for debugging (default: enabled)")
-    parser.add_argument("--load", action="append", default=[], metavar="OPP_FILE", help="load one or more .opp configuration files or directories at startup, can be specified multiple times and supports glob patterns (e.g. --load '*.opp'); when a directory is given, all *.opp files in it are loaded; use --load @opp to load the bundled .opp files shipped with opp_repl; if not specified, all *.opp files in the current working directory are loaded automatically")
+    parser.add_argument("--load", action="append", default=[], metavar="OPP_FILE", help="load one or more .opp configuration files or directories at startup, can be specified multiple times and supports glob patterns (e.g. --load '*.opp'); when a directory is given, all *.opp files in it are loaded; use --load @opp to load the bundled .opp files shipped with opp_repl; if not specified, the *.opp files of the current working directory, or else of its nearest parent directory that has any, are loaded automatically")
     return parser.parse_args(sys.argv[1:])
 
 def process_build_project_arguments(args):
@@ -356,7 +356,7 @@ def process_build_project_arguments(args):
         for opp_file in args.load:
             load_opp_file(opp_file)
     else:
-        for opp_file in sorted(glob.glob(os.path.join(os.getcwd(), "*.opp"))):
+        for opp_file in find_opp_files():
             load_opp_file(opp_file)
     simulation_project = determine_default_simulation_project(name=args.simulation_project)
     kwargs = {k: v for k, v in vars(args).items() if v is not None}
@@ -399,7 +399,7 @@ def parse_build_omnetpp_arguments():
     parser.add_argument("--log-file", default=None, help="write all log messages to this file (disabled by default)")
     parser.add_argument("-b", "--build-engine", choices=["makefile", "task"], default="makefile", help="build engine: makefile invokes make in the OMNeT++ tree, task uses the built-in task system (default: makefile)")
     parser.add_argument("--handle-exception", default=True, action=argparse.BooleanOptionalAction, help="when enabled, errors are displayed as short messages; use --no-handle-exception to show full stack traces for debugging (default: enabled)")
-    parser.add_argument("--load", action="append", default=[], metavar="OPP_FILE", help="load one or more .opp configuration files or directories at startup, can be specified multiple times and supports glob patterns (e.g. --load '*.opp'); when a directory is given, all *.opp files in it are loaded; use --load @opp to load the bundled .opp files shipped with opp_repl; if not specified, all *.opp files in the current working directory are loaded automatically")
+    parser.add_argument("--load", action="append", default=[], metavar="OPP_FILE", help="load one or more .opp configuration files or directories at startup, can be specified multiple times and supports glob patterns (e.g. --load '*.opp'); when a directory is given, all *.opp files in it are loaded; use --load @opp to load the bundled .opp files shipped with opp_repl; if not specified, the *.opp files of the current working directory, or else of its nearest parent directory that has any, are loaded automatically")
     return parser.parse_args(sys.argv[1:])
 
 def _determine_default_omnetpp_project(name=None):
@@ -427,7 +427,7 @@ def process_build_omnetpp_arguments(args):
         for opp_file in args.load:
             load_opp_file(opp_file)
     else:
-        for opp_file in sorted(glob.glob(os.path.join(os.getcwd(), "*.opp"))):
+        for opp_file in find_opp_files():
             load_opp_file(opp_file)
     omnetpp_project = _determine_default_omnetpp_project(name=args.omnetpp_project)
     kwargs = {k: v for k, v in vars(args).items() if v is not None}
@@ -464,7 +464,7 @@ def parse_clean_omnetpp_arguments():
     parser.add_argument("--log-file", default=None, help="write all log messages to this file (disabled by default)")
     parser.add_argument("-b", "--build-engine", choices=["makefile", "task"], default="makefile", help="clean engine: makefile uses make clean, task removes build artifacts directly (default: makefile)")
     parser.add_argument("--handle-exception", default=True, action=argparse.BooleanOptionalAction, help="when enabled, errors are displayed as short messages; use --no-handle-exception to show full stack traces for debugging (default: enabled)")
-    parser.add_argument("--load", action="append", default=[], metavar="OPP_FILE", help="load one or more .opp configuration files or directories at startup, can be specified multiple times and supports glob patterns (e.g. --load '*.opp'); when a directory is given, all *.opp files in it are loaded; use --load @opp to load the bundled .opp files shipped with opp_repl; if not specified, all *.opp files in the current working directory are loaded automatically")
+    parser.add_argument("--load", action="append", default=[], metavar="OPP_FILE", help="load one or more .opp configuration files or directories at startup, can be specified multiple times and supports glob patterns (e.g. --load '*.opp'); when a directory is given, all *.opp files in it are loaded; use --load @opp to load the bundled .opp files shipped with opp_repl; if not specified, the *.opp files of the current working directory, or else of its nearest parent directory that has any, are loaded automatically")
     return parser.parse_args(sys.argv[1:])
 
 def process_clean_omnetpp_arguments(args):
@@ -473,7 +473,7 @@ def process_clean_omnetpp_arguments(args):
         for opp_file in args.load:
             load_opp_file(opp_file)
     else:
-        for opp_file in sorted(glob.glob(os.path.join(os.getcwd(), "*.opp"))):
+        for opp_file in find_opp_files():
             load_opp_file(opp_file)
     omnetpp_project = _determine_default_omnetpp_project(name=args.omnetpp_project)
     kwargs = {k: v for k, v in vars(args).items() if v is not None}
@@ -510,7 +510,7 @@ def parse_clean_project_arguments():
     parser.add_argument("--log-file", default=None, help="write all log messages to this file (disabled by default)")
     parser.add_argument("-b", "--build-engine", choices=["makefile", "task"], default="makefile", help="clean engine: makefile uses make clean, task removes build artifacts directly (default: makefile)")
     parser.add_argument("--handle-exception", default=True, action=argparse.BooleanOptionalAction, help="when enabled, errors are displayed as short messages; use --no-handle-exception to show full stack traces for debugging (default: enabled)")
-    parser.add_argument("--load", action="append", default=[], metavar="OPP_FILE", help="load one or more .opp configuration files or directories at startup, can be specified multiple times and supports glob patterns (e.g. --load '*.opp'); when a directory is given, all *.opp files in it are loaded; use --load @opp to load the bundled .opp files shipped with opp_repl; if not specified, all *.opp files in the current working directory are loaded automatically")
+    parser.add_argument("--load", action="append", default=[], metavar="OPP_FILE", help="load one or more .opp configuration files or directories at startup, can be specified multiple times and supports glob patterns (e.g. --load '*.opp'); when a directory is given, all *.opp files in it are loaded; use --load @opp to load the bundled .opp files shipped with opp_repl; if not specified, the *.opp files of the current working directory, or else of its nearest parent directory that has any, are loaded automatically")
     return parser.parse_args(sys.argv[1:])
 
 def process_clean_project_arguments(args):
@@ -519,7 +519,7 @@ def process_clean_project_arguments(args):
         for opp_file in args.load:
             load_opp_file(opp_file)
     else:
-        for opp_file in sorted(glob.glob(os.path.join(os.getcwd(), "*.opp"))):
+        for opp_file in find_opp_files():
             load_opp_file(opp_file)
     simulation_project = determine_default_simulation_project(name=args.simulation_project)
     kwargs = {k: v for k, v in vars(args).items() if v is not None}
