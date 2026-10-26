@@ -360,6 +360,7 @@ def coverage_report(lcov_files, output_folder=".", previous_file=None, html=Fals
     if html:
         root_folder = simulation_project.get_full_path(".") if simulation_project else os.getcwd()
         title = simulation_project.get_name() if simulation_project else "coverage"
-        args = ["genhtml", lcov_file, f"--output-directory={os.path.abspath(os.path.join(output_folder, 'html'))}", "--branch-coverage", "--demangle-cpp", f"--title={title}"]
+        # --quiet: without it, genhtml prints a block for each source file (thousands of lines for INET)
+        args = ["genhtml", lcov_file, f"--output-directory={os.path.abspath(os.path.join(output_folder, 'html'))}", "--branch-coverage", "--demangle-cpp", "--quiet", f"--title={title}"]
         run_command_with_logging(args, cwd=root_folder, error_message="Generating the HTML coverage report failed", command_line_logger=_logger)
     return summary
