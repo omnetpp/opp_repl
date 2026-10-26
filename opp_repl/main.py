@@ -200,6 +200,47 @@ def export_coverage_main():
         else:
             raise e
 
+def parse_coverage_report_arguments():
+    description = "Merges lcov files, for example the exports of several test suites or slices, and writes the merged lcov file, a JSON summary, a history line, a Markdown summary and, with --html, the HTML report of genhtml."
+    parser = argparse.ArgumentParser(description=description)
+    parser.add_argument("lcov_files", nargs="+", metavar="LCOV_FILE", help="the lcov files to merge")
+    parser.add_argument("-o", "--output-folder", default=".", help="folder of the report files (default: the current folder)")
+    parser.add_argument("--previous", dest="previous_file", default=None, metavar="FILE", help="an earlier summary.json or history file; the summary gives the change against its last entry")
+    parser.add_argument("--html", action="store_true", help="also write the HTML report of genhtml into the html folder of the output folder")
+    parser.add_argument("--commit", default=None, help="the commit of the report, recorded in the summary")
+    parser.add_argument("--date", default=None, help="the date of that commit, recorded in the summary")
+    parser.add_argument("--load", action="append", default=[], metavar="OPP_FILE", help="load one or more .opp configuration files or directories at startup, can be specified multiple times and supports glob patterns (e.g. --load '*.opp'); when a directory is given, all *.opp files in it are loaded; use --load @opp to load the bundled .opp files shipped with opp_repl; if not specified, all *.opp files in the current working directory are loaded automatically")
+    parser.add_argument("-p", "--simulation-project", default=None, help="name of the simulation project that gives the areas of the summary and the sources of the HTML report (auto-detected from the working directory if not specified; the report works without a project too)")
+    parser.add_argument("-l", "--log-level", choices=["ERROR", "WARN", "INFO", "DEBUG"], default="WARN", help="controls the verbosity of log messages (default: WARN)")
+    parser.add_argument("-L", "--external-command-log-level", choices=["ERROR", "WARN", "INFO", "DEBUG"], default="INFO", help="controls the verbosity of log messages from genhtml (default: INFO)")
+    parser.add_argument("--log-file", default=None, help="write all log messages to this file (disabled by default)")
+    parser.add_argument("--handle-exception", default=True, action=argparse.BooleanOptionalAction, help="when enabled, errors are displayed as short messages; use --no-handle-exception to show full stack traces for debugging (default: enabled)")
+    return parser.parse_args(sys.argv[1:])
+
+def coverage_report_main():
+    args = parse_coverage_report_arguments()
+    try:
+        initialize_logging(args.log_level, args.external_command_log_level, args.log_file)
+        for opp_file in args.load or sorted(glob.glob(os.path.join(os.getcwd(), "*.opp"))):
+            load_opp_file(opp_file)
+        try:
+            simulation_project = determine_default_simulation_project(name=args.simulation_project)
+        except Exception:
+            if args.simulation_project:
+                raise
+            simulation_project = None
+        coverage_report(args.lcov_files, output_folder=args.output_folder, previous_file=args.previous_file, html=args.html, simulation_project=simulation_project, commit=args.commit, date=args.date)
+        with open(os.path.join(args.output_folder, "summary.md")) as f:
+            print(f.read())
+    except KeyboardInterrupt:
+        _logger.warn("Program interrupted by user")
+    except Exception as e:
+        if args.handle_exception:
+            _logger.error(str(e))
+            sys.exit(1)
+        else:
+            raise e
+
 def run_all_tests_main():
     run_tasks_main(run_all_tests, "tests")
 
@@ -291,7 +332,7 @@ def update_speed_test_results_main():
 def run_self_test_main():
     import unittest
     loader = unittest.TestLoader()
-    suite = loader.loadTestsFromName("opp_repl.test.self.dependency")
+    suite = loader.loadTestsFromNames(["opp_repl.test.self.dependency", "opp_repl.test.self.coverage"])
     result = unittest.TextTestRunner(verbosity=2).run(suite)
     sys.exit(0 if result.wasSuccessful() else 1)
 
