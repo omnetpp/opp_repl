@@ -158,7 +158,7 @@ class OppTestTask(TestTask):
         simulation_args = ["--check-signals=false", f"-l{library_name}", "-n", ":".join(ned_folders)]
         if not self.debug:
             args = ["opp_test", "run", "-v", "-w", work_directory, "-p", test_program, self.test_file_name, "-a", *simulation_args]
-            subprocess_result = run_command_with_logging(args, cwd=self.working_directory, env=self.simulation_project.get_env(), command_line_logger=_logger)
+            subprocess_result = run_command_with_logging(args, cwd=self.working_directory, env=self.simulation_project.get_env(mode=self.mode), command_line_logger=_logger)
             stdout = subprocess_result.stdout
         else:
             ide_opp_test = IdeOppTest(remove_launch=self.remove_launch)
@@ -313,7 +313,7 @@ class BinaryTestTask(TestTask):
     def run_protected(self, **kwargs):
         binary_suffix = "_dbg" if self.mode == "debug" else ""
         working_directory = self.simulation_project.get_full_path(self.test_folder)
-        env = self.simulation_project.get_env()
+        env = self.simulation_project.get_env(mode=self.mode)
         # Build the folder's own executable (links the already-built project lib).
         build_args = ["make", "-s", f"MODE={self.mode}", "-j", str(multiprocessing.cpu_count())]
         subprocess_result = run_command_with_logging(build_args, cwd=working_directory, env=env, command_line_logger=_logger)

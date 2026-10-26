@@ -393,7 +393,7 @@ class ModuleImageTaskBase(Task):
             "-r", str(self.run_number),
             "--result-dir", result_dir,
         ]
-        env = sp.get_env()
+        env = sp.get_env(mode=self.mode)
         env["QT_QPA_PLATFORM"] = "offscreen"
         cwd = sp.get_full_path(sc.working_directory)
         _logger.debug(f"Spawning Qtenv MCP simulation: {' '.join(args)}")

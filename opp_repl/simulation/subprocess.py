@@ -15,4 +15,4 @@ class SubprocessSimulationRunner:
         simulation_project = simulation_config.simulation_project
         working_directory = simulation_config.working_directory
         full_working_directory = simulation_project.get_full_path(working_directory)
-        return run_command_with_logging(args, cwd=full_working_directory, env=simulation_project.get_env(), wait=simulation_task.wait, command_line_logger=_logger)
+        return run_command_with_logging(args, cwd=full_working_directory, env=simulation_project.get_env(mode=simulation_task.mode), wait=simulation_task.wait, command_line_logger=_logger)

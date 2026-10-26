@@ -627,7 +627,7 @@ class SimulationProject:
             raise Exception("Not implemented")
         return hasher.digest()
 
-    def get_env(self):
+    def get_env(self, mode=None):
         env = os.environ.copy()
         opp = self.get_omnetpp_project()
         if opp is not None and opp.has_root_path():
@@ -659,7 +659,24 @@ class SimulationProject:
             used_lib_dir = used_project.get_library_folder_full_path()
             if used_lib_dir and used_lib_dir not in env.get("LD_LIBRARY_PATH", "").split(os.pathsep):
                 env["LD_LIBRARY_PATH"] = used_lib_dir + os.pathsep + env.get("LD_LIBRARY_PATH", "")
+        # A process of a coverage build adds its profile to the pool of the project when it ends.
+        # %4m names the files after the instrumented binary and merges the profiles of all processes
+        # into at most 4 files for each binary, so the disk use does not grow with the number of runs.
+        if mode == "coverage" and "LLVM_PROFILE_FILE" not in env:
+            profile_folder = self.get_coverage_profile_folder()
+            os.makedirs(profile_folder, exist_ok=True)
+            env["LLVM_PROFILE_FILE"] = os.path.join(profile_folder, "%4m.profraw")
         return env
+
+    def get_coverage_profile_folder(self):
+        """
+        Returns the folder of the profile pool that the processes of a coverage build write: the folder
+        of ``LLVM_PROFILE_FILE`` if the caller set it (to an absolute path), else ``coverage/profiles``
+        in the project root. See the :doc:`Coverage </coverage>` guide.
+        """
+        if "LLVM_PROFILE_FILE" in os.environ:
+            return os.path.dirname(os.path.abspath(os.environ["LLVM_PROFILE_FILE"]))
+        return self.get_full_path("coverage/profiles")
 
     def get_environment_variable_relative_path(self, enviroment_variable, path):
         return os.path.abspath(os.path.join(os.environ[enviroment_variable], path)) if enviroment_variable in os.environ else None
@@ -904,7 +921,7 @@ class SimulationProject:
                     return None
                 default_args = self.get_default_args()
                 args = [executable, *default_args, "-s", "-f", ini_file, "-c", config, "-q", "numruns"]
-            result = run_command_with_logging(args, cwd=working_directory, command_line_logger=_logger)
+            result = run_command_with_logging(args, cwd=working_directory, env=self.get_env(mode=mode), command_line_logger=_logger)
             if result.returncode == 0:
                 # KLUDGE: this was added to test source dependency based task result caching
                 result.stdout = re.sub(r"INI dependency: (.*)", "", result.stdout)
