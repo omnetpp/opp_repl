@@ -237,7 +237,9 @@ def get_opp_test_tasks(test_folder, simulation_project=None, filter=".*", full_m
     # tests write sub-`.test` files into it). On a reused workspace those copies
     # from a prior run would otherwise be picked up as phantom tasks. No source
     # tree keeps real tests under work/, so this is a no-op on a fresh checkout.
-    is_scratch = lambda f: (os.sep + "work" + os.sep) in f
+    # Only the folders below the test folder count: the checkout itself can lie
+    # under a folder named work, as on a GitHub runner (/home/runner/work/...).
+    is_scratch = lambda f: "work" in os.path.relpath(os.path.dirname(f), test_folder_path).split(os.sep)
     test_file_names = list(builtins.filter(lambda test_file_name: not is_scratch(test_file_name) and matches_filter(test_file_name, filter, None, full_match) and matches_working_directory(test_file_name),
                                            glob.glob(os.path.join(test_folder_path, "**/*.test"), recursive=True)))
     test_tasks = list(map(create_test_task, test_file_names))
