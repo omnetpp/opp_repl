@@ -129,6 +129,12 @@ class FingerprintTestTask(SimulationTestTask):
             result = "CANCEL"
             reason = "Cancel by user"
             calculated_fingerprint = None
+        elif simulation_task_result.result == "SKIP":
+            # a dry run or an up-to-date simulation has no output to check
+            result = "SKIP"
+            expected_result = simulation_task_result.expected_result
+            reason = simulation_task_result.reason
+            calculated_fingerprint = None
         else:
             calculated_fingerprint = get_calculated_fingerprint(simulation_task_result, self.fingerprint.ingredients)
             if calculated_fingerprint is None:
