@@ -256,6 +256,9 @@ class MultipleOppTestTasks(MultipleSimulationTestTasks):
         self.lib_folder = lib_folder
 
     def run_protected(self, **kwargs):
+        # a dry run compiles and changes nothing
+        if kwargs.get("dry_run"):
+            return super().run_protected(**kwargs)
         # Start each suite run from a clean <test_folder>/work, replicating a fresh
         # checkout. opp_test extracts and compiles each .test case under work/, and
         # "meta" tests (e.g. INET's ConvolutionalCoder*/Ieee80211*Domain, which do
