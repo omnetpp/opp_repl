@@ -621,7 +621,7 @@ class Task:
                     self.print_run_start(context=context, progress=progress, **kwargs)
                 with EnabledKeyboardInterrupts(keyboard_interrupt_handler):
                     if dry_run:
-                        task_result = self.task_result_class(task=self, result="DONE", reason="Dry run")
+                        task_result = self.task_result_class(task=self, result="SKIP", expected_result="SKIP", reason="Dry run")
                     else:
                         start_time = time.time()
                         task_result = self.run_protected(context=context, progress=progress, **kwargs)
