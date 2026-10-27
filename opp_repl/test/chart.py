@@ -356,7 +356,7 @@ def get_update_chart_tasks(simulation_project=None, run_simulations=True, filter
     return MultipleChartUpdateTasks(tasks=update_tasks, multiple_simulation_tasks=MultipleSimulationTasks(tasks=simulation_tasks, simulation_project=simulation_project, **kwargs), **dict(kwargs, scheduler="process"))
 get_update_chart_tasks.__signature__ = combine_signatures(get_update_chart_tasks, get_simulation_tasks)
 
-def update_chart_test_results(simulation_project=None, **kwargs):
+def update_chart_test_results(**kwargs):
     """
     Updates the stored charts for one or more chart tests that match the provided filter criteria.
 
@@ -367,8 +367,8 @@ def update_chart_test_results(simulation_project=None, **kwargs):
     Returns (:py:class:`MultipleUpdateTaskResults`):
         an object that contains a list of :py:class:`UpdateTaskResult` objects. Each object describes the result of running one update task.
     """
-    if simulation_project is None:
-        simulation_project = get_default_simulation_project()
-    multiple_update_chart_tasks = get_update_chart_tasks(simulation_project=simulation_project, **kwargs)
+    from opp_repl.simulation.project import apply_project_test_defaults  # lazy: avoid test/* import cycle
+    kwargs = apply_project_test_defaults("chart", kwargs)
+    multiple_update_chart_tasks = get_update_chart_tasks(**kwargs)
     return multiple_update_chart_tasks.run(**kwargs)
 update_chart_test_results.__signature__ = combine_signatures(update_chart_test_results, get_update_chart_tasks)
