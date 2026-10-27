@@ -218,7 +218,9 @@ def get_chart_test_tasks(simulation_project=None, baseline_simulation_project=No
         simulation_project = get_default_simulation_project()
     test_tasks = []
     simulation_tasks = []
-    for analysis_file_name in simulation_project.get_analysis_files(filter=filter or working_directory_filter, **kwargs):
+    for analysis_file_name in simulation_project.get_analysis_files(filter=filter, **kwargs):
+        if not matches_filter(os.path.dirname(analysis_file_name) or ".", working_directory_filter, None, False):
+            continue
         analysis = omnetpp.scave.analysis.load_anf_file(simulation_project.get_full_path(analysis_file_name))
         for chart in analysis.collect_charts():
             if matches_filter(chart.name, chart_filter, exclude_chart_filter, False):
@@ -341,7 +343,9 @@ def get_update_chart_tasks(simulation_project=None, run_simulations=True, filter
         simulation_project = get_default_simulation_project()
     update_tasks = []
     simulation_tasks = []
-    for analysis_file_name in simulation_project.get_analysis_files(filter=filter or working_directory_filter, **kwargs):
+    for analysis_file_name in simulation_project.get_analysis_files(filter=filter, **kwargs):
+        if not matches_filter(os.path.dirname(analysis_file_name) or ".", working_directory_filter, None, False):
+            continue
         analysis = omnetpp.scave.analysis.load_anf_file(simulation_project.get_full_path(analysis_file_name))
         for chart in analysis.collect_charts():
             if matches_filter(chart.name, chart_filter, exclude_chart_filter, False):
