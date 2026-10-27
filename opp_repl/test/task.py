@@ -116,7 +116,9 @@ class TaskTestTask(TestTask):
         if tested_task_result.result == "DONE":
             return self.check_task_result(tested_task_result=tested_task_result, **kwargs)
         else:
-            return self.task_result_class(task=self, tested_task_result=tested_task_result, result=tested_task_result.result, expected_result=tested_task_result.expected_result, expected=tested_task_result.expected, reason=tested_task_result.reason, error_message="simulation exited with error")
+            # an aggregate keeps its nominal expected result, so take the result itself when all its parts are expected
+            expected_result = tested_task_result.result if tested_task_result.expected else tested_task_result.expected_result
+            return self.task_result_class(task=self, tested_task_result=tested_task_result, result=tested_task_result.result, expected_result=expected_result, expected=tested_task_result.expected, reason=tested_task_result.reason, error_message="simulation exited with error")
 
     def check_task_result(self, **kwargs):
         return self.task_result_class(task=self, result="PASS")
