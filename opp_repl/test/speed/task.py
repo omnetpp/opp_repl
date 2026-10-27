@@ -128,7 +128,8 @@ class MultipleSpeedUpdateTasks(MultipleSimulationUpdateTasks):
             speed_update_task = speed_update_result.task
             simulation_task = speed_update_task.simulation_task
             simulation_config = simulation_task.simulation_config
-            if simulation_task_result.elapsed_wall_time:
+            # a dry run, a cancel or an exception gives no simulation result
+            if simulation_task_result and simulation_task_result.elapsed_wall_time:
                 speed_measurement_store.update_entry(elapsed_wall_time=simulation_task_result.elapsed_wall_time, elapsed_cpu_time=simulation_task_result.elapsed_cpu_time, num_cpu_cycles=simulation_task_result.num_cpu_cycles, num_cpu_instructions=simulation_task_result.num_cpu_instructions,
                                                      test_result="PASS", sim_time_limit=simulation_task.sim_time_limit,
                                                      working_directory=simulation_config.working_directory, ini_file=simulation_config.ini_file, config=simulation_config.config, run_number=simulation_task.run_number)
