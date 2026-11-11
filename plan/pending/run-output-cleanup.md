@@ -1,6 +1,6 @@
 # Automatic cleanup of run output
 
-> **Status:** stages 1, 2 and 5 complete; stage 3 waits for D5; stage 4 is measured and waits for D6 and D7 · **Owner:** opp_repl · **Branch:** `topic/run-output-cleanup`, worktree `opp_repl-run-output-cleanup` · **Optional stages:** INET, OMNeT++ · **Written:** 2026-11-11
+> **Status:** stages 1, 2 and 5 complete; stage 3 is ready to start; stage 4 is measured and waits for D6 and D7 · **Owner:** opp_repl · **Branch:** `topic/run-output-cleanup`, worktree `opp_repl-run-output-cleanup` · **Optional stages:** INET, OMNeT++ · **Written:** 2026-11-11
 
 opp_repl removes the output of a test or of a comparison when the result is the expected result.
 opp_repl keeps the output when the result is not the expected result, because a person will
@@ -239,7 +239,9 @@ Check, done on 2026-11-11 with real simulations (`examples/inet/nclients`, confi
 ### Stage 3 — worktrees (54 GB class)
 
 - [ ] 3.1 `_make_git_worktree`: change the ref to the commit hash with `git rev-parse`, then make
-      the name from the hash. This step also repairs the old checkout for a branch name.
+      the name `<repository>-<short hash>` from the hash. A hash and a ref name go through the
+      same code. This step also repairs the old checkout for a branch name. The marker file
+      records the ref text, and opp_repl logs the ref, the commit and the directory at each use.
 - [ ] 3.2 Write a marker file with the commit into the administration directory of the worktree
       (`git rev-parse --git-dir`). Update its time at each use. Hold a shared lock on it while the
       process has the worktree as a project.
@@ -329,7 +331,7 @@ without them.
 | D2 | Worktrees: when to remove | Only with the four checks of section 3, and without `--force`. `delete_worktree=False` stays the default |
 | D3 | System settings of stage 5 | 5.1 and 5.3 done; 5.2 examined, no change |
 | D4 | Optional stages O1 and O2 | Later, after a measurement |
-| D5 | Open. Name of a worktree: the commit hash, or the ref name with a checkout update at each reuse | Recommended: the short hash of the commit that the ref gives. The first recommendation, the ref name, was wrong: `<repository>-<branch>` is the name rule of the user's own worktrees, thus the ref `master` gives `inet-master` |
+| D5 | Name of a worktree that opp_repl makes | The short hash of the commit that the ref gives. The ref name is not possible: `<repository>-<branch>` is the name rule of the user's own worktrees, thus the ref `master` gives `inet-master` |
 | D6 | Open. Smoke, sanitizer and fingerprint tests: a private result folder that the test removes, or no recording | Recommended: a private result folder for each run, removed as `keep_output` tells. The recording code then stays in the smoke test, and a PCAP file goes too |
 | D7 | Open. Statistical test: result files of a simulation that did not complete | Recommended: the same rule as all other output: keep them only when the result is not the expected result |
 
@@ -347,6 +349,7 @@ without them.
 | 2026-11-11 | Plan written. |
 | 2026-11-11 | User: D1 agreed. D2: remove a worktree only when it is provably not in use. D3 agreed. D4 later. |
 | 2026-11-11 | D2: the proof has five parts (section 3). The user has not yet confirmed this definition of the proof. |
+| 2026-11-11 | User: agreed with the short commit hash as the name of a worktree (D5). |
 | 2026-11-11 | User: agreed with the four checks. opp_repl must not call `git worktree remove --force` by default, and `delete_worktree=True` as the default is wrong. The age is now a policy and not a part of the proof. |
 | 2026-11-11 | 5.2: no new `/var/tmp` rule, because the 30-day rule of the system works. |
 | 2026-11-11 | Stage 1: a test with an expected FAIL or a SKIP also loses its folder, because the result is the expected result. |
