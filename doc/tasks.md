@@ -354,6 +354,37 @@ r = run_chart_tests()
 tr2 = r.results[0].recheck(metric_threshold=0.01)  # tolerate small diffs
 ```
 
+### Opp tests
+
+Opp tests run the `.test` files of a folder with the `opp_test` command.
+The unit, module, queueing and protocol tests of a project are the opp
+tests of the folder that the project gives for that kind.
+
+```python
+run_opp_tests("tests/module")
+run_protocol_tests(working_directory_filter="tests/protocol/tcp")
+```
+
+`opp_test` extracts each test into `work/<test>/`, and opp_repl builds and
+runs the test there.  This folder holds the object files, the binary and
+the complete output of the test.  The output of one test can be some
+hundred megabytes of event log.  The `keep_output` argument of the run
+tells which tests keep their folder after the run:
+
+| Value | The folder of a test stays |
+|---|---|
+| `"unexpected"` (default) | only when the result is not the expected result |
+| `"all"` | always |
+| `"none"` | never |
+
+```python
+run_module_tests(filter="Rstp")                     # keeps the folder of each unexpected result
+run_module_tests(filter="Rstp", keep_output="all")  # also keeps test.out of the tests that pass
+```
+
+On the command line the option is `--keep-output`.  A debug run always
+keeps the folder.  A work folder that is empty after the run goes too.
+
 ## Update tasks in detail
 
 Update tasks re-run simulations and refresh the stored baselines.  The
