@@ -109,6 +109,33 @@ results = compare_simulations_between_commits(
 The default is `delete_worktree=False`, which keeps the worktrees so repeated
 comparisons against the same commits do not rebuild from scratch.
 
+### Output file cleanup
+
+The two sides of a comparison write their files into the result folder of the
+working directory, as `<config>-#<run>-1` and `<config>-#<run>-2`: the stdout
+(`.out`), the eventlog (`.elog`) and the results (`.sca`, `.vci`).  A stdout
+comparison runs the simulations with the complete event log, thus one `.out`
+file can be some gigabytes.
+
+The `keep_output` argument tells which comparisons keep these files after all
+verdicts are known:
+
+| Value | The files of a comparison stay |
+|---|---|
+| `"unexpected"` (default) | only when the result is not `IDENTICAL` |
+| `"all"` | always |
+| `"none"` | never |
+
+```python
+results = compare_simulations(
+    simulation_project_1=project_a, simulation_project_2=project_b,
+    config_filter="General", run_number=0,
+    keep_output="all")
+```
+
+A comparison that did not run its simulations, such as a dry run, removes no
+file.
+
 ### Shorthand functions
 
 Dedicated shorthand functions are available for comparing a single axis.
@@ -422,6 +449,12 @@ r2.result                                # overall verdict is recomputed
 
 Only axes whose `compare_*` flag was enabled on the original task are
 recomputed; the rest are passed through unchanged.
+
+`recompare()` reads the output files of the two sides again.  An `IDENTICAL`
+comparison removes its files by default (see
+[Output file cleanup](#output-file-cleanup)), and `recompare()` then raises an
+error.  Run the comparison with `keep_output="all"` to compare an identical
+pair again.
 
 ### Interactive debugging and visualization
 
