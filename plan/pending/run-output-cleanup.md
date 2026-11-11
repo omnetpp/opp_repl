@@ -1,6 +1,6 @@
 # Automatic cleanup of run output
 
-> **Status:** stages 1 and 5 complete, stages 2 to 4 open · **Owner:** opp_repl · **Branch:** `topic/run-output-cleanup`, worktree `opp_repl-run-output-cleanup` · **Optional stages:** INET, OMNeT++ · **Written:** 2026-11-11
+> **Status:** stages 1, 2 and 5 complete, stages 3 and 4 open · **Owner:** opp_repl · **Branch:** `topic/run-output-cleanup`, worktree `opp_repl-run-output-cleanup` · **Optional stages:** INET, OMNeT++ · **Written:** 2026-11-11
 
 opp_repl removes the output of a test or of a comparison when the result is the expected result.
 opp_repl keeps the output when the result is not the expected result, because a person will
@@ -180,15 +180,38 @@ test, a maximum of about 1.2 GB for each test.
 
 ### Stage 2 — result files of the compare functions (53 GB class)
 
-- [ ] 2.1 Add one function that removes the `.out`, `.elog`, `.sca`, `.vec` and `.vci` files of the
-      two sides of a compare task.
-- [ ] 2.2 Call the function after `_finalize_chart_comparisons` and
-      `_finalize_module_image_comparisons`, in each compare entry point. Apply `keep_output`: with
-      the default, remove the files of each task with the result IDENTICAL.
-- [ ] 2.3 `recompare()` and the trajectory functions: when a file is not there, raise an error
-      that names `keep_output="all"`.
-- [ ] 2.4 Add a self test: an identical pair leaves no `-1` and `-2` files; a divergent pair keeps
-      them, and `debug_at_stdout_divergence_position` works.
+- [x] 2.1 `CompareSimulationsTaskResult.get_output_file_paths()` gives the `.out`, `.elog`, `.sca`,
+      `.vec` and `.vci` files of the two sides, and `_remove_output_files()` removes them
+      (`a54bdba`).
+- [x] 2.2 The two entry points that do the chart and module image steps call
+      `_remove_output_files()` after these steps: `compare_simulations_using_multiple_tasks` and
+      `compare_simulations_across_commits`. With the default, a comparison with the result
+      IDENTICAL removes its files (`a54bdba`).
+- [x] 2.3 `recompare()` raises an error that names `keep_output="all"` when the files are removed.
+      The result records this in `output_files_removed`. The trajectory functions did not change
+      (`a54bdba`).
+- [x] 2.4 Self test `opp_repl/test/self/compare.py`, 8 cases, in `opp_repl_self_test`. It builds
+      and runs no simulation (`a54bdba`).
+- [x] 2.5 `doc/comparing_simulations.md` has a section on the output file cleanup (`a8a4957`).
+
+Facts from the work:
+
+- A comparison that did not run its simulations (a dry run, a cancel) removes no file. The files
+  on the disk are then from an earlier run.
+- A file that some other comparison keeps stays. Two pairs of a comparison across commits can
+  write the same file of one commit, for example in the baseline mode.
+- The `.vci` file stayed after each comparison before this change, because the conversion of the
+  vectors removed only the `.vec` file.
+
+Check, done on 2026-11-11 with real simulations (`examples/inet/nclients`, config `inet__inet`,
+2 s, the two sides in one project):
+
+| Case | Result | Files in `results/` after the run |
+|---|---|---|
+| same seed, default | IDENTICAL | none |
+| same seed, `keep_output="all"` | IDENTICAL | 8 files, 6.5 MB |
+| other seed on side 2, default | DIVERGENT | 8 files, 7.4 MB; `recompare()` works |
+| other seed on side 2, `keep_output="none"` | DIVERGENT | none |
 
 ### Stage 3 — worktrees (54 GB class)
 
@@ -281,3 +304,4 @@ without them.
 | 2026-11-11 | 5.2: no new `/var/tmp` rule, because the 30-day rule of the system works. |
 | 2026-11-11 | Stage 1: a test with an expected FAIL or a SKIP also loses its folder, because the result is the expected result. |
 | 2026-11-11 | Stage 1: `should_keep_output()` is a method of `TaskResult`, thus stages 2 and 4 use the same decision. |
+| 2026-11-11 | Stage 2: the guard is in `recompare()` and not in the trajectory functions, because other callers also use these functions. |
