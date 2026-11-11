@@ -251,6 +251,23 @@ class TaskResult:
     def get_hash(self, **kwargs):
         return self.task.get_hash(**kwargs)
 
+    def should_keep_output(self, keep_output="unexpected"):
+        """
+        Tells if the task keeps the output files of this run. A new run makes the output again, and
+        only a person who examines the result has a use for it.
+
+        Parameters:
+            keep_output (string):
+                "unexpected" keeps the output only when the result is not the expected result,
+                "all" always keeps it, and "none" always removes it.
+
+        Returns (bool):
+            True if the output stays on the disk.
+        """
+        if keep_output not in ("unexpected", "all", "none"):
+            raise ValueError(f"Invalid keep_output: {keep_output!r} (allowed: 'unexpected', 'all', 'none')")
+        return keep_output == "all" or (keep_output == "unexpected" and not self.expected)
+
     def get_description(self, complete_error_message=True, include_parameters=False, **kwargs):
         return (self.task.get_parameters_string() + " " if include_parameters else "") + \
                 self.color + self.result + COLOR_RESET + \

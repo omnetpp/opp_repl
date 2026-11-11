@@ -128,7 +128,22 @@ class OppTestTask(TestTask):
                 pass
         return self._expected_result
 
-    def run_protected(self, **kwargs):
+    def run_protected(self, keep_output="unexpected", **kwargs):
+        """
+        Runs the test, then removes the folder of the test from the work directory.
+
+        Parameters:
+            keep_output (string):
+                "unexpected" (default) keeps the folder only when the result is not the expected
+                result, "all" always keeps it, and "none" always removes it. One test can leave
+                some hundred megabytes of event log there. A debug run always keeps the folder.
+        """
+        task_result = self.run_test(**kwargs)
+        if not self.debug and not task_result.should_keep_output(keep_output):
+            shutil.rmtree(self.get_test_directory(), ignore_errors=True)
+        return task_result
+
+    def run_test(self, **kwargs):
         binary_suffix = "" if self.mode == "release" else self.simulation_project.get_omnetpp_project().get_library_suffix(mode=self.mode)
         expected_result = self.get_expected_result()
         test_file_name = os.path.join(self.working_directory, self.test_file_name)
