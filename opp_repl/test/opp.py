@@ -307,7 +307,13 @@ class MultipleOppTestTasks(MultipleSimulationTestTasks):
             subprocess_result = run_command_with_logging(args, cwd=lib_directory, env=self.simulation_project.get_env(), command_line_logger=_logger)
             if subprocess_result.returncode != 0:
                 raise Exception(f"Cannot build opp_test support lib in {lib_directory}")
-        return super().run_protected(**kwargs)
+        multiple_task_results = super().run_protected(**kwargs)
+        # Each test removes its own folder (see OppTestTask.run_protected). A work folder that
+        # is empty after the run goes too.
+        for work_directory in sorted(work_directories):
+            if os.path.isdir(work_directory) and not os.listdir(work_directory):
+                os.rmdir(work_directory)
+        return multiple_task_results
 
 class BinaryTestTask(TestTask):
     """Run a self-contained test folder that builds its own executable (via its

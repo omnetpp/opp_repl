@@ -118,5 +118,27 @@ class OppTestOutputTestCase(unittest.TestCase):
         self.assertIn("keep_output", task_result.error_message)
         self.assertTrue(has_output)
 
+    def _run_suite(self, opp_test_result, **kwargs):
+        self.opp_test_result = opp_test_result
+        multiple_tasks = MultipleOppTestTasks(tasks=[self._make_task()], simulation_project=self.simulation_project, test_folder=self.folder.name,
+                                              build=False, multiple_task_results_class=MultipleTestTaskResults)
+        multiple_task_results = multiple_tasks.run(output_stream=io.StringIO(), **kwargs)
+        return multiple_task_results, os.path.isdir(os.path.join(self.folder.name, "work"))
+
+    def test_suite_removes_an_empty_work_folder(self):
+        multiple_task_results, has_work_folder = self._run_suite("PASS")
+        self.assertEqual(multiple_task_results.result, "PASS")
+        self.assertFalse(has_work_folder)
+
+    def test_suite_keeps_a_work_folder_with_a_test_in_it(self):
+        multiple_task_results, has_work_folder = self._run_suite("FAIL")
+        self.assertEqual(multiple_task_results.result, "FAIL")
+        self.assertTrue(has_work_folder)
+
+    def test_suite_passes_keep_output_to_the_tests(self):
+        multiple_task_results, has_work_folder = self._run_suite("PASS", keep_output="all")
+        self.assertEqual(multiple_task_results.result, "PASS")
+        self.assertTrue(has_work_folder)
+
 if __name__ == "__main__":
     unittest.main()
