@@ -333,7 +333,7 @@ def update_speed_test_results_main():
 def run_self_test_main():
     import unittest
     loader = unittest.TestLoader()
-    suite = loader.loadTestsFromNames(["opp_repl.test.self.dependency", "opp_repl.test.self.coverage", "opp_repl.test.self.opp"])
+    suite = loader.loadTestsFromNames(["opp_repl.test.self.dependency", "opp_repl.test.self.coverage", "opp_repl.test.self.opp", "opp_repl.test.self.compare"])
     result = unittest.TextTestRunner(verbosity=2).run(suite)
     sys.exit(0 if result.wasSuccessful() else 1)
 

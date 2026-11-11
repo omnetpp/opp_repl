@@ -94,6 +94,7 @@ class CompareSimulationsTaskResult(TaskResult):
     def __init__(self, multiple_task_results=None, **kwargs):
         super().__init__(expected_result="IDENTICAL", **kwargs)
         self.multiple_task_results = multiple_task_results
+        self.output_files_removed = False
         if multiple_task_results and multiple_task_results.result == "DONE":
             self.multiple_tasks = multiple_task_results.multiple_tasks
 
@@ -262,6 +263,8 @@ class CompareSimulationsTaskResult(TaskResult):
             CompareSimulationsTaskResult: A new result with updated verdicts.
         """
         import copy
+        if self.output_files_removed:
+            raise Exception("The output files of this comparison are removed, run the comparison with keep_output=\"all\" to compare it again")
         new_result = copy.copy(self)
         if self.task.compare_stdout:
             new_result._compute_stdout_verdict(**kwargs)
@@ -275,6 +278,16 @@ class CompareSimulationsTaskResult(TaskResult):
             new_result._compute_module_image_verdict()
         new_result._recompute_overall_result()
         return new_result
+
+    def get_output_file_paths(self):
+        """The stdout, eventlog, scalar, vector and vector index files of the two sides."""
+        file_paths = []
+        for simulation_task in self.task.multiple_simulation_tasks.tasks:
+            simulation_config = simulation_task.simulation_config
+            vector_index_file_path = os.path.splitext(simulation_task.vector_file_path)[0] + ".vci"
+            for file_path in [simulation_task.stdout_file_path, simulation_task.eventlog_file_path, simulation_task.scalar_file_path, simulation_task.vector_file_path, vector_index_file_path]:
+                file_paths.append(simulation_config.simulation_project.get_full_path(os.path.join(simulation_config.working_directory, file_path)))
+        return file_paths
 
     def _compute_stdout_verdict(self, **kwargs):
         """Compute stdout trajectory comparison verdict."""
@@ -806,11 +819,12 @@ def get_compare_simulations_tasks(multiple_tasks_1, multiple_tasks_2, build=True
     return aggregate
 get_compare_simulations_tasks.__signature__ = combine_signatures(get_compare_simulations_tasks, CompareSimulationsTask.__init__, get_simulation_tasks)
 
-def compare_simulations_using_multiple_tasks(multiple_tasks_1, multiple_tasks_2, **kwargs):
+def compare_simulations_using_multiple_tasks(multiple_tasks_1, multiple_tasks_2, keep_output="unexpected", **kwargs):
     multiple_compare_simulations_tasks = get_compare_simulations_tasks(multiple_tasks_1, multiple_tasks_2, **kwargs)
     results = multiple_compare_simulations_tasks.run(**kwargs)
     _finalize_chart_comparisons(multiple_compare_simulations_tasks.tasks, results)
     _finalize_module_image_comparisons(multiple_compare_simulations_tasks.tasks, results)
+    _remove_output_files(results, keep_output)
     return results
 
 def compare_simulations(**kwargs):
@@ -827,6 +841,12 @@ def compare_simulations(**kwargs):
     :py:func:`get_simulation_tasks`).  The two projects need not agree on the set of
     simulation configs: the sides are matched on identity and only the configs present
     on both are compared, the rest being reported and left out.
+
+    The two sides write their stdout, eventlog and result files into the result folder,
+    as ``<config>-#<run>-1`` and ``<config>-#<run>-2``. The ``keep_output`` argument tells
+    which comparisons keep these files: ``"unexpected"`` (the default) keeps them only when
+    the result is not IDENTICAL, ``"all"`` always keeps them, and ``"none"`` always removes
+    them. A result without its files cannot be compared again with ``recompare()``.
 
     Example::
 
@@ -994,7 +1014,7 @@ def _build_commit_pairs(commits, comparison_mode):
                      f"(expected 'differential' or 'baseline')")
 
 def compare_simulations_across_commits(simulation_project=None, commits=None,
-                                       comparison_mode="differential", delete_worktree=False, **kwargs):
+                                       comparison_mode="differential", delete_worktree=False, keep_output="unexpected", **kwargs):
     """Compare simulation results across a sequence of git commits.
 
     Two comparison modes are supported:
@@ -1025,6 +1045,11 @@ def compare_simulations_across_commits(simulation_project=None, commits=None,
             If ``True``, every worktree created by this call is removed
             after the comparison finishes (including on error).  Default
             ``False`` (worktrees are kept for reuse).
+        keep_output (str):
+            Which comparisons keep the stdout, eventlog and result files of their
+            two sides: ``"unexpected"`` (default) keeps them only when the result
+            is not IDENTICAL, ``"all"`` always keeps them, ``"none"`` always
+            removes them.
         kwargs:
             Forwarded to :py:func:`compare_simulations` / :py:class:`CompareSimulationsTask`.
 
@@ -1073,6 +1098,7 @@ def compare_simulations_across_commits(simulation_project=None, commits=None,
         results = aggregate.run(**kwargs)
         _finalize_chart_comparisons(all_compare_tasks, results)
         _finalize_module_image_comparisons(all_compare_tasks, results)
+        _remove_output_files(results, keep_output)
         return results
     finally:
         if delete_worktree:
@@ -1224,6 +1250,27 @@ def _recompute_multiple_task_result(multi_result):
             multi_result.result = pr
     multi_result.color = multi_result.possible_result_colors[multi_result.possible_results.index(multi_result.result)]
     multi_result.expected = multi_result.expected_result == multi_result.result
+
+def _remove_output_files(multiple_compare_results, keep_output="unexpected"):
+    """Removes the output files of the comparisons that do not keep them (see
+    :py:meth:`TaskResult.should_keep_output`), after all verdicts are known.
+
+    A stdout comparison runs the two simulations with the complete event log, thus one stdout
+    file can be some gigabytes. A person has a use for these files only when the two sides
+    are not identical.
+
+    A comparison that did not run its simulations (a dry run, a cancel) wrote no file and
+    removes none. A file that some other comparison keeps stays too: two pairs of a
+    comparison across commits can write the same file of one commit.
+    """
+    results = [result for result in multiple_compare_results.results if result.multiple_task_results is not None]
+    kept_file_paths = {file_path for result in results if result.should_keep_output(keep_output) for file_path in result.get_output_file_paths()}
+    for result in results:
+        if not result.should_keep_output(keep_output):
+            for file_path in result.get_output_file_paths():
+                if file_path not in kept_file_paths and os.path.exists(file_path):
+                    os.remove(file_path)
+            result.output_files_removed = True
 
 def _finalize_module_image_comparisons(compare_tasks, multiple_compare_results):
     """Capture each side's module images and diff them, then refresh the
