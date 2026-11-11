@@ -92,6 +92,14 @@ class OppTestTask(TestTask):
         with one file name in different subfolders do not share a folder."""
         return os.path.join(os.path.dirname(self.test_file_name), "work") if self.has_testprog() else "work"
 
+    def get_test_directory(self):
+        """The folder of this test in the work directory. It holds the extracted files, the object
+        files, the binary and the complete output of the test. opp_test names it after the test
+        file and changes each character other than a letter, a digit and "_" to "_"
+        (omnetpp/test.py)."""
+        test_name = re.sub(r"[^A-Za-z0-9_]", "_", os.path.splitext(os.path.basename(self.test_file_name))[0])
+        return os.path.join(self.working_directory, self.get_work_directory(), test_name)
+
     def get_parameters_string(self, **kwargs):
         return self.test_file_name
 
@@ -124,9 +132,9 @@ class OppTestTask(TestTask):
         binary_suffix = "" if self.mode == "release" else self.simulation_project.get_omnetpp_project().get_library_suffix(mode=self.mode)
         expected_result = self.get_expected_result()
         test_file_name = os.path.join(self.working_directory, self.test_file_name)
-        test_binary_name = os.path.basename(re.sub(r"\.test$", "", self.test_file_name))
         work_directory = self.get_work_directory()
-        test_directory = os.path.join(self.working_directory, work_directory, test_binary_name)
+        test_directory = self.get_test_directory()
+        test_binary_name = os.path.basename(test_directory)
         has_lib = os.path.exists(self.lib_directory)
         lib_relative_path = os.path.relpath(self.lib_directory, test_directory)
         os.makedirs(test_directory, exist_ok=True)
