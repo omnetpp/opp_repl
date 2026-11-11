@@ -1,6 +1,6 @@
 # Automatic cleanup of run output
 
-> **Status:** stage 1 in work, stage 5 complete · **Owner:** opp_repl · **Branch:** `topic/run-output-cleanup`, worktree `opp_repl-run-output-cleanup` · **Optional stages:** INET, OMNeT++ · **Written:** 2026-11-11
+> **Status:** stages 1 and 5 complete, stages 2 to 4 open · **Owner:** opp_repl · **Branch:** `topic/run-output-cleanup`, worktree `opp_repl-run-output-cleanup` · **Optional stages:** INET, OMNeT++ · **Written:** 2026-11-11
 
 opp_repl removes the output of a test or of a comparison when the result is the expected result.
 opp_repl keeps the output when the result is not the expected result, because a person will
@@ -40,6 +40,10 @@ All line numbers are from opp_repl `main` at `39e15bc` and OMNeT++ `omnetpp-6.x`
   `.subst` copies. One output file was as large as 580 MB.
 - No tool reads `work/` after the run. opp_ci, the INET workflows and the INET Python code do not
   refer to it.
+- `opp_test` names the folder `work/<test>` after the test file, and it changes each character
+  other than a letter, a digit and `_` to `_` (`python/omnetpp/test.py:297-298`). INET has 188
+  tests with such a name, for example the packetdrill tests. opp_repl used the name without this
+  change (found in stage 1, repaired in `0f2e5ab`).
 
 ### 2.2 Result files of the compare functions
 
@@ -145,17 +149,31 @@ done, and write new facts into this file.
 
 ### Stage 1 — `opp_test` work directories (159 GB class)
 
-- [ ] 1.1 `OppTestTask.run_protected`: give the function one exit path. After the result is known,
-      remove `work/<test>/` as `keep_output` tells. Do not remove in debug mode and in a dry run.
-- [ ] 1.2 `MultipleOppTestTasks.run_protected`: after the run, remove each `work/` directory that
-      is empty.
-- [ ] 1.3 Add `--keep-output` to the command line of the test runners.
-- [ ] 1.4 Add a self test: one test that passes and one test that fails; examine `work/` for each
-      value of `keep_output`.
-- [ ] 1.5 Update the documentation of `run_opp_tests`.
+- [x] 1.0 `OppTestTask.get_test_directory()` gives the folder that `opp_test` makes for the test
+      (`0f2e5ab`). This step was not in the first plan. The first INET check found it: the
+      folders of the packetdrill tests stayed.
+- [x] 1.1 `OppTestTask.run_protected` runs the test in `run_test` and then removes `work/<test>/`
+      as `keep_output` tells. `TaskResult.should_keep_output()` makes the decision for all task
+      types. A debug run keeps the folder. A dry run does not reach this function (`4424d6a`).
+- [x] 1.2 `MultipleOppTestTasks.run_protected`: after the run, remove each `work/` directory that
+      is empty (`79b83c0`).
+- [x] 1.3 `--keep-output` is an option of all test runners (`adb7f49`).
+- [x] 1.4 Self test `opp_repl/test/self/opp.py`, 11 cases, in `opp_repl_self_test`. A stub takes
+      the place of `opp_test`, thus the test does not need OMNeT++. The cases fail without the
+      change (`4424d6a`, `79b83c0`).
+- [x] 1.5 `doc/tasks.md` has a section on the opp tests and `keep_output` (`6a4473e`).
 
-Check: run the INET module, unit and protocol suites in one worktree. The verdict counts are the
-same as before the change. `work/` contains only the tests with a result that is not expected.
+Check, done on 2026-11-11 in `inet-physicallayer-content-errors` (debug, `--no-build`): each
+suite ran with the default and with `--keep-output all`, which is the behaviour before the change.
+
+| Suite | Tests | Different verdicts | `work/` with the default | `work/` with `all` |
+|---|---|---|---|---|
+| protocol | 1193 | 0 | 1.5 GB | 23.3 GB |
+| module | 849 | 0 | 0 | 3.1 GB |
+| unit | 155 | 0 | 0 | 1.6 GB |
+
+The 1.5 GB are the folders of the 67 tests with an unexpected FAIL. An expected FAIL (47 tests)
+and a SKIP (306 tests) leave no folder.
 
 Note: the disk use during a run is now the number of parallel tests multiplied by the size of one
 test, a maximum of about 1.2 GB for each test.
@@ -261,3 +279,5 @@ without them.
 | 2026-11-11 | User: D1 agreed. D2: remove a worktree only when it is provably not in use. D3 agreed. D4 later. |
 | 2026-11-11 | D2: the proof has five parts (section 3). The user has not yet confirmed this definition of the proof. |
 | 2026-11-11 | 5.2: no new `/var/tmp` rule, because the 30-day rule of the system works. |
+| 2026-11-11 | Stage 1: a test with an expected FAIL or a SKIP also loses its folder, because the result is the expected result. |
+| 2026-11-11 | Stage 1: `should_keep_output()` is a method of `TaskResult`, thus stages 2 and 4 use the same decision. |
