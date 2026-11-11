@@ -1,6 +1,6 @@
 # Automatic cleanup of run output
 
-> **Status:** stages 1, 2 and 5 complete, stages 3 and 4 open · **Owner:** opp_repl · **Branch:** `topic/run-output-cleanup`, worktree `opp_repl-run-output-cleanup` · **Optional stages:** INET, OMNeT++ · **Written:** 2026-11-11
+> **Status:** stages 1, 2 and 5 complete; stage 3 waits for D2 and D5; stage 4 is measured and waits for D6 and D7 · **Owner:** opp_repl · **Branch:** `topic/run-output-cleanup`, worktree `opp_repl-run-output-cleanup` · **Optional stages:** INET, OMNeT++ · **Written:** 2026-11-11
 
 opp_repl removes the output of a test or of a comparison when the result is the expected result.
 opp_repl keeps the output when the result is not the expected result, because a person will
@@ -233,9 +233,26 @@ Check, done on 2026-11-11 with real simulations (`examples/inet/nclients`, confi
 
 ### Stage 4 — simulation tests (part of the 130 GB class)
 
-- [ ] 4.1 Measure first. In a clean INET worktree, run the smoke, sanitizer, fingerprint,
-      statistical and chart tests on a small filter. Record the files that stay in `results/` for
-      each test type. Do not run the feature tests on this machine.
+- [x] 4.1 Measure first. Done on 2026-11-11 in `inet-physicallayer-content-errors` (debug,
+      `--no-build`), each test type on one working directory, with an empty `results/` folder at
+      the start:
+
+      | Test type | Directory | Tests | Files that stay in `results/` |
+      |---|---|---|---|
+      | smoke | `examples/inet/nclients` | 10 | 6 `.vec` 222 MB, 6 `.sca` 6 MB, 6 `.vci` 4 MB |
+      | fingerprint | `examples/inet/nclients` | all | 7 `.vec` 12 MB, 7 `.sca` 5 MB, 7 `.vci` 13 MB |
+      | fingerprint | `tutorials/stp` | 8 | 8 `.pcap` 68 MB, 8 `.vec` 7 MB, 8 `.sca` 3 MB, 8 `.vci` 7 MB |
+      | statistical | `examples/inet/nclients` | 10 | none |
+
+      - The smoke test is the large maker: about 38 MB for each run of 1 s CPU time, with full
+        vectors.
+      - The files of a fingerprint test have no data. The `.vec` file has only the declarations
+        of the vectors, and the `.sca` file has only parameter lines. The `.pcap` file is real
+        data, because the ini file of the tutorial records it.
+      - The statistical test left nothing, also for a simulation that stops with an error at its
+        start. A file can stay only when a simulation stops after it made the result files.
+      - Not measured: the chart tests (this worktree has no `media` folder), the sanitizer tests
+        (no sanitize build) and the feature tests (not on this machine).
 - [ ] 4.2 Statistical tests: move the removal of the `.sca`, `.vec` and `.vci` files into a
       `finally` block, thus it runs for each simulation result.
 - [ ] 4.3 Tests that do not read results in `results/`: `SimulationTestTask` gives the simulation
@@ -286,6 +303,9 @@ without them.
 | D2 | Worktrees: when to remove | Only with a proof that nobody uses the worktree (section 3) |
 | D3 | System settings of stage 5 | 5.1 and 5.3 done; 5.2 examined, no change |
 | D4 | Optional stages O1 and O2 | Later, after a measurement |
+| D5 | Open. Name of a worktree: the commit hash, or the ref name with a checkout update at each reuse | Recommended: the ref name with `/` changed to `-`, as the other worktrees of the workspace, and an update of the checkout when the ref moved and the worktree is clean |
+| D6 | Open. Smoke, sanitizer and fingerprint tests: a private result folder that the test removes, or no recording | Recommended: a private result folder for each run, removed as `keep_output` tells. The recording code then stays in the smoke test, and a PCAP file goes too |
+| D7 | Open. Statistical test: result files of a simulation that did not complete | Recommended: the same rule as all other output: keep them only when the result is not the expected result |
 
 ## 7. Out of scope
 
@@ -305,3 +325,4 @@ without them.
 | 2026-11-11 | Stage 1: a test with an expected FAIL or a SKIP also loses its folder, because the result is the expected result. |
 | 2026-11-11 | Stage 1: `should_keep_output()` is a method of `TaskResult`, thus stages 2 and 4 use the same decision. |
 | 2026-11-11 | Stage 2: the guard is in `recompare()` and not in the trajectory functions, because other callers also use these functions. |
+| 2026-11-11 | Stage 4.1 measured. The work stops here: stage 3 needs D2 and D5, and the other steps of stage 4 need D6 and D7. |
