@@ -56,6 +56,7 @@ def parse_run_tasks_arguments(task_name, extra_args_fn=None):
     parser.add_argument("--handle-exception", action="store_true", help="display errors as short messages (default: enabled)")
     parser.add_argument("--no-handle-exception", dest="handle_exception", action="store_false")
     parser.add_argument("--result-file", default=None, help="write JSON result to this file; use '-' for stdout (after the text output)")
+    parser.add_argument("--keep-output", choices=["unexpected", "all", "none"], default=None, help="which runs keep their output files, such as the work folder of an opp test: unexpected keeps them only when the result is not the expected result (default), all always keeps them, none always removes them")
     parser.set_defaults(concurrent=True, build=True, dry_run=False, handle_exception=True)
     if extra_args_fn is not None:
         extra_args_fn(parser)
