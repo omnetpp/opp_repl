@@ -138,7 +138,9 @@ options, `keep_charts` and `keep_images`.
 
 **Worktrees** stay for reuse, because a build is slow. `delete_worktree=False` stays the default.
 opp_repl removes a worktree only when it has a proof that nobody uses the worktree, and it does
-not use `git worktree remove --force`. The proof has four checks, and each check must be true:
+not use `git worktree remove --force`. The user agreed with four checks, and each check must be
+true. A safety review of 2026-11-12 made check 3 stricter and added a fifth check; see step 3.6a
+and `_remove_git_worktree`.
 
 1. **opp_repl made the worktree.** A marker file in the administration directory of the worktree
    (`git rev-parse --git-dir`) records the commit that opp_repl checked out.
@@ -267,10 +269,39 @@ Check, done on 2026-11-11 with real simulations (`examples/inet/nclients`, confi
 - [x] 3.6 Self test `opp_repl/test/self/worktree.py`, 26 cases with a temporary git repository,
       in `opp_repl_self_test`. `doc/comparing_simulations.md` and `doc/bisecting.md` describe
       the worktrees (`af30dc9`).
-- [ ] 3.7 One time, by hand: remove the 15 old worktrees without a marker, after the user agrees.
-      State on 2026-11-12: 5.5 GB together, all with a detached `HEAD`, and no process in them.
-      14 have a clean `git status`. `omnetpp-af93876531` has 18 changed or new files; examine it
-      first.
+- [x] 3.6a After a safety review that the user asked for, the proof is stricter (`bb125ad`): the
+      `HEAD` never moved, no other git repository is in the worktree, no file or folder in it is
+      newer than the marker file, `git status` runs with explicit options, and a branch, a remote
+      branch or a tag contains the commit. The marker file gets the time of the end of each use.
+      The proof now has five checks. Self test: 30 cases.
+- [ ] 3.7 One time, by hand: remove the old worktrees without a marker, after the user agrees.
+      State on 2026-11-12: 15 worktrees, 5.5 GB together, all with a detached `HEAD`, no process
+      in them, no other repository in them, and a `HEAD` log of at most one entry.
+
+      The command history of the REPL (`~/.ipython/profile_default/history.sqlite`) has the call
+      that made each group:
+
+      | Worktrees | Made | Call |
+      |---|---|---|
+      | `omnetpp-<hash>`, 7 | 2026-04-23 15:14 | `bisect_statistical_tests(histograms_project, "af93876531...", "6afd103c13...")` |
+      | `inet-gm-master`, `inet-gm-topic/desy` | 2026-05-20 14:29 | `compare_charts_between_commits(inet_gm, "master", "topic/desync")`, used again on 2026-06-03 |
+      | `inet-master-origin/mas`, `inet-master-origin/top` | 2026-05-28 14:02 | `compare_module_images_between_commits("origin/master", "origin/topic/improvement")` |
+      | `simu5g-HEAD` | 2026-05-29 18:46 | not found in the history; the name is the ref `HEAD` |
+      | `inet-remotes/or`, `inet-master-master`, `inet-master-remotes/or` | 2026-06-03 12:23 and 12:29 | `compare_module_images_between_commits("remotes/origin/topic/improvement", "master")` |
+
+      Three of the 15 must stay as they are:
+
+      - `inet-master-origin/top` keeps 20 commits that no branch and no tag contains: the state
+        of `origin/topic/improvement` of 2026-05-28, before that branch moved. For 22 commits of
+        its history, the branch of today has no equal change (`git cherry`).
+      - `inet-gm-topic/desy` keeps 2 commits that no branch contains: the state of `topic/desync`
+        of 2026-05-20. One of them, `0ff2faa11d` "EthernetPlca: Added a debug-only curID
+        synchronization check" (95 lines), has no equal change in `topic/desync` of today.
+      - `omnetpp-af93876531` has 18 new files in `samples/histograms`: the stored statistics of
+        the good commit of the bisect.
+
+      The first proposal, to remove 14, was wrong for the first two: it was the loss of these
+      commits. This finding is the reason for check 5.
 
 Facts from the work:
 
@@ -332,12 +363,17 @@ Check, done on 2026-11-12 with the project `mm1k` and real builds and runs:
         gave the same verdicts (7 PASS, 3 expected ERROR) and left no file, 232 MB before. The
         fingerprint test of `tutorials/stp` gave 8 PASS and left only the 8 `.pcap` files, 68 MB.
       - Not solved, with the agreement of the user: (1) a file that a module writes, such as
-        the PCAP files of 15 INET ini files; each run replaces them. (2) OMNeT++ removes an old
-        `.vec` or `.sca` file with the same name at the start of each run, also when the files
-        are off (`src/envir/omnetppoutvectormgr.cc:65-67`), thus a test removes the result of a
-        manual run of the same config; today the test replaces it. (3) A simulation with an
+        the PCAP files of 15 INET ini files; each run replaces them. (3) A simulation with an
         OMNeT++ before 6.2.0 stops with an error on these options; there is no version check,
         as in the speed test.
+      - Point (2) is solved after the safety review (`2fbfa0f`), against the first decision of
+        "no change": OMNeT++ removes an old `.vec` or `.sca` file with the same name at the
+        start of each run, also when the files are off
+        (`src/envir/omnetppoutvectormgr.cc:65-67`). A test thus removed the result of a manual
+        run of the same config. The tests now also pass
+        `--output-scalar-file=${resultdir}/.no-result-file.sca` and the same for the vector
+        file. Check with the complete INET smoke and fingerprint suites: the files of a manual
+        run of two configs stayed, and no verdict changed.
 - [x] 4.3a `doc/smoke_tests.md`, `sanitizer_tests.md`, `fingerprint_tests.md` and
       `statistical_tests.md` tell which result files the tests make and remove (`c460c16`). Self
       test `opp_repl/test/self/result_files.py`, 9 cases, in `opp_repl_self_test`.
@@ -414,6 +450,7 @@ without them.
 | 2026-11-11 | Plan written. |
 | 2026-11-11 | User: D1 agreed. D2: remove a worktree only when it is provably not in use. D3 agreed. D4 later. |
 | 2026-11-11 | D2: the proof has five parts (section 3). The user has not yet confirmed this definition of the proof. |
+| 2026-11-12 | User asked for a recheck of all removals. Result: the proof for worktrees has five checks now, and the tests do not remove the result files of a manual run. The second point changes the first decision of "no change"; the user can reject it. |
 | 2026-11-12 | Stage 3 done. Found during the work: the old `delete_worktree=True` did not work, and a build file that git does not ignore keeps a worktree. |
 | 2026-11-12 | User asked if a bisect keeps its worktrees for a later bisect. Answer: yes, also in the plan. The age of the automatic removal becomes a setting, and `None` turns the removal off. |
 | 2026-11-12 | Stage 4 check: one complete INET smoke run left 25 GB before the change. The PCAP files that stay are 0.5 GB to 0.8 GB for each worktree; the user agreed before this number was known. |
