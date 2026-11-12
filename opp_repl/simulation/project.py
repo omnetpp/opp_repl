@@ -1113,15 +1113,40 @@ def _get_git_root(path, optional=False):
     )
     return os.path.abspath(result.stdout.strip())
 
-def _make_git_worktree(git_root, git_hash):
-    """Ensure a worktree of *git_root* at *git_hash* exists and return its path.
+def _run_git(args, cwd):
+    """Run a git query in *cwd*. Return its output, or ``None`` when git gives an error."""
+    result = subprocess.run(["git", *args], cwd=cwd, capture_output=True, text=True)
+    return result.stdout.strip() if result.returncode == 0 else None
 
-    The worktree is placed next to *git_root*, named
-    ``<basename>-<short_hash>``.  If it already exists it is reused.
+def _resolve_git_commit(git_root, git_hash):
+    """Return the full hash of the commit that *git_hash* names: a hash, a tag or a branch name."""
+    commit = _run_git(["rev-parse", "--verify", "--quiet", git_hash + "^{commit}"], git_root)
+    if not commit:
+        raise RuntimeError(f"Cannot find the git commit {git_hash!r} in {git_root}")
+    return commit
+
+def _get_worktree_git_dir(worktree_path):
+    """Return the administration directory (.git/worktrees/<name>) of the linked worktree at
+    *worktree_path*, or ``None`` when the folder is not the top folder of a linked worktree."""
+    if not os.path.isdir(worktree_path):
+        return None
+    top_level = _run_git(["rev-parse", "--show-toplevel"], worktree_path)
+    git_dir = _run_git(["rev-parse", "--absolute-git-dir"], worktree_path)
+    common_dir = _run_git(["rev-parse", "--path-format=absolute", "--git-common-dir"], worktree_path)
+    if not top_level or os.path.realpath(top_level) != os.path.realpath(worktree_path) or not git_dir or git_dir == common_dir:
+        return None
+    return git_dir
+
+def _make_git_worktree(git_root, git_hash):
+    """Ensure a worktree of *git_root* at the commit of *git_hash* exists and return its path.
+
+    The worktree is placed next to *git_root*, named ``<basename>-<short_hash>`` after the
+    commit that *git_hash* names. A hash, a tag and a branch name of one commit thus give one
+    worktree, and a branch that moved gives another worktree. If the worktree exists, it is
+    used again. A folder with the name of the worktree is used only when its HEAD is the commit.
     """
-    short_hash = git_hash[:10]
-    worktree_path = os.path.join(os.path.dirname(git_root),
-                                 os.path.basename(git_root) + "-" + short_hash)
+    commit = _resolve_git_commit(git_root, git_hash)
+    worktree_path = os.path.join(os.path.dirname(git_root), os.path.basename(git_root) + "-" + commit[:10])
     if not os.path.isdir(worktree_path):
         run_command_with_logging(
             ["git", "worktree", "prune"],
@@ -1129,18 +1154,24 @@ def _make_git_worktree(git_root, git_hash):
             command_line_logger=_logger,
         )
         run_command_with_logging(
-            ["git", "worktree", "add", "--detach", "-q", worktree_path, git_hash],
+            ["git", "worktree", "add", "--detach", "-q", worktree_path, commit],
             cwd=git_root, error_message="Failed to create git worktree",
             command_line_logger=_logger,
         )
+    else:
+        head = _run_git(["rev-parse", "HEAD"], worktree_path) if _get_worktree_git_dir(worktree_path) else None
+        if head != commit:
+            state = f"its HEAD is the commit {head[:10]}" if head else "it is not a git worktree"
+            raise RuntimeError(f"Cannot use the folder {worktree_path} for the git commit {commit[:10]} ({git_hash!r}): {state}")
+    _logger.info(f"Using the git worktree {worktree_path} for the commit {commit[:10]} ({git_hash!r})")
     return worktree_path
 
 def make_worktree_simulation_project(simulation_project, git_hash):
     """Create a git worktree at *git_hash* and return a new :py:class:`SimulationProject` for it.
 
     The worktree is placed next to the git repository root, named
-    ``<basename>-<short_hash>``.  If the worktree already exists, it is
-    reused.
+    ``<basename>-<short_hash>`` after the commit that *git_hash* names.  If the
+    worktree already exists, it is reused.
 
     Sub-projects whose root folder is a subdirectory of the git repository
     (e.g. ``samples/histograms`` inside *omnetpp*) are handled automatically:
@@ -1150,10 +1181,10 @@ def make_worktree_simulation_project(simulation_project, git_hash):
     redirected to the worktree.
 
     The returned project is registered in the source project's workspace
-    under key ``(name, git_hash)``, so repeated calls with the same hash
-    return the cached project (preserving lazily-populated state such as
-    ``simulation_configs``).  :py:func:`remove_worktree_simulation_project`
-    unregisters it again.
+    under key ``(name, commit)``, where *commit* is the full hash of the
+    commit, so repeated calls for the same commit return the cached project
+    (preserving lazily-populated state such as ``simulation_configs``).
+    :py:func:`remove_worktree_simulation_project` unregisters it again.
 
     Parameters:
         simulation_project (:py:class:`SimulationProject`):
@@ -1166,11 +1197,6 @@ def make_worktree_simulation_project(simulation_project, git_hash):
     """
     src_root = os.path.abspath(simulation_project.get_root_path())
 
-    workspace = simulation_project.get_workspace()
-    cached = workspace.get_simulation_projects().get((simulation_project.name, git_hash))
-    if cached is not None:
-        return cached
-
     git_root = _get_git_root(src_root, optional=True)
     if git_root is None:
         raise RuntimeError(
@@ -1178,11 +1204,18 @@ def make_worktree_simulation_project(simulation_project, git_hash):
             f"at {src_root} is not in a git repository. This operation requires the project "
             f"to be a git checkout."
         )
+    # the key is the commit and not the text of the ref: a branch name can move to another commit
+    commit = _resolve_git_commit(git_root, git_hash)
+    workspace = simulation_project.get_workspace()
+    cached = workspace.get_simulation_projects().get((simulation_project.name, commit))
+    if cached is not None:
+        return cached
+
     worktree_path = _make_git_worktree(git_root, git_hash)
 
     import copy
     project = copy.copy(simulation_project)
-    project.version = git_hash
+    project.version = commit
     rel_path = os.path.relpath(src_root, git_root)
     project.root_folder = worktree_path if rel_path == "." else os.path.join(worktree_path, rel_path)
     project.simulation_configs = None
@@ -1202,7 +1235,7 @@ def make_worktree_simulation_project(simulation_project, git_hash):
                 omnetpp_project_copy.root_folder = worktree_path if omnetpp_rel == "." else os.path.join(worktree_path, omnetpp_rel)
                 project.omnetpp_project = omnetpp_project_copy
 
-    workspace.set_simulation_project(simulation_project.name, git_hash, project)
+    workspace.set_simulation_project(simulation_project.name, commit, project)
     return project
 
 def remove_worktree_simulation_project(simulation_project):
