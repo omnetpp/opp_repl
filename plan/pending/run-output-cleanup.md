@@ -1,6 +1,6 @@
 # Automatic cleanup of run output
 
-> **Status:** stages 1, 2, 4 and 5 complete, but for the chart tests of step 4.4; stage 3 is in work · **Owner:** opp_repl · **Branch:** `topic/run-output-cleanup`, worktree `opp_repl-run-output-cleanup` · **Optional stages:** INET, OMNeT++ · **Written:** 2026-11-11
+> **Status:** stages 1 to 5 complete, but for two steps: 3.7 (the old worktrees) waits for the user, and 4.4 (the chart tests) is not measured · **Owner:** opp_repl · **Branch:** `topic/run-output-cleanup`, worktree `opp_repl-run-output-cleanup` · **Optional stages:** INET, OMNeT++ · **Written:** 2026-11-11
 
 opp_repl removes the output of a test or of a comparison when the result is the expected result.
 opp_repl keeps the output when the result is not the expected result, because a person will
@@ -79,8 +79,12 @@ All line numbers are from opp_repl `main` at `39e15bc` and OMNeT++ `omnetpp-6.x`
 - opp_repl keeps no record of the worktrees that it made. A directory with the same name that
   the user made is used too: the ref `baseline` gives `inet-baseline`, which is the user's
   worktree of the branch `baseline`.
-- `remove_worktree_simulation_project` removes with `git worktree remove --force` and without a
-  check (`project.py:1229-1233`). Changed files and new files in the worktree are lost.
+- `remove_worktree_simulation_project` called `git worktree remove --force` without a check
+  (`project.py:1229-1233`). The command ran in the parent folder of the worktree. That folder is
+  usually not in a git repository, thus git stopped with `fatal: not a git repository` and the
+  worktree stayed (tested on 2026-11-12). `delete_worktree=True` thus did not work. The first
+  version of this fact, that the option removes changed and new files, was from the code only
+  and was wrong for the usual folder layout.
 - Test with git 2.53.0: `git worktree remove` without `--force` removes a clean worktree and a
   worktree with only ignored files (build output, results). It refuses a worktree with a changed
   tracked file or a new file that git does not ignore. It does not refuse a worktree with a new
@@ -238,30 +242,56 @@ Check, done on 2026-11-11 with real simulations (`examples/inet/nclients`, confi
 
 ### Stage 3 — worktrees (54 GB class)
 
-- [ ] 3.1 `_make_git_worktree`: change the ref to the commit hash with `git rev-parse`, then make
-      the name `<repository>-<short hash>` from the hash. A hash and a ref name go through the
-      same code. This step also repairs the old checkout for a branch name. The marker file
-      records the ref text, and opp_repl logs the ref, the commit and the directory at each use.
-- [ ] 3.2 Write a marker file with the commit into the administration directory of the worktree
-      (`git rev-parse --git-dir`). Update its time at each use. Hold a shared lock on it while the
-      process has the worktree as a project.
-- [ ] 3.3 Add `is_worktree_unused(worktree_path)`. It does the four checks of section 3 and gives
-      the check that is not true.
-- [ ] 3.4 Add `remove_unused_worktrees(simulation_project, max_age="14d")`. It removes each
-      worktree for which the proof is complete and the last use is older than `max_age`, and it
-      logs the reason for each worktree that stays. `_make_git_worktree` calls it before it adds
-      a worktree. The age is a setting, and the value `None` turns the automatic removal off.
-- [ ] 3.5 `remove_worktree_simulation_project` uses the same proof and `git worktree remove`
-      without `--force`. `delete_worktree=True` thus removes only with the proof. A worktree that
-      stays gives a warning with the reason. The bisect function gets no removal at its end: its
-      worktrees stay for the next bisect, and only the rule of step 3.4 can remove them.
-- [ ] 3.5a A directory with the name of the worktree but without a marker: opp_repl uses it only
-      when its `HEAD` is at the necessary commit, and it writes no marker into it. When the
-      `HEAD` is at another commit, opp_repl stops with an error.
-- [ ] 3.6 Add a self test with a temporary repository: the name from a ref with a slash, the
-      reuse, and one case for each check of the proof.
-- [ ] 3.7 One time, by hand: list the 15 old worktrees without a marker, and remove them after the
-      user agrees.
+- [x] 3.1 `_make_git_worktree` changes the ref to the commit with `git rev-parse`, and the name is
+      `<repository>-<short hash>`. A hash and a ref name go through the same code. The project of
+      a worktree has the commit as its version and as its key in the workspace, thus a ref that
+      moved gets a new project too. opp_repl logs the ref, the commit and the folder at each use
+      (`3768fa7`).
+- [x] 3.2 The marker file `opp_repl` in the administration directory of the worktree records the
+      commit and the ref text. A use sets its time, and the process holds a shared lock on it
+      until the process ends (`cc3c0d6`).
+- [x] 3.3 `_remove_git_worktree(worktree_path, max_age_days)` does the four checks and gives the
+      reason when the worktree stays. Check 4 also examines the mapped files of a process, for a
+      simulation that loads a library of the worktree (`cc3c0d6`).
+- [x] 3.4 `remove_unused_worktrees(simulation_project, max_age_days=0)` removes at once and gives
+      the reason for each worktree that stays. `_make_git_worktree` does the same before it adds
+      a worktree, with the age of the setting. The setting is the environment variable
+      `OPP_WORKTREE_MAX_AGE_DAYS`, 14 by default, and `none` turns the automatic removal off
+      (`cc3c0d6`).
+- [x] 3.5 `remove_worktree_simulation_project` uses the proof and `git worktree remove` without
+      `--force`. A worktree that stays gives a warning with the reason. The bisect function has
+      no removal at its end (`cc3c0d6`).
+- [x] 3.5a A folder with the name of the worktree and without a marker: opp_repl uses it only
+      when its `HEAD` is the commit, and it writes no marker into it. Another commit as `HEAD`,
+      or a folder that is not a worktree, is an error (`3768fa7`).
+- [x] 3.6 Self test `opp_repl/test/self/worktree.py`, 26 cases with a temporary git repository,
+      in `opp_repl_self_test`. `doc/comparing_simulations.md` and `doc/bisecting.md` describe
+      the worktrees (`af30dc9`).
+- [ ] 3.7 One time, by hand: remove the 15 old worktrees without a marker, after the user agrees.
+      State on 2026-11-12: 5.5 GB together, all with a detached `HEAD`, and no process in them.
+      14 have a clean `git status`. `omnetpp-af93876531` has 18 changed or new files; examine it
+      first.
+
+Facts from the work:
+
+- A project whose build leaves a file that git does not ignore does not pass check 3, thus its
+  worktrees stay. The build of `mm1k` makes a `Makefile` that its `.gitignore` does not name.
+  The worktrees of INET, OMNeT++ and Simu5G that opp_repl made and built have a clean
+  `git status`.
+- The flock of a process is on its open file. The removal at the end of a run thus first
+  releases the lock of its own process, and then it tries to get the exclusive lock.
+
+Check, done on 2026-11-12 with the project `mm1k` and real builds and runs:
+
+- `compare_simulations_between_commits(p, "a24dbcf", "HEAD")` made `mm1k-a24dbcf594` and
+  `mm1k-ce9adf0ba5`. The branch name `topic` of the same commit as `HEAD` used the worktree of
+  `HEAD` again.
+- `HEAD` and `HEAD~1`, the commit with the broken queue condition, gave DIVERGENT for the
+  complete runs. Each side thus ran its own commit.
+- The process that made the worktrees could not remove them: "this process uses it". A second
+  process could not remove them with the age of 14 days: "its last use was 0.0 days ago".
+- With no age, the second process gave "it has changed or new files", because of the
+  `Makefile`. After the removal of that file, opp_repl removed the three worktrees.
 
 ### Stage 4 — simulation tests (part of the 130 GB class)
 
@@ -384,6 +414,7 @@ without them.
 | 2026-11-11 | Plan written. |
 | 2026-11-11 | User: D1 agreed. D2: remove a worktree only when it is provably not in use. D3 agreed. D4 later. |
 | 2026-11-11 | D2: the proof has five parts (section 3). The user has not yet confirmed this definition of the proof. |
+| 2026-11-12 | Stage 3 done. Found during the work: the old `delete_worktree=True` did not work, and a build file that git does not ignore keeps a worktree. |
 | 2026-11-12 | User asked if a bisect keeps its worktrees for a later bisect. Answer: yes, also in the plan. The age of the automatic removal becomes a setting, and `None` turns the removal off. |
 | 2026-11-12 | Stage 4 check: one complete INET smoke run left 25 GB before the change. The PCAP files that stay are 0.5 GB to 0.8 GB for each worktree; the user agreed before this number was known. |
 | 2026-11-12 | User: agreed that the statistical test and its update always remove their result files (D7), after the answer that the `.diff` and `.csv` files stay. |
