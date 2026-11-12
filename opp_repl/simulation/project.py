@@ -25,11 +25,17 @@ import shutil
 import socket
 import subprocess
 import textwrap
+import time
 
 try:
     from omnetpp.runtime.omnetpp import *
 except:
     pass
+
+try:
+    import fcntl
+except ImportError: # not a POSIX system
+    fcntl = None
 
 from opp_repl.common.util import *
 from opp_repl.simulation.config import *
@@ -1113,6 +1119,26 @@ def _get_git_root(path, optional=False):
     )
     return os.path.abspath(result.stdout.strip())
 
+# The marker file of a worktree that opp_repl made. It is in the administration directory of the
+# worktree (.git/worktrees/<name>), thus it is not a file of the checkout. It records the commit
+# that opp_repl checked out, its time is the time of the last use, and each process that uses
+# the worktree holds a shared lock on it.
+_WORKTREE_MARKER_FILE_NAME = "opp_repl"
+
+# worktree path -> the open marker file on which this process holds the shared lock
+_worktree_locks = {}
+
+def get_unused_worktree_max_age_days():
+    """Return the number of days after which opp_repl removes a worktree that it made and that
+    nobody uses (see :py:func:`remove_unused_worktrees`), or ``None`` when opp_repl removes no
+    worktree by its age.
+
+    The environment variable ``OPP_WORKTREE_MAX_AGE_DAYS`` gives the number, 14 by default. The
+    value ``none`` turns the removal off.
+    """
+    value = os.environ.get("OPP_WORKTREE_MAX_AGE_DAYS", "14")
+    return None if value.strip().lower() == "none" else float(value)
+
 def _run_git(args, cwd):
     """Run a git query in *cwd*. Return its output, or ``None`` when git gives an error."""
     result = subprocess.run(["git", *args], cwd=cwd, capture_output=True, text=True)
@@ -1137,17 +1163,174 @@ def _get_worktree_git_dir(worktree_path):
         return None
     return git_dir
 
+def _get_worktree_marker_path(worktree_path):
+    """Return the path of the marker file of the linked worktree at *worktree_path*, or ``None``
+    when the folder is not the top folder of a linked worktree."""
+    git_dir = _get_worktree_git_dir(worktree_path)
+    return os.path.join(git_dir, _WORKTREE_MARKER_FILE_NAME) if git_dir else None
+
+def _lock_worktree(worktree_path):
+    """Record that this process uses a worktree that opp_repl made: hold a shared lock on its marker
+    file until the process ends or removes the worktree, and set the time of the last use."""
+    marker_path = _get_worktree_marker_path(worktree_path)
+    if marker_path is None or not os.path.exists(marker_path):
+        return
+    if worktree_path not in _worktree_locks and fcntl is not None:
+        marker_file = open(marker_path)
+        fcntl.flock(marker_file, fcntl.LOCK_SH)
+        _worktree_locks[worktree_path] = marker_file
+    os.utime(marker_path)
+
+def _unlock_worktree(worktree_path):
+    marker_file = _worktree_locks.pop(worktree_path, None)
+    if marker_file is not None:
+        marker_file.close()
+
+def _find_process_in_folder(folder):
+    """Return a description of a process of the user that has its working directory, an open file
+    or a mapped file in *folder*, or ``None`` when there is no such process. Raise ``OSError``
+    when the processes cannot be examined, as on a system without /proc.
+
+    The processes of other users are not examined: their data is not readable.
+    """
+    folder = os.path.realpath(folder)
+    prefix = folder + os.sep
+    user_id = os.getuid()
+    for process_id in os.listdir("/proc"):
+        if not process_id.isdigit():
+            continue
+        process_folder = os.path.join("/proc", process_id)
+        try:
+            if os.stat(process_folder).st_uid != user_id:
+                continue
+            links = [os.path.join(process_folder, "cwd")] + [os.path.join(process_folder, "fd", name) for name in os.listdir(os.path.join(process_folder, "fd"))]
+            paths = []
+            for link in links:
+                try:
+                    paths.append(os.readlink(link))
+                except OSError:
+                    pass
+            with open(os.path.join(process_folder, "maps")) as maps_file:
+                for line in maps_file:
+                    fields = line.split(None, 5) # the sixth field is the path of a mapped file
+                    if len(fields) == 6:
+                        paths.append(fields[5].rstrip("\n"))
+            if any(path == folder or path.startswith(prefix) for path in paths):
+                with open(os.path.join(process_folder, "comm")) as comm_file:
+                    return f"process {process_id} ({comm_file.read().strip()})"
+        except OSError:
+            continue # the process ended in the meantime
+    return None
+
+def _remove_git_worktree(worktree_path, max_age_days=None):
+    """Remove a worktree that opp_repl made, but only with the proof that nobody uses it. Return
+    ``None`` when the worktree is removed, and the reason as a text when it stays.
+
+    The proof has four checks:
+
+    1. opp_repl made the worktree: it has the marker file.
+    2. No opp_repl process uses it: nobody holds the lock on the marker file.
+    3. Nobody worked in it: its HEAD is detached at the commit that opp_repl checked out, and
+       ``git status`` shows no changed and no new file. Ignored files, such as the build output,
+       do not count.
+    4. No process of the user has its working directory, an open file or a mapped file in it.
+
+    With *max_age_days*, the worktree also stays when its last use is not that old. git removes
+    the worktree without ``--force``, thus it does the file part of check 3 again.
+    """
+    marker_path = _get_worktree_marker_path(worktree_path)
+    if marker_path is None or not os.path.exists(marker_path):
+        return "opp_repl did not make it"
+    if fcntl is None:
+        return "this system has no file locks, thus opp_repl cannot know if a process uses it"
+    if worktree_path in _worktree_locks:
+        return "this process uses it"
+    with open(marker_path) as marker_file:
+        try:
+            fcntl.flock(marker_file, fcntl.LOCK_EX | fcntl.LOCK_NB)
+        except OSError:
+            return "another opp_repl process uses it"
+        if max_age_days is not None:
+            age_days = (time.time() - os.stat(marker_path).st_mtime) / 86400
+            if age_days < max_age_days:
+                return f"its last use was {age_days:.1f} days ago"
+        commit = json.load(marker_file).get("commit")
+        if _run_git(["rev-parse", "HEAD"], worktree_path) != commit or _run_git(["symbolic-ref", "-q", "HEAD"], worktree_path):
+            return "its HEAD is not the detached commit that opp_repl checked out"
+        if _run_git(["status", "--porcelain"], worktree_path) != "":
+            return "it has changed or new files"
+        try:
+            process = _find_process_in_folder(worktree_path)
+        except OSError:
+            return "opp_repl cannot examine the processes on this system"
+        if process:
+            return f"{process} has its working directory or a file in it"
+        common_dir = _run_git(["rev-parse", "--path-format=absolute", "--git-common-dir"], worktree_path)
+        result = subprocess.run(["git", "--git-dir", common_dir, "worktree", "remove", worktree_path], cwd=os.path.dirname(worktree_path), capture_output=True, text=True)
+        if result.returncode != 0:
+            return "git did not remove it: " + result.stderr.strip()
+    return None
+
+def _remove_unused_git_worktrees(git_root, max_age_days):
+    """Try to remove each worktree of the repository at *git_root* that opp_repl made. Return a
+    dictionary from the path of each such worktree to ``None`` (removed) or to the reason why it
+    stays."""
+    reasons = {}
+    for line in (_run_git(["worktree", "list", "--porcelain"], git_root) or "").splitlines():
+        if line.startswith("worktree "):
+            worktree_path = line[len("worktree "):]
+            marker_path = _get_worktree_marker_path(worktree_path)
+            if marker_path is not None and os.path.exists(marker_path):
+                reasons[worktree_path] = _remove_git_worktree(worktree_path, max_age_days)
+                if reasons[worktree_path] is None:
+                    _logger.info(f"Removed the unused git worktree {worktree_path}")
+                else:
+                    _logger.debug(f"The git worktree {worktree_path} stays: {reasons[worktree_path]}")
+    return reasons
+
+def remove_unused_worktrees(simulation_project=None, max_age_days=0):
+    """Remove the git worktrees that opp_repl made for the repository of *simulation_project*
+    (see :py:func:`make_worktree_simulation_project`) and that nobody uses.
+
+    opp_repl removes a worktree only with the proof that nobody uses it; the four checks are
+    in :py:func:`_remove_git_worktree`. opp_repl never touches a worktree that it did not make.
+    opp_repl calls this function itself before it makes a worktree, with the age of
+    :py:func:`get_unused_worktree_max_age_days`.
+
+    Parameters:
+        simulation_project (:py:class:`SimulationProject`):
+            A project in the repository. If ``None``, the default simulation project is used.
+        max_age_days (number):
+            A worktree stays when its last use is not this old. The default 0 removes each
+            worktree that nobody uses.
+
+    Returns (dict):
+        The path of each worktree that opp_repl made, with ``None`` when the worktree is removed
+        and with the reason as a text when it stays.
+    """
+    if simulation_project is None:
+        simulation_project = get_default_simulation_project()
+    return _remove_unused_git_worktrees(_get_git_root(os.path.abspath(simulation_project.get_root_path())), max_age_days)
+
 def _make_git_worktree(git_root, git_hash):
     """Ensure a worktree of *git_root* at the commit of *git_hash* exists and return its path.
 
     The worktree is placed next to *git_root*, named ``<basename>-<short_hash>`` after the
     commit that *git_hash* names. A hash, a tag and a branch name of one commit thus give one
     worktree, and a branch that moved gives another worktree. If the worktree exists, it is
-    used again. A folder with the name of the worktree is used only when its HEAD is the commit.
+    used again.
+
+    opp_repl puts a marker file into each worktree that it makes (see
+    :py:func:`_remove_git_worktree`). A folder with the name of the worktree and without the
+    marker is used only when its HEAD is the commit; opp_repl puts no marker into it and never
+    removes it.
     """
     commit = _resolve_git_commit(git_root, git_hash)
     worktree_path = os.path.join(os.path.dirname(git_root), os.path.basename(git_root) + "-" + commit[:10])
     if not os.path.isdir(worktree_path):
+        max_age_days = get_unused_worktree_max_age_days()
+        if max_age_days is not None:
+            _remove_unused_git_worktrees(git_root, max_age_days)
         run_command_with_logging(
             ["git", "worktree", "prune"],
             cwd=git_root,
@@ -1158,11 +1341,14 @@ def _make_git_worktree(git_root, git_hash):
             cwd=git_root, error_message="Failed to create git worktree",
             command_line_logger=_logger,
         )
+        with open(_get_worktree_marker_path(worktree_path), "w") as marker_file:
+            json.dump({"commit": commit, "ref": git_hash}, marker_file)
     else:
         head = _run_git(["rev-parse", "HEAD"], worktree_path) if _get_worktree_git_dir(worktree_path) else None
         if head != commit:
             state = f"its HEAD is the commit {head[:10]}" if head else "it is not a git worktree"
             raise RuntimeError(f"Cannot use the folder {worktree_path} for the git commit {commit[:10]} ({git_hash!r}): {state}")
+    _lock_worktree(worktree_path)
     _logger.info(f"Using the git worktree {worktree_path} for the commit {commit[:10]} ({git_hash!r})")
     return worktree_path
 
@@ -1171,7 +1357,8 @@ def make_worktree_simulation_project(simulation_project, git_hash):
 
     The worktree is placed next to the git repository root, named
     ``<basename>-<short_hash>`` after the commit that *git_hash* names.  If the
-    worktree already exists, it is reused.
+    worktree already exists, it is reused.  The process holds a lock on the
+    worktree until it ends, thus no other opp_repl process removes it.
 
     Sub-projects whose root folder is a subdirectory of the git repository
     (e.g. ``samples/histograms`` inside *omnetpp*) are handled automatically:
@@ -1243,10 +1430,12 @@ def remove_worktree_simulation_project(simulation_project):
 
     Counterpart to :py:func:`make_worktree_simulation_project`.  The worktree
     is located by asking ``git rev-parse --show-toplevel`` from the project's
-    root folder (so sub-directory projects are handled correctly) and removed
-    via ``git worktree remove --force``.  If the path no longer exists, the
-    worktree removal is skipped, but the project is still unregistered from
-    its workspace.
+    root folder (so sub-directory projects are handled correctly).  It is
+    removed only with the proof that nobody uses it (see
+    :py:func:`_remove_git_worktree`) and without ``--force``; a worktree that
+    stays gives a warning with the reason.  If the path no longer exists, the
+    worktree removal is skipped.  The project is unregistered from its
+    workspace in each case.
 
     Parameters:
         simulation_project (:py:class:`SimulationProject`):
@@ -1259,11 +1448,11 @@ def remove_worktree_simulation_project(simulation_project):
             error_message="Failed to locate worktree top",
             command_line_logger=_logger)
         worktree_top = os.path.abspath(result.stdout.strip())
-        run_command_with_logging(
-            ["git", "worktree", "remove", "--force", worktree_top],
-            cwd=os.path.dirname(worktree_top),
-            error_message=f"Failed to remove git worktree {worktree_top}",
-            command_line_logger=_logger)
+        # this process does not use the worktree any more
+        _unlock_worktree(worktree_top)
+        reason = _remove_git_worktree(worktree_top)
+        if reason is not None:
+            _logger.warning(f"The git worktree {worktree_top} stays: {reason}")
     workspace = simulation_project.get_workspace()
     workspace.get_simulation_projects().pop(
         (simulation_project.name, simulation_project.version), None)

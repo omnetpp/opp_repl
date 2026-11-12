@@ -880,7 +880,9 @@ def compare_simulations_between_commits(simulation_project=None, git_hash_1=None
             Second git commit-ish.
         delete_worktree (bool):
             If ``True``, the git worktrees created for the two commits are
-            removed after the comparison finishes (including on error).
+            removed after the comparison finishes (including on error), but
+            only with the proof that nobody uses them (see
+            :py:func:`remove_unused_worktrees <opp_repl.simulation.project.remove_unused_worktrees>`).
             Default ``False`` (worktrees are kept for reuse).
         kwargs:
             Forwarded to :py:func:`compare_simulations`.
@@ -1043,8 +1045,10 @@ def compare_simulations_across_commits(simulation_project=None, commits=None,
             ``"differential"`` (default) or ``"baseline"``.
         delete_worktree (bool):
             If ``True``, every worktree created by this call is removed
-            after the comparison finishes (including on error).  Default
-            ``False`` (worktrees are kept for reuse).
+            after the comparison finishes (including on error), but only
+            with the proof that nobody uses it (see
+            :py:func:`remove_unused_worktrees <opp_repl.simulation.project.remove_unused_worktrees>`).
+            Default ``False`` (worktrees are kept for reuse).
         keep_output (str):
             Which comparisons keep the stdout, eventlog and result files of their
             two sides: ``"unexpected"`` (default) keeps them only when the result
