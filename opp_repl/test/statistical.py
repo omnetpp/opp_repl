@@ -44,6 +44,17 @@ def _write_diff_file(a_file_name, b_file_name, diff_file_name):
     with open(diff_file_name, "w") as file:
         subprocess.call(diff_command, stdout=file)
 
+def _remove_result_files(task):
+    """Removes the scalar, vector and vector index files that the simulation of a statistical test
+    or update task wrote. They are work files of the task: the check reads them, and the stored
+    results and the diff files are in the statistics folder. The check removes them too, but it
+    does not run for a simulation that stops with an error or a cancel."""
+    simulation_config = task.simulation_task.simulation_config
+    for extension in ["sca", "vec", "vci"]:
+        file_name = simulation_config.simulation_project.get_full_path(os.path.join(simulation_config.working_directory, "results", task.get_result_file_name(extension)))
+        if os.path.exists(file_name):
+            os.remove(file_name)
+
 def _remove_attr_lines(file_path):
     with open(file_path, 'r') as file:
         lines = file.readlines()
@@ -179,6 +190,12 @@ class StatisticalTestTask(SimulationTestTask):
         simulation_config = self.simulation_task.simulation_config
         return f"{simulation_config.ini_file}-{simulation_config.config}-#{self.simulation_task.run_number}.{extension}"
 
+    def run_protected(self, **kwargs):
+        try:
+            return super().run_protected(**kwargs)
+        finally:
+            _remove_result_files(self)
+
     def check_simulation_task_result(self, simulation_task_result, baseline_simulation_project=None,
                                       result_name_filter=None, exclude_result_name_filter=None,
                                       result_module_filter=None, exclude_result_module_filter=None,
@@ -298,13 +315,14 @@ class StatisticalResultsUpdateTask(SimulationUpdateTask):
         working_directory = simulation_config.working_directory
         target_results_directory = baseline_project.get_full_path(os.path.join(baseline_project.statistics_folder, working_directory))
         os.makedirs(target_results_directory, exist_ok=True)
-        update_result = super().run_protected(**kwargs)
-        stored_scalar_result_file_name = simulation_project.get_full_path(os.path.join(working_directory, "results", self.get_result_file_name("sca")))
-        if update_result.result == "INSERT" or update_result.result == "UPDATE":
-            shutil.copy(stored_scalar_result_file_name, target_results_directory)
-        if os.path.exists(stored_scalar_result_file_name):
-            os.remove(stored_scalar_result_file_name)
-        return update_result
+        try:
+            update_result = super().run_protected(**kwargs)
+            stored_scalar_result_file_name = simulation_project.get_full_path(os.path.join(working_directory, "results", self.get_result_file_name("sca")))
+            if update_result.result == "INSERT" or update_result.result == "UPDATE":
+                shutil.copy(stored_scalar_result_file_name, target_results_directory)
+            return update_result
+        finally:
+            _remove_result_files(self)
 
     def check_simulation_task_result(self, simulation_task_result, baseline_simulation_project=None, result_name_filter=None, exclude_result_name_filter=None, result_module_filter=None, exclude_result_module_filter=None, full_match=False, **kwargs):
         simulation_config = self.simulation_task.simulation_config
