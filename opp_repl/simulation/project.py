@@ -12,6 +12,7 @@ one above the current working directory when the omnetpp.repl package is loaded,
 later.
 """
 
+import atexit
 import builtins
 import glob
 import hashlib
@@ -1182,9 +1183,22 @@ def _lock_worktree(worktree_path):
     os.utime(marker_path)
 
 def _unlock_worktree(worktree_path):
+    """Record that this process does not use the worktree any more: set the time of the last use
+    and release the lock."""
     marker_file = _worktree_locks.pop(worktree_path, None)
     if marker_file is not None:
+        try:
+            os.utime(marker_file.name)
+        except OSError:
+            pass # the worktree is gone
         marker_file.close()
+
+@atexit.register
+def _unlock_worktrees():
+    # The time of the marker file is then later than each file that this process made in the
+    # worktree. A process that stops without this step leaves newer files, and the worktree stays.
+    for worktree_path in list(_worktree_locks):
+        _unlock_worktree(worktree_path)
 
 def _find_process_in_folder(folder):
     """Return a description of a process of the user that has its working directory, an open file
@@ -1226,17 +1240,26 @@ def _remove_git_worktree(worktree_path, max_age_days=None):
     """Remove a worktree that opp_repl made, but only with the proof that nobody uses it. Return
     ``None`` when the worktree is removed, and the reason as a text when it stays.
 
-    The proof has four checks:
+    The proof has five checks:
 
     1. opp_repl made the worktree: it has the marker file.
     2. No opp_repl process uses it: nobody holds the lock on the marker file.
-    3. Nobody worked in it: its HEAD is detached at the commit that opp_repl checked out, and
-       ``git status`` shows no changed and no new file. Ignored files, such as the build output,
-       do not count.
+    3. Nobody worked in it after the last use of opp_repl:
+
+       - its HEAD is detached at the commit that opp_repl checked out, and it never moved;
+       - ``git status`` shows no changed and no new file;
+       - it has no other git repository in it;
+       - no file or folder in it is newer than the marker file, whose time is the end of the
+         last use. This part also covers the files that git ignores: the build output and the
+         result files of opp_repl are older than the marker, and a file that somebody wrote
+         later is newer.
+
     4. No process of the user has its working directory, an open file or a mapped file in it.
+    5. A branch, a remote branch or a tag contains its commit. The HEAD of a worktree keeps
+       its commit, thus the removal of the worktree must not be the loss of the commit.
 
     With *max_age_days*, the worktree also stays when its last use is not that old. git removes
-    the worktree without ``--force``, thus it does the file part of check 3 again.
+    the worktree without ``--force``, thus it does the ``git status`` part of check 3 again.
     """
     marker_path = _get_worktree_marker_path(worktree_path)
     if marker_path is None or not os.path.exists(marker_path):
@@ -1257,8 +1280,23 @@ def _remove_git_worktree(worktree_path, max_age_days=None):
         commit = json.load(marker_file).get("commit")
         if _run_git(["rev-parse", "HEAD"], worktree_path) != commit or _run_git(["symbolic-ref", "-q", "HEAD"], worktree_path):
             return "its HEAD is not the detached commit that opp_repl checked out"
-        if _run_git(["status", "--porcelain"], worktree_path) != "":
+        head_log_path = os.path.join(os.path.dirname(marker_path), "logs", "HEAD")
+        if os.path.exists(head_log_path):
+            with open(head_log_path) as head_log_file:
+                if len(head_log_file.readlines()) > 1:
+                    return "its HEAD moved after opp_repl made it"
+        # the options make the answer independent of the git settings of the user
+        if _run_git(["status", "--porcelain", "--untracked-files=normal", "--ignore-submodules=none"], worktree_path) != "":
             return "it has changed or new files"
+        for description, find_args in [("it has another git repository in it", ["-mindepth", "2", "-name", ".git"]),
+                                       ("somebody wrote into it after the last use of opp_repl", ["-newer", marker_path])]:
+            result = subprocess.run(["find", worktree_path, *find_args, "-print", "-quit"], capture_output=True, text=True)
+            if result.returncode != 0:
+                return "opp_repl cannot examine its files"
+            if result.stdout.strip():
+                return f"{description}: {result.stdout.strip()}"
+        if not _run_git(["for-each-ref", "--count=1", "--contains", commit, "refs/heads", "refs/remotes", "refs/tags"], worktree_path):
+            return "no branch and no tag contains its commit, thus its removal can be the loss of the commit"
         try:
             process = _find_process_in_folder(worktree_path)
         except OSError:
@@ -1292,8 +1330,8 @@ def remove_unused_worktrees(simulation_project=None, max_age_days=0):
     """Remove the git worktrees that opp_repl made for the repository of *simulation_project*
     (see :py:func:`make_worktree_simulation_project`) and that nobody uses.
 
-    opp_repl removes a worktree only with the proof that nobody uses it; the four checks are
-    in :py:func:`_remove_git_worktree`. opp_repl never touches a worktree that it did not make.
+    opp_repl removes a worktree only with the proof that nobody uses it and that the removal
+    loses nothing; the five checks are in :py:func:`_remove_git_worktree`. opp_repl never touches a worktree that it did not make.
     opp_repl calls this function itself before it makes a worktree, with the age of
     :py:func:`get_unused_worktree_max_age_days`.
 

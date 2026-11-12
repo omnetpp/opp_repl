@@ -66,8 +66,18 @@ class WorktreeTestCase(unittest.TestCase):
         return os.path.join(_git(worktree_path, "rev-parse", "--absolute-git-dir"), "opp_repl")
 
     def _set_last_use(self, worktree_path, days_ago):
+        """Makes the worktree as old as after a last use of opp_repl that many days ago: the files
+        that opp_repl made in it are older than the marker file."""
         last_use = time.time() - days_ago * 86400
+        for folder, folder_names, file_names in os.walk(worktree_path):
+            for name in [".", *folder_names, *file_names]:
+                os.utime(os.path.join(folder, name), (last_use - 1, last_use - 1), follow_symlinks=False)
         os.utime(self._get_marker_path(worktree_path), (last_use, last_use))
+
+    def _write_file(self, worktree_path, name, content="content\n"):
+        os.makedirs(os.path.dirname(os.path.join(worktree_path, name)), exist_ok=True)
+        with open(os.path.join(worktree_path, name), "w") as f:
+            f.write(content)
 
     # the name and the reuse
 
@@ -125,11 +135,11 @@ class WorktreeTestCase(unittest.TestCase):
         self.assertFalse(os.path.exists(worktree_path))
         self.assertNotIn(worktree_path, _git(self.git_root, "worktree", "list"))
 
-    def test_ignored_files_do_not_count(self):
-        worktree_path = self._make_unused_worktree()
-        os.makedirs(os.path.join(worktree_path, "out"))
-        with open(os.path.join(worktree_path, "out", "lib.so"), "w") as f:
-            f.write("build output\n")
+    def test_the_build_output_of_opp_repl_does_not_count(self):
+        # git ignores the file, and it is older than the end of the use
+        worktree_path = _make_git_worktree(self.git_root, "topic/some")
+        self._write_file(worktree_path, "out/lib.so")
+        _unlock_worktree(worktree_path)
         self.assertIsNone(_remove_git_worktree(worktree_path))
         self.assertFalse(os.path.exists(worktree_path))
 
@@ -177,6 +187,41 @@ class WorktreeTestCase(unittest.TestCase):
         _git(worktree_path, "checkout", "-q", "-b", "work")
         self.assertEqual(_remove_git_worktree(worktree_path), "its HEAD is not the detached commit that opp_repl checked out")
         self.assertTrue(os.path.isdir(worktree_path))
+
+    def test_check_3_head_moved_and_came_back(self):
+        # the new commit is then only in the log of the HEAD of the worktree
+        worktree_path = self._make_unused_worktree()
+        self._commit("in the worktree", folder=worktree_path, **{"a.txt": "work\n"})
+        _git(worktree_path, "checkout", "-q", "--detach", self.first_commit)
+        self.assertEqual(_remove_git_worktree(worktree_path), "its HEAD moved after opp_repl made it")
+        self.assertTrue(os.path.isdir(worktree_path))
+
+    def test_check_3_an_ignored_file_that_somebody_wrote_later(self):
+        worktree_path = self._make_unused_worktree()
+        time.sleep(0.05) # the file system gives the same time to two changes that are very near
+        self._write_file(worktree_path, "out/notes.txt")
+        self.assertRegex(_remove_git_worktree(worktree_path), "^somebody wrote into it after the last use of opp_repl: ")
+        self.assertTrue(os.path.isdir(worktree_path))
+
+    def test_check_3_another_repository_in_it(self):
+        worktree_path = _make_git_worktree(self.git_root, "topic/some")
+        os.makedirs(os.path.join(worktree_path, "out", "statistics"))
+        _git(os.path.join(worktree_path, "out", "statistics"), "init", "-q", ".")
+        _unlock_worktree(worktree_path)
+        self.assertEqual(_remove_git_worktree(worktree_path), "it has another git repository in it: " + os.path.join(worktree_path, "out", "statistics", ".git"))
+        self.assertTrue(os.path.isdir(worktree_path))
+
+    def test_check_5_no_branch_contains_the_commit(self):
+        # the HEAD of the worktree is then the only thing that keeps the commit
+        _git(self.git_root, "checkout", "-q", "-b", "only")
+        self._commit("only on this branch", **{"a.txt": "only\n"})
+        _git(self.git_root, "checkout", "-q", "main")
+        worktree_path = self._make_unused_worktree("only")
+        _git(self.git_root, "branch", "-q", "-D", "only")
+        self.assertEqual(_remove_git_worktree(worktree_path), "no branch and no tag contains its commit, thus its removal can be the loss of the commit")
+        self.assertTrue(os.path.isdir(worktree_path))
+        _git(self.git_root, "tag", "kept", _git(worktree_path, "rev-parse", "HEAD"))
+        self.assertIsNone(_remove_git_worktree(worktree_path))
 
     def test_check_4_a_process_in_it(self):
         worktree_path = self._make_unused_worktree()

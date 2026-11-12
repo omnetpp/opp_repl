@@ -101,17 +101,25 @@ worktree, and a branch that moved gets a new worktree.
 
 opp_repl keeps the worktrees, so repeated comparisons against the same commits
 do not rebuild from scratch.  It removes a worktree only with the proof that
-nobody uses it.  The proof has four checks:
+nobody uses it and that the removal loses nothing.  The proof has five checks:
 
 1. opp_repl made the worktree.  A marker file in the administration directory
    of the worktree (`.git/worktrees/<name>/opp_repl`) shows this.
 2. No opp_repl process uses it.  Each process holds a lock on the marker file
    until the process ends.
-3. Nobody worked in it.  Its `HEAD` is the commit that opp_repl checked out,
-   and `git status` shows no changed and no new file.  Ignored files, such as
-   the build output and the result files, do not count.
+3. Nobody worked in it after the last use of opp_repl:
+   - its `HEAD` is the commit that opp_repl checked out, and it never moved;
+   - `git status` shows no changed and no new file;
+   - it has no other git repository in it;
+   - no file or folder in it is newer than the end of the last use of
+     opp_repl.  This part also covers the files that git ignores: the build
+     output and the result files of opp_repl are older, and a file that
+     somebody wrote later is newer.
 4. No process of the user has its working directory, an open file or a mapped
    file in it.
+5. A branch, a remote branch or a tag contains its commit.  The `HEAD` of a
+   worktree keeps its commit, thus the removal of the worktree must not be the
+   loss of a commit that no branch has any more, for example after a rebase.
 
 The removal is a `git worktree remove` without `--force`.  opp_repl never
 removes a worktree that it did not make.
