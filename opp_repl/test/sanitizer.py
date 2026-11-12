@@ -8,8 +8,8 @@ __sphinx_mock__ = True # ignore this module in documentation
 _logger = logging.getLogger(__name__)
 
 class SanitizerTestTask(SimulationTestTask):
-    def run_protected(self, output_stream=sys.stdout, **kwargs):
-        simulation_task_result = self.simulation_task.run_protected(output_stream=output_stream, **kwargs)
+    def run_protected(self, output_stream=sys.stdout, append_args=[], **kwargs):
+        simulation_task_result = self.simulation_task.run_protected(output_stream=output_stream, append_args=no_result_files_append_args + append_args, **kwargs)
         stderr = simulation_task_result.subprocess_result.stderr or ""
         test_task_result = super().check_simulation_task_result(simulation_task_result, **kwargs)
         match = re.search(r"SUMMARY: (.*)", stderr)

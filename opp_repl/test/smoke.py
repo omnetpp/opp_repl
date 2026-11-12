@@ -16,6 +16,9 @@ class SmokeTestTask(SimulationTestTask):
     def __init__(self, **kwargs):
         super().__init__(**kwargs)
 
+    def run_protected(self, append_args=[], **kwargs):
+        return super().run_protected(append_args=no_result_files_append_args + append_args, **kwargs)
+
     def check_simulation_task_result(self, simulation_task_result, **kwargs):
         # TODO check simulation_task_result.elapsed_cpu_time
         return super().check_simulation_task_result(simulation_task_result, **kwargs)

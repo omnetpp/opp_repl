@@ -149,7 +149,7 @@ class FingerprintTestTask(SimulationTestTask):
         return FingerprintTestTaskResult(task=self, simulation_task_result=simulation_task_result, expected_fingerprint=expected_fingerprint, calculated_fingerprint=calculated_fingerprint, result=result, expected_result=expected_result, reason=reason)
 
     def get_append_args(self, simulation_project, fingerprint_arg):
-        return ["--fingerprint", fingerprint_arg, "--vector-recording", "false", "--scalar-recording", "false"]
+        return ["--fingerprint", fingerprint_arg, *no_result_files_append_args]
 
 class FingerprintTestGroupTask(MultipleTestTasks):
     def __init__(self, sim_time_limit=None, **kwargs):
@@ -493,7 +493,7 @@ class FingerprintUpdateTask(SimulationUpdateTask):
         ingredients_append_args = set()
         for ingredients in self.ingredients_list:
             ingredients_append_args = ingredients_append_args.union(get_ingredients_append_args(ingredients))
-        fingerprint_append_args = ["--fingerprint", fingerprint_arg, "--vector-recording", "false", "--scalar-recording", "false"] + sorted(ingredients_append_args)
+        fingerprint_append_args = ["--fingerprint", fingerprint_arg, *no_result_files_append_args] + sorted(ingredients_append_args)
         simulation_task_result = self.simulation_task.run_protected(output_stream=output_stream, append_args=fingerprint_append_args + append_args, **kwargs)
         ingredient_updates = []
         for ingredients in self.ingredients_list:

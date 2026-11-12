@@ -11,7 +11,7 @@ _logger = logging.getLogger(__name__)
 
 _speed_test_append_args = ["-s", "-S", "--measure-cpu-usage=true",
                            "--cmdenv-express-mode=true", "--cmdenv-performance-display=false", "--cmdenv-status-frequency=1000000s",
-                           "--record-vector-results=false", "--record-scalar-results=false", "--record-eventlog=false",
+                           *no_result_files_append_args,
                            "--vector-recording=false", "--scalar-recording=false", "--bin-recording=false", "--param-recording=false"]
 
 class SpeedTestTaskResult(SimulationTestTaskResult):
