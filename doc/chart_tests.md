@@ -38,6 +38,11 @@ When a test fails, two extra files are written next to the baseline:
 - `<name>-new.png` — the newly rendered image
 - `<name>-diff.png` — a per-pixel absolute-difference image
 
+The baseline images can be in another git repository, at a commit that the
+project declares.  See
+[Baseline repository](statistical_tests.md#baseline-repository); the test kind
+of the declaration is `chart`.
+
 ## Python API
 
 ### Storing baseline charts

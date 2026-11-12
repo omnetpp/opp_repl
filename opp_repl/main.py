@@ -333,9 +333,44 @@ def update_speed_test_results_main():
 def run_self_test_main():
     import unittest
     loader = unittest.TestLoader()
-    suite = loader.loadTestsFromNames(["opp_repl.test.self.dependency", "opp_repl.test.self.coverage", "opp_repl.test.self.opp", "opp_repl.test.self.compare", "opp_repl.test.self.result_files", "opp_repl.test.self.worktree"])
+    suite = loader.loadTestsFromNames(["opp_repl.test.self.dependency", "opp_repl.test.self.coverage", "opp_repl.test.self.opp", "opp_repl.test.self.compare", "opp_repl.test.self.result_files", "opp_repl.test.self.worktree", "opp_repl.test.self.baseline"])
     result = unittest.TextTestRunner(verbosity=2).run(suite)
     sys.exit(0 if result.wasSuccessful() else 1)
+
+def parse_checkout_test_baselines_arguments():
+    description = "Checks out the baseline repositories that the tests of the specified or enclosing simulation project declare, at the commits that the project declares."
+    parser = argparse.ArgumentParser(description=description)
+    parser.add_argument("kinds", nargs="*", metavar="KIND", help="test kinds whose baseline repository is checked out, for example statistical or chart (default: all kinds that declare a baseline repository)")
+    parser.add_argument("-p", "--simulation-project", default=None, help="name of the simulation project to use (auto-detected from the working directory if not specified)")
+    parser.add_argument("-l", "--log-level", choices=["ERROR", "WARN", "INFO", "DEBUG"], default="WARN", help="controls the verbosity of log messages (default: WARN)")
+    parser.add_argument("-L", "--external-command-log-level", choices=["ERROR", "WARN", "INFO", "DEBUG"], default="WARN", help="controls the verbosity of log messages from external commands (default: WARN)")
+    parser.add_argument("--log-file", default=None, help="write all log messages to this file (disabled by default)")
+    parser.add_argument("--handle-exception", default=True, action=argparse.BooleanOptionalAction, help="when enabled, errors are displayed as short messages; use --no-handle-exception to show full stack traces for debugging (default: enabled)")
+    parser.add_argument("--load", action="append", default=[], metavar="OPP_FILE", help="load one or more .opp configuration files or directories at startup, can be specified multiple times and supports glob patterns (e.g. --load '*.opp'); when a directory is given, all *.opp files in it are loaded; use --load @opp to load the bundled .opp files shipped with opp_repl; if not specified, the *.opp files of the current working directory, or else of its nearest parent directory that has any, are loaded automatically")
+    return parser.parse_args(sys.argv[1:])
+
+def checkout_test_baselines_main():
+    try:
+        args = parse_checkout_test_baselines_arguments()
+        initialize_logging(args.log_level, args.external_command_log_level, args.log_file)
+        for opp_file in args.load or find_opp_files():
+            load_opp_file(opp_file)
+        simulation_project = determine_default_simulation_project(name=args.simulation_project)
+        kinds = args.kinds or get_test_baseline_kinds(simulation_project)
+        if not kinds:
+            print(f"The project {simulation_project.get_name()} declares no baseline repository")
+        for kind in kinds:
+            commit = checkout_test_baseline(kind, simulation_project=simulation_project)
+            baseline = simulation_project.get_test_baseline(kind)
+            print(f"{kind} baseline: {baseline['repository']} at {commit} in {baseline.get('folder') or '.'}")
+    except KeyboardInterrupt:
+        _logger.warn("Program interrupted by user")
+    except Exception as e:
+        if args.handle_exception:
+            _logger.error(str(e))
+            sys.exit(1)
+        else:
+            raise e
 
 def parse_build_project_arguments():
     description = "Builds the specified or enclosing simulation project."

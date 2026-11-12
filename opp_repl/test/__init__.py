@@ -8,6 +8,7 @@ and profiling.
 import importlib.util
 
 from opp_repl.test.all import *
+from opp_repl.test.baseline import *
 from opp_repl.test.bisect import *
 from opp_repl.test.comparison import *
 from opp_repl.test.coverage import *

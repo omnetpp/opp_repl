@@ -102,6 +102,7 @@ by purpose:
 - `opp_update_speed_test_results` — update the speed test baseline
 - `opp_update_statistical_test_results` — update the statistical test baseline
 - `opp_update_chart_test_results` — update the chart test baseline images
+- `opp_checkout_test_baselines` — check out the baseline repositories at the commits that the project declares
 
 **Overlays:**
 

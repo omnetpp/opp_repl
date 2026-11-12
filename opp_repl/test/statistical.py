@@ -20,6 +20,7 @@ except (ImportError, ModuleNotFoundError):
     pass
 
 from opp_repl.simulation import *
+from opp_repl.test.baseline import check_test_baseline
 from opp_repl.test.fingerprint import *
 from opp_repl.test.simulation import *
 
@@ -293,6 +294,7 @@ def run_statistical_tests(append_args=[], **kwargs):
         an object that contains a list of :py:class:`SimulationTestTaskResult` objects. Each object describes the result of running one test task.
     """
     kwargs = apply_project_test_defaults("statistical", kwargs)
+    check_test_baseline("statistical", **kwargs)
     multiple_statistical_test_tasks = get_statistical_test_tasks(**kwargs)
     return multiple_statistical_test_tasks.run(append_args=append_args + _append_args, **kwargs)
 run_statistical_tests.__signature__ = combine_signatures(run_statistical_tests, get_statistical_test_tasks)
@@ -386,6 +388,7 @@ def update_statistical_test_results(sim_time_limit=get_statistical_test_sim_time
         an object that contains a list of :py:class:`UpdateTaskResult` objects. Each object describes the result of running one update task.
     """
     kwargs = apply_project_test_defaults("statistical", kwargs)
+    check_test_baseline("statistical", **kwargs)
     multiple_update_statistical_result_tasks = get_update_statistical_result_tasks(sim_time_limit=sim_time_limit, **kwargs)
     return multiple_update_statistical_result_tasks.run(sim_time_limit=sim_time_limit, append_args=append_args + _append_args, **kwargs)
 update_statistical_test_results.__signature__ = combine_signatures(update_statistical_test_results, get_update_statistical_result_tasks)

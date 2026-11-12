@@ -21,6 +21,7 @@ except ImportError:
     pass
 
 from opp_repl.common import *
+from opp_repl.test.baseline import check_test_baseline
 from opp_repl.test.statistical import *
 from opp_repl.test.task import *
 
@@ -249,6 +250,7 @@ def run_chart_tests(**kwargs):
     """
     from opp_repl.simulation.project import apply_project_test_defaults  # lazy: avoid test/* import cycle
     kwargs = apply_project_test_defaults("chart", kwargs)
+    check_test_baseline("chart", **kwargs)
     multiple_chart_test_tasks = get_chart_test_tasks(**kwargs)
     return multiple_chart_test_tasks.run(**kwargs)
 run_chart_tests.__signature__ = combine_signatures(run_chart_tests, get_chart_test_tasks)
@@ -373,6 +375,7 @@ def update_chart_test_results(**kwargs):
     """
     from opp_repl.simulation.project import apply_project_test_defaults  # lazy: avoid test/* import cycle
     kwargs = apply_project_test_defaults("chart", kwargs)
+    check_test_baseline("chart", **kwargs)
     multiple_update_chart_tasks = get_update_chart_tasks(**kwargs)
     return multiple_update_chart_tasks.run(**kwargs)
 update_chart_test_results.__signature__ = combine_signatures(update_chart_test_results, get_update_chart_tasks)

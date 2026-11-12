@@ -50,6 +50,52 @@ them after each run, also when the simulation stops with an error or a cancel.
 They have the name `{ini_file}-{config}-#{run_number}`, thus they are not the
 result files of a manual run.
 
+### Baseline repository
+
+A project can keep its baselines in another git repository.  The `baseline`
+entry of the test kind in the `test_parameters` of the `.opp` file declares
+that repository:
+
+```python
+test_parameters={
+    "statistical": {"baseline": {"repository": "inet-framework/statistics",
+                                 "ref": "e8f63b9c81e3a12d114898f00e6178151fa6c033",
+                                 "folder": "statistics"}},
+}
+```
+
+- **`repository`** — a URL, or the `owner/name` of a repository on GitHub.
+- **`folder`** — the folder of the clone, relative to the project root.
+- **`ref`** — the commit to use: a full commit hash, a branch or a tag.
+  Optional.
+
+With a full commit hash as `ref`, each commit of the project names the exact
+baseline that it passes with.  A change of the project that moves a result then
+changes the `ref` in the same commit, and a test of an older commit compares
+with the baseline of that commit.
+
+`opp_checkout_test_baselines` makes the clone, or gets the declared commit into
+a clone that exists, and moves the checkout to that commit:
+
+```bash
+opp_checkout_test_baselines --load "/home/user/workspace/inet/inet.opp" -p inet
+opp_checkout_test_baselines --load "/home/user/workspace/inet/inet.opp" -p inet statistical
+```
+
+```python
+checkout_test_baselines(simulation_project=inet_project)
+checkout_test_baseline("statistical", simulation_project=inet_project)
+```
+
+The command prints the commit of each checkout.  It gets a commit by its hash,
+thus the commit can be on no branch, as the head of a pull request is.  A
+checkout that is already at the commit stays on its branch.  The command never
+discards a local change: git stops when the checkout would overwrite one.
+
+A test and an update never move a baseline checkout.  They give a warning when
+the checkout is not at the declared commit, and with the log level `INFO` they
+report the commit and whether the checkout has local changes.
+
 ## Python API
 
 ```python
