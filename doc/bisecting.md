@@ -15,7 +15,7 @@ commit is built, tested, and evaluated automatically.
 3. It verifies that the good commit really passes and the bad commit
    really fails.
 4. It performs a binary search: at each step, a middle commit is checked
-   out as a **temporary git worktree**, built, and tested.
+   out as a **git worktree**, built, and tested.
 5. Depending on whether the result is good or bad, the search range is
    narrowed.
 6. When the search converges, the **offending commit** — the first one
@@ -25,6 +25,11 @@ Each worktree is created next to the original repository root so that the
 original working tree is never modified.  Baseline results (fingerprints,
 statistics, speed measurements, etc.) are automatically loaded from the
 good commit.
+
+The worktrees stay after the bisect, with their build output, thus a later
+bisect over the same commits builds nothing again.  opp_repl removes a
+worktree only when nobody uses it and its last use is older than 14 days; see
+[Worktree cleanup](comparing_simulations.md#worktree-cleanup).
 
 ## Supported test types
 

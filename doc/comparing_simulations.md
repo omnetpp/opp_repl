@@ -93,10 +93,43 @@ Each task in the aggregate result is tagged with the short hashes of its pair
 
 ### Worktree cleanup
 
-`*_between_commits()` and `*_across_commits()` create git worktrees next to
-the source repository (named `<repo>-<short_hash>`) and reuse them on
-subsequent calls.  Pass `delete_worktree=True` to remove the worktrees after
-the comparison finishes (including on error):
+`*_between_commits()` and `*_across_commits()` create a git worktree for each
+commit next to the source repository and reuse it on subsequent calls.  The
+name is `<repo>-<short_hash>`, from the commit that the given hash, tag or
+branch name gives.  A hash and a branch name of one commit thus use one
+worktree, and a branch that moved gets a new worktree.
+
+opp_repl keeps the worktrees, so repeated comparisons against the same commits
+do not rebuild from scratch.  It removes a worktree only with the proof that
+nobody uses it.  The proof has four checks:
+
+1. opp_repl made the worktree.  A marker file in the administration directory
+   of the worktree (`.git/worktrees/<name>/opp_repl`) shows this.
+2. No opp_repl process uses it.  Each process holds a lock on the marker file
+   until the process ends.
+3. Nobody worked in it.  Its `HEAD` is the commit that opp_repl checked out,
+   and `git status` shows no changed and no new file.  Ignored files, such as
+   the build output and the result files, do not count.
+4. No process of the user has its working directory, an open file or a mapped
+   file in it.
+
+The removal is a `git worktree remove` without `--force`.  opp_repl never
+removes a worktree that it did not make.
+
+A project whose build leaves a file that git does not ignore, for example a
+generated `Makefile`, does not pass check 3.  Add such files to the
+`.gitignore` file of the project.
+
+There are three times at which opp_repl removes worktrees:
+
+- **Before it makes a new worktree**, it removes the worktrees with a complete
+  proof whose last use is older than 14 days.  The environment variable
+  `OPP_WORKTREE_MAX_AGE_DAYS` changes the number of days, and the value `none`
+  turns this removal off.
+- **With `delete_worktree=True`**, at the end of the call, also after an error.
+  A worktree without a complete proof stays, and a warning gives the reason.
+- **With `remove_unused_worktrees()`**, at once.  The function returns the
+  reason for each worktree that stays.
 
 ```python
 results = compare_simulations_between_commits(
@@ -104,10 +137,10 @@ results = compare_simulations_between_commits(
     delete_worktree=True,
     config_filter="General",
     run_number=0)
-```
 
-The default is `delete_worktree=False`, which keeps the worktrees so repeated
-comparisons against the same commits do not rebuild from scratch.
+remove_unused_worktrees(inet_project)
+# {'/home/user/inet-1a2b3c4d5e': None, '/home/user/inet-6f7a8b9c0d': 'it has changed or new files'}
+```
 
 ### Output file cleanup
 
