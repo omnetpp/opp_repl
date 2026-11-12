@@ -1,6 +1,6 @@
 # Automatic cleanup of run output
 
-> **Status:** stages 1, 2 and 5 complete; all decisions are made; stages 3 and 4 are in work · **Owner:** opp_repl · **Branch:** `topic/run-output-cleanup`, worktree `opp_repl-run-output-cleanup` · **Optional stages:** INET, OMNeT++ · **Written:** 2026-11-11
+> **Status:** stages 1, 2, 4 and 5 complete, but for the chart tests of step 4.4; stage 3 is in work · **Owner:** opp_repl · **Branch:** `topic/run-output-cleanup`, worktree `opp_repl-run-output-cleanup` · **Optional stages:** INET, OMNeT++ · **Written:** 2026-11-11
 
 opp_repl removes the output of a test or of a comparison when the result is the expected result.
 opp_repl keeps the output when the result is not the expected result, because a person will
@@ -250,10 +250,14 @@ Check, done on 2026-11-11 with real simulations (`examples/inet/nclients`, confi
 - [ ] 3.4 Add `remove_unused_worktrees(simulation_project, max_age="14d")`. It removes each
       worktree for which the proof is complete and the last use is older than `max_age`, and it
       logs the reason for each worktree that stays. `_make_git_worktree` calls it before it adds
-      a worktree.
+      a worktree. The age is a setting, and the value `None` turns the automatic removal off.
 - [ ] 3.5 `remove_worktree_simulation_project` uses the same proof and `git worktree remove`
-      without `--force`. `delete_worktree=True` and the bisect function thus remove only with
-      the proof. A worktree that stays gives a warning with the reason.
+      without `--force`. `delete_worktree=True` thus removes only with the proof. A worktree that
+      stays gives a warning with the reason. The bisect function gets no removal at its end: its
+      worktrees stay for the next bisect, and only the rule of step 3.4 can remove them.
+- [ ] 3.5a A directory with the name of the worktree but without a marker: opp_repl uses it only
+      when its `HEAD` is at the necessary commit, and it writes no marker into it. When the
+      `HEAD` is at another commit, opp_repl stops with an error.
 - [ ] 3.6 Add a self test with a temporary repository: the name from a ref with a slash, the
       reuse, and one case for each check of the proof.
 - [ ] 3.7 One time, by hand: list the 15 old worktrees without a marker, and remove them after the
@@ -281,11 +285,11 @@ Check, done on 2026-11-11 with real simulations (`examples/inet/nclients`, confi
         start. A file can stay only when a simulation stops after it made the result files.
       - Not measured: the chart tests (this worktree has no `media` folder), the sanitizer tests
         (no sanitize build) and the feature tests (not on this machine).
-- [ ] 4.2 The statistical test and the statistical update remove their `.sca`, `.vec` and `.vci`
+- [x] 4.2 (`de6fba7`) The statistical test and the statistical update remove their `.sca`, `.vec` and `.vci`
       files in a `finally` block, thus also after an error or a cancel. The files are work files
       of the test, and `keep_output` has no function here. The `.diff` and `.csv` files are in
       the statistics folder, and this step does not touch them.
-- [ ] 4.3 The smoke, sanitizer and fingerprint tests and the fingerprint update run with
+- [x] 4.3 (`a4a9e89`) The smoke, sanitizer and fingerprint tests and the fingerprint update run with
       `--record-scalar-results=false --record-vector-results=false --record-eventlog=false`, as the
       speed test does. The per-object options of the fingerprint test go. These tests then write
       no result file, thus they need no private result folder and no `keep_output`.
@@ -304,12 +308,25 @@ Check, done on 2026-11-11 with real simulations (`examples/inet/nclients`, confi
         manual run of the same config; today the test replaces it. (3) A simulation with an
         OMNeT++ before 6.2.0 stops with an error on these options; there is no version check,
         as in the speed test.
-- [ ] 4.4 Chart tests: decide after step 4.1. The charts read `results/` in place, thus a private
-      folder is not possible. A possible rule is to remove the result files of a directory when
-      all its charts pass.
+- [x] 4.3a `doc/smoke_tests.md`, `sanitizer_tests.md`, `fingerprint_tests.md` and
+      `statistical_tests.md` tell which result files the tests make and remove (`c460c16`). Self
+      test `opp_repl/test/self/result_files.py`, 9 cases, in `opp_repl_self_test`.
+- [ ] 4.4 Chart tests: open. They were not measured, because the worktree of the check has no
+      `media` folder. The charts read `results/` in place, thus the three options are not
+      possible. A possible rule is to remove the result files of a directory when all its charts
+      pass. Measure first, then ask the user.
 
-Check for step 4.3: the verdicts of the full INET smoke and fingerprint suites are the same as
-before.
+Check for step 4.3, done on 2026-11-12 in `inet-physicallayer-content-errors` (release,
+`--no-build`): the complete INET suites with the opp_repl of `main` (before) and of the branch
+(after).
+
+| Suite | Tests | Different verdicts | Files before | Files after | Time before | Time after |
+|---|---|---|---|---|---|---|
+| smoke | 917 | 0 | 25.1 GB: `.vec` 23.6 GB, `.sca` 0.8 GB, `.vci` 0.2 GB, `.pcap` 0.5 GB | 0.5 GB, 147 `.pcap` | 106 s | 33 s |
+| fingerprint | 1792 | 0 | 1.9 GB: files without data 1.1 GB, `.pcap` 0.8 GB | 0.8 GB, 141 `.pcap` | 109 s | 118 s |
+
+The PCAP files that stay are larger than the first measurement of one tutorial showed: 0.5 GB
+after a smoke run and 0.8 GB after a fingerprint run, in each worktree. Each run replaces them.
 
 ### Stage 5 — system settings (no code, each step needs the user's agreement)
 
@@ -367,6 +384,8 @@ without them.
 | 2026-11-11 | Plan written. |
 | 2026-11-11 | User: D1 agreed. D2: remove a worktree only when it is provably not in use. D3 agreed. D4 later. |
 | 2026-11-11 | D2: the proof has five parts (section 3). The user has not yet confirmed this definition of the proof. |
+| 2026-11-12 | User asked if a bisect keeps its worktrees for a later bisect. Answer: yes, also in the plan. The age of the automatic removal becomes a setting, and `None` turns the removal off. |
+| 2026-11-12 | Stage 4 check: one complete INET smoke run left 25 GB before the change. The PCAP files that stay are 0.5 GB to 0.8 GB for each worktree; the user agreed before this number was known. |
 | 2026-11-12 | User: agreed that the statistical test and its update always remove their result files (D7), after the answer that the `.diff` and `.csv` files stay. |
 | 2026-11-12 | Found, not a part of this plan: no code removes an old `.csv` file of the statistical test, thus it stays after a later PASS. |
 | 2026-11-12 | User: OMNeT++ can turn the result files off completely, thus the recommendation for D6 changed. User agreed with the three options and with no change for the three points that stay. |
