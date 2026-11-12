@@ -42,7 +42,12 @@ turns the result files and the eventlog off with
 The simulation makes no `.sca`, `.vec` or `.elog` file, and the model runs as
 before.  These options need OMNeT++ 6.2.0 or later.  A file that a module
 writes itself, such as a PCAP file, is not a result file of OMNeT++ and is
-written as before.  The fingerprint update does the same.
+written as before.
+
+OMNeT++ removes an old file with the name of a result file at the start of
+each run.  The test thus also gives the two result files another name with
+`--output-scalar-file` and `--output-vector-file`, and the `.sca` and `.vec`
+files of a manual run of the same config stay.  The fingerprint update does the same.
 
 Example output:
 

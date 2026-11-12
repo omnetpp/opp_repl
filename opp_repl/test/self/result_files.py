@@ -45,7 +45,16 @@ class NoResultFilesTestCase(unittest.TestCase):
         return run_kwargs["append_args"]
 
     def test_the_options_turn_off_the_two_result_files_and_the_eventlog(self):
-        self.assertEqual(sorted(no_result_files_append_args), ["--record-eventlog=false", "--record-scalar-results=false", "--record-vector-results=false"])
+        for option in ["--record-eventlog=false", "--record-scalar-results=false", "--record-vector-results=false"]:
+            self.assertIn(option, no_result_files_append_args)
+
+    def test_the_options_do_not_name_the_result_files_of_a_manual_run(self):
+        # OMNeT++ removes an old file with the name of a result file at the start of each run
+        file_names = {option.split("=", 1)[0]: option.split("=", 1)[1] for option in no_result_files_append_args if "-file=" in option}
+        self.assertEqual(sorted(file_names), ["--output-scalar-file", "--output-vector-file"])
+        for file_name in file_names.values():
+            self.assertTrue(file_name.startswith("${resultdir}/."))
+            self.assertNotIn("${configname}", file_name)
 
     def test_smoke_test(self):
         self.assertEqual(self._run(SmokeTestTask), no_result_files_append_args)

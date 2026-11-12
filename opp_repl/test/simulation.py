@@ -14,9 +14,14 @@ from opp_repl.test.task import *
 _logger = logging.getLogger(__name__)
 
 # A test that reads only the stdout and the stderr of its simulation needs no result file and no
-# eventlog. With these options the simulation does not make the files, and the model runs as
-# before. OMNeT++ has the two result file options from release 6.2.0.
-no_result_files_append_args = ["--record-scalar-results=false", "--record-vector-results=false", "--record-eventlog=false"]
+# eventlog. With the first three options the simulation does not make the files, and the model
+# runs as before. OMNeT++ has the two result file options from release 6.2.0.
+#
+# OMNeT++ removes an old file with the name of a result file at the start of each run, also when
+# it makes no result file. The last two options give the two files a name that nobody uses, thus
+# the test does not remove the result files of a manual run of the same config.
+no_result_files_append_args = ["--record-scalar-results=false", "--record-vector-results=false", "--record-eventlog=false",
+                               "--output-scalar-file=${resultdir}/.no-result-file.sca", "--output-vector-file=${resultdir}/.no-result-file.vec"]
 
 class SimulationTestTaskResult(TestTaskResult):
     """
