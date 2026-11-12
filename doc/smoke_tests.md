@@ -3,6 +3,15 @@
 Smoke tests are the most basic tests — they check if simulations run without
 crashing and terminate properly.
 
+A smoke test reads only the stdout and the stderr of the simulation, thus it
+turns the result files and the eventlog off with
+`--record-scalar-results=false --record-vector-results=false --record-eventlog=false`.
+The simulation makes no `.sca`, `.vec` or `.elog` file, and the model runs as
+before.  These options need OMNeT++ 6.2.0 or later.  A file that a module
+writes itself, such as a PCAP file, is not a result file of OMNeT++ and is
+written as before.  To get the result files of a simulation, use
+`run_simulations`.
+
 ## Python API
 
 ```python

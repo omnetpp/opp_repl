@@ -44,6 +44,12 @@ baseline, making it easy to inspect what changed:
 - **`.csv`** — a table of all differing scalars with `value_stored`,
   `value_current`, and `relative_error` columns, sorted by largest error.
 
+The `.sca`, `.vec` and `.vci` files of the run in the `results/` folder of the
+working directory are work files of the test.  The test and the update remove
+them after each run, also when the simulation stops with an error or a cancel.
+They have the name `{ini_file}-{config}-#{run_number}`, thus they are not the
+result files of a manual run.
+
 ## Python API
 
 ```python

@@ -30,6 +30,14 @@ By default, simulations are limited by a CPU time limit (`cpu_time_limit`,
 default `"1s"`) instead of simulation time to keep sanitizer runs
 practical, since instrumented builds are significantly slower.
 
+A sanitizer test reads only the stdout and the stderr of the simulation, thus it
+turns the result files and the eventlog off with
+`--record-scalar-results=false --record-vector-results=false --record-eventlog=false`.
+The simulation makes no `.sca`, `.vec` or `.elog` file, and the model runs as
+before.  These options need OMNeT++ 6.2.0 or later.  A file that a module
+writes itself, such as a PCAP file, is not a result file of OMNeT++ and is
+written as before.
+
 ## Python API
 
 ### Running sanitizer tests

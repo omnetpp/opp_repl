@@ -36,6 +36,14 @@ Multiple update fingerprint results: KEEP, summary: 7 KEEP in 0:00:00.218112
 r = run_fingerprint_tests(simulation_project=inet_project, sim_time_limit="1s")
 ```
 
+A fingerprint test reads only the stdout and the stderr of the simulation, thus it
+turns the result files and the eventlog off with
+`--record-scalar-results=false --record-vector-results=false --record-eventlog=false`.
+The simulation makes no `.sca`, `.vec` or `.elog` file, and the model runs as
+before.  These options need OMNeT++ 6.2.0 or later.  A file that a module
+writes itself, such as a PCAP file, is not a result file of OMNeT++ and is
+written as before.  The fingerprint update does the same.
+
 Example output:
 
 ```
