@@ -1,6 +1,6 @@
 # Automatic cleanup of run output
 
-> **Status:** stages 1 to 5 complete and on `main` since 2026-11-12, but for step 4.4 (the chart tests, not measured) · **Owner:** opp_repl · **Branch:** `topic/run-output-cleanup`, worktree `opp_repl-run-output-cleanup` · **Optional stages:** INET, OMNeT++ · **Written:** 2026-11-11
+> **Status:** complete and on `main` since 2026-11-12; step 4.4 (the chart tests) and the optional stages are not done, by the decision of the user · **Owner:** opp_repl · **Branch:** `topic/run-output-cleanup`, worktree `opp_repl-run-output-cleanup` · **Optional stages:** INET, OMNeT++ · **Written:** 2026-11-11
 
 opp_repl removes the output of a test or of a comparison when the result is the expected result.
 opp_repl keeps the output when the result is not the expected result, because a person will
@@ -383,10 +383,9 @@ Check, done on 2026-11-12 with the project `mm1k` and real builds and runs:
 - [x] 4.3a `doc/smoke_tests.md`, `sanitizer_tests.md`, `fingerprint_tests.md` and
       `statistical_tests.md` tell which result files the tests make and remove (`ab622af`). Self
       test `opp_repl/test/self/result_files.py`, 9 cases, in `opp_repl_self_test`.
-- [ ] 4.4 Chart tests: open. They were not measured, because the worktree of the check has no
-      `media` folder. The charts read `results/` in place, thus the three options are not
-      possible. A possible rule is to remove the result files of a directory when all its charts
-      pass. Measure first, then ask the user.
+- [x] 4.4 Chart tests: skipped by the decision of the user on 2026-11-12. They were not measured,
+      because the worktree of the check has no `media` folder, and they have no change. The
+      charts read `results/` in place, thus the options of step 4.3 are not possible for them.
 
 Check for step 4.3, done on 2026-11-12 in `inet-physicallayer-content-errors` (release,
 `--no-build`): the complete INET suites with the opp_repl of `main` (before) and of the branch
@@ -414,7 +413,7 @@ after a smoke run and 0.8 GB after a fingerprint run, in each worktree. Each run
 ### Optional stages in other repositories
 
 These stages decrease the disk use during a run and the run time. Stage 1 removes the files
-without them.
+without them. They are not done, and no work on them is planned.
 
 - [ ] O1 INET: set `cmdenv-express-mode = true` in the shared ini files of the large protocol
       tests. Measure the size of `test.out` for each test first. 825 of the 1193 protocol tests
@@ -433,8 +432,10 @@ without them.
       they were before.
 - The tools on the development machine use the main checkout as an editable install, thus they
   use the change at once. The INET GitHub CI jobs install opp_repl from `github_ci` in each job.
-  The opp_ci service takes a new opp_repl only after a restart; that restart is not done.
-- [ ] Move this file to `plan/done/` when step 4.4 is done or dropped.
+  The opp_ci service takes a new opp_repl only after a restart. The user decided against a
+  restart for this change, thus the service takes it at its next restart.
+- [x] This file moved to `plan/done/` on 2026-11-12. The worktree `opp_repl-run-output-cleanup`
+      and the branch `topic/run-output-cleanup` are removed.
 
 ## 6. Decisions
 
@@ -462,6 +463,7 @@ without them.
 | 2026-11-11 | Plan written. |
 | 2026-11-11 | User: D1 agreed. D2: remove a worktree only when it is provably not in use. D3 agreed. D4 later. |
 | 2026-11-11 | D2: the proof has five parts (section 3). The user has not yet confirmed this definition of the proof. |
+| 2026-11-12 | User: no restart of the opp_ci service; remove the worktree and the branch of this work; skip the chart tests. The plan is complete with that. |
 | 2026-11-12 | User: land steps 1 to 3: the local `main`, the push of `main`, and the update and push of `github_ci` and `opp_ci`. |
 | 2026-11-12 | User: remove the 12 old worktrees; `inet-master-origin/top` and `inet-gm-topic/desy` stay as they are, with no new branch. |
 | 2026-11-12 | User asked for a recheck of all removals. Result: the proof for worktrees has five checks now, and the tests do not remove the result files of a manual run. The second point changes the first decision of "no change"; the user can reject it. |
