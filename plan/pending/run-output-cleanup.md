@@ -1,6 +1,6 @@
 # Automatic cleanup of run output
 
-> **Status:** stages 1 to 5 complete, but for step 4.4 (the chart tests, not measured); the branch is not on `main` · **Owner:** opp_repl · **Branch:** `topic/run-output-cleanup`, worktree `opp_repl-run-output-cleanup` · **Optional stages:** INET, OMNeT++ · **Written:** 2026-11-11
+> **Status:** stages 1 to 5 complete and on `main` since 2026-11-12, but for step 4.4 (the chart tests, not measured) · **Owner:** opp_repl · **Branch:** `topic/run-output-cleanup`, worktree `opp_repl-run-output-cleanup` · **Optional stages:** INET, OMNeT++ · **Written:** 2026-11-11
 
 opp_repl removes the output of a test or of a comparison when the result is the expected result.
 opp_repl keeps the output when the result is not the expected result, because a person will
@@ -425,10 +425,16 @@ without them.
 
 ## 5. Delivery
 
-- Land the stages on opp_repl `main`, one stage after the other. Run `opp_repl_self_test` for each
-  stage.
-- Bring the `github_ci` and `opp_ci` branches up to date only when the user asks.
-- Move this file to `plan/done/` when the stages 1 to 5 are complete.
+- [x] Landed on 2026-11-12, by the decision of the user. The remote `main`, `github_ci` and
+      `opp_ci` were all one commit ahead of the base of the branch, at `36d35ee`. The 27 commits
+      of the branch were thus rebased on that commit, and `main` took them as a fast-forward.
+      The commit names in this file are those after the rebase.
+- [x] `main` is pushed. `github_ci` and `opp_ci` are pushed at the same commit as `main`, as
+      they were before.
+- The tools on the development machine use the main checkout as an editable install, thus they
+  use the change at once. The INET GitHub CI jobs install opp_repl from `github_ci` in each job.
+  The opp_ci service takes a new opp_repl only after a restart; that restart is not done.
+- [ ] Move this file to `plan/done/` when step 4.4 is done or dropped.
 
 ## 6. Decisions
 
@@ -456,6 +462,7 @@ without them.
 | 2026-11-11 | Plan written. |
 | 2026-11-11 | User: D1 agreed. D2: remove a worktree only when it is provably not in use. D3 agreed. D4 later. |
 | 2026-11-11 | D2: the proof has five parts (section 3). The user has not yet confirmed this definition of the proof. |
+| 2026-11-12 | User: land steps 1 to 3: the local `main`, the push of `main`, and the update and push of `github_ci` and `opp_ci`. |
 | 2026-11-12 | User: remove the 12 old worktrees; `inet-master-origin/top` and `inet-gm-topic/desy` stay as they are, with no new branch. |
 | 2026-11-12 | User asked for a recheck of all removals. Result: the proof for worktrees has five checks now, and the tests do not remove the result files of a manual run. The second point changes the first decision of "no change"; the user can reject it. |
 | 2026-11-12 | Stage 3 done. Found during the work: the old `delete_worktree=True` did not work, and a build file that git does not ignore keeps a worktree. |
