@@ -1,6 +1,6 @@
 # Automatic cleanup of run output
 
-> **Status:** stages 1 to 5 complete, but for two steps: 3.7 (the old worktrees) waits for the user, and 4.4 (the chart tests) is not measured · **Owner:** opp_repl · **Branch:** `topic/run-output-cleanup`, worktree `opp_repl-run-output-cleanup` · **Optional stages:** INET, OMNeT++ · **Written:** 2026-11-11
+> **Status:** stages 1 to 5 complete, but for step 4.4 (the chart tests, not measured); the branch is not on `main` · **Owner:** opp_repl · **Branch:** `topic/run-output-cleanup`, worktree `opp_repl-run-output-cleanup` · **Optional stages:** INET, OMNeT++ · **Written:** 2026-11-11
 
 opp_repl removes the output of a test or of a comparison when the result is the expected result.
 opp_repl keeps the output when the result is not the expected result, because a person will
@@ -24,7 +24,7 @@ Sizes before the manual deletion:
 
 ## 2. What exists today
 
-All line numbers are from opp_repl `main` at `39e15bc` and OMNeT++ `omnetpp-6.x`.
+All line numbers are from opp_repl `main` at `39e15bc`, before this work, and OMNeT++ `omnetpp-6.x`.
 
 ### 2.1 `opp_test` work directories
 
@@ -43,7 +43,7 @@ All line numbers are from opp_repl `main` at `39e15bc` and OMNeT++ `omnetpp-6.x`
 - `opp_test` names the folder `work/<test>` after the test file, and it changes each character
   other than a letter, a digit and `_` to `_` (`python/omnetpp/test.py:297-298`). INET has 188
   tests with such a name, for example the packetdrill tests. opp_repl used the name without this
-  change (found in stage 1, repaired in `0f2e5ab`).
+  change (found in stage 1, repaired in `cb05d95`).
 
 ### 2.2 Result files of the compare functions
 
@@ -179,18 +179,18 @@ done, and write new facts into this file.
 ### Stage 1 — `opp_test` work directories (159 GB class)
 
 - [x] 1.0 `OppTestTask.get_test_directory()` gives the folder that `opp_test` makes for the test
-      (`0f2e5ab`). This step was not in the first plan. The first INET check found it: the
+      (`cb05d95`). This step was not in the first plan. The first INET check found it: the
       folders of the packetdrill tests stayed.
 - [x] 1.1 `OppTestTask.run_protected` runs the test in `run_test` and then removes `work/<test>/`
       as `keep_output` tells. `TaskResult.should_keep_output()` makes the decision for all task
-      types. A debug run keeps the folder. A dry run does not reach this function (`4424d6a`).
+      types. A debug run keeps the folder. A dry run does not reach this function (`cd66439`).
 - [x] 1.2 `MultipleOppTestTasks.run_protected`: after the run, remove each `work/` directory that
-      is empty (`79b83c0`).
-- [x] 1.3 `--keep-output` is an option of all test runners (`adb7f49`).
+      is empty (`1d89606`).
+- [x] 1.3 `--keep-output` is an option of all test runners (`d438675`).
 - [x] 1.4 Self test `opp_repl/test/self/opp.py`, 11 cases, in `opp_repl_self_test`. A stub takes
       the place of `opp_test`, thus the test does not need OMNeT++. The cases fail without the
-      change (`4424d6a`, `79b83c0`).
-- [x] 1.5 `doc/tasks.md` has a section on the opp tests and `keep_output` (`6a4473e`).
+      change (`cd66439`, `1d89606`).
+- [x] 1.5 `doc/tasks.md` has a section on the opp tests and `keep_output` (`1d3c1f1`).
 
 Check, done on 2026-11-11 in `inet-physicallayer-content-errors` (debug, `--no-build`): each
 suite ran with the default and with `--keep-output all`, which is the behaviour before the change.
@@ -211,17 +211,17 @@ test, a maximum of about 1.2 GB for each test.
 
 - [x] 2.1 `CompareSimulationsTaskResult.get_output_file_paths()` gives the `.out`, `.elog`, `.sca`,
       `.vec` and `.vci` files of the two sides, and `_remove_output_files()` removes them
-      (`a54bdba`).
+      (`c1815e4`).
 - [x] 2.2 The two entry points that do the chart and module image steps call
       `_remove_output_files()` after these steps: `compare_simulations_using_multiple_tasks` and
       `compare_simulations_across_commits`. With the default, a comparison with the result
-      IDENTICAL removes its files (`a54bdba`).
+      IDENTICAL removes its files (`c1815e4`).
 - [x] 2.3 `recompare()` raises an error that names `keep_output="all"` when the files are removed.
       The result records this in `output_files_removed`. The trajectory functions did not change
-      (`a54bdba`).
+      (`c1815e4`).
 - [x] 2.4 Self test `opp_repl/test/self/compare.py`, 8 cases, in `opp_repl_self_test`. It builds
-      and runs no simulation (`a54bdba`).
-- [x] 2.5 `doc/comparing_simulations.md` has a section on the output file cleanup (`a8a4957`).
+      and runs no simulation (`c1815e4`).
+- [x] 2.5 `doc/comparing_simulations.md` has a section on the output file cleanup (`50edbeb`).
 
 Facts from the work:
 
@@ -248,33 +248,33 @@ Check, done on 2026-11-11 with real simulations (`examples/inet/nclients`, confi
       `<repository>-<short hash>`. A hash and a ref name go through the same code. The project of
       a worktree has the commit as its version and as its key in the workspace, thus a ref that
       moved gets a new project too. opp_repl logs the ref, the commit and the folder at each use
-      (`3768fa7`).
+      (`7939f10`).
 - [x] 3.2 The marker file `opp_repl` in the administration directory of the worktree records the
       commit and the ref text. A use sets its time, and the process holds a shared lock on it
-      until the process ends (`cc3c0d6`).
+      until the process ends (`ec8afc7`).
 - [x] 3.3 `_remove_git_worktree(worktree_path, max_age_days)` does the four checks and gives the
       reason when the worktree stays. Check 4 also examines the mapped files of a process, for a
-      simulation that loads a library of the worktree (`cc3c0d6`).
+      simulation that loads a library of the worktree (`ec8afc7`).
 - [x] 3.4 `remove_unused_worktrees(simulation_project, max_age_days=0)` removes at once and gives
       the reason for each worktree that stays. `_make_git_worktree` does the same before it adds
       a worktree, with the age of the setting. The setting is the environment variable
       `OPP_WORKTREE_MAX_AGE_DAYS`, 14 by default, and `none` turns the automatic removal off
-      (`cc3c0d6`).
+      (`ec8afc7`).
 - [x] 3.5 `remove_worktree_simulation_project` uses the proof and `git worktree remove` without
       `--force`. A worktree that stays gives a warning with the reason. The bisect function has
-      no removal at its end (`cc3c0d6`).
+      no removal at its end (`ec8afc7`).
 - [x] 3.5a A folder with the name of the worktree and without a marker: opp_repl uses it only
       when its `HEAD` is the commit, and it writes no marker into it. Another commit as `HEAD`,
-      or a folder that is not a worktree, is an error (`3768fa7`).
+      or a folder that is not a worktree, is an error (`7939f10`).
 - [x] 3.6 Self test `opp_repl/test/self/worktree.py`, 26 cases with a temporary git repository,
       in `opp_repl_self_test`. `doc/comparing_simulations.md` and `doc/bisecting.md` describe
-      the worktrees (`af30dc9`).
-- [x] 3.6a After a safety review that the user asked for, the proof is stricter (`bb125ad`): the
+      the worktrees (`fb5ba2b`).
+- [x] 3.6a After a safety review that the user asked for, the proof is stricter (`4cf4cb7`): the
       `HEAD` never moved, no other git repository is in the worktree, no file or folder in it is
       newer than the marker file, `git status` runs with explicit options, and a branch, a remote
       branch or a tag contains the commit. The marker file gets the time of the end of each use.
       The proof now has five checks. Self test: 30 cases.
-- [ ] 3.7 One time, by hand: remove the old worktrees without a marker, after the user agrees.
+- [x] 3.7 One time, by hand: remove the old worktrees without a marker, after the user agrees.
       State on 2026-11-12: 15 worktrees, 5.5 GB together, all with a detached `HEAD`, no process
       in them, no other repository in them, and a `HEAD` log of at most one entry.
 
@@ -302,6 +302,12 @@ Check, done on 2026-11-11 with real simulations (`examples/inet/nclients`, confi
 
       The first proposal, to remove 14, was wrong for the first two: it was the loss of these
       commits. This finding is the reason for check 5.
+
+      Done on 2026-11-12, with the agreement of the user: the other 12 are removed with
+      `git worktree remove`, without `--force`, each after a new run of all checks. This freed
+      4.0 GB. The user decided that the three worktrees above stay as they are. The two parent
+      folders that were empty after the removal, `inet-remotes` and `inet-master-remotes`, are
+      removed too.
 
 Facts from the work:
 
@@ -346,11 +352,11 @@ Check, done on 2026-11-12 with the project `mm1k` and real builds and runs:
         start. A file can stay only when a simulation stops after it made the result files.
       - Not measured: the chart tests (this worktree has no `media` folder), the sanitizer tests
         (no sanitize build) and the feature tests (not on this machine).
-- [x] 4.2 (`de6fba7`) The statistical test and the statistical update remove their `.sca`, `.vec` and `.vci`
+- [x] 4.2 (`b61a08a`) The statistical test and the statistical update remove their `.sca`, `.vec` and `.vci`
       files in a `finally` block, thus also after an error or a cancel. The files are work files
       of the test, and `keep_output` has no function here. The `.diff` and `.csv` files are in
       the statistics folder, and this step does not touch them.
-- [x] 4.3 (`a4a9e89`) The smoke, sanitizer and fingerprint tests and the fingerprint update run with
+- [x] 4.3 (`f2fd1de`) The smoke, sanitizer and fingerprint tests and the fingerprint update run with
       `--record-scalar-results=false --record-vector-results=false --record-eventlog=false`, as the
       speed test does. The per-object options of the fingerprint test go. These tests then write
       no result file, thus they need no private result folder and no `keep_output`.
@@ -366,7 +372,7 @@ Check, done on 2026-11-12 with the project `mm1k` and real builds and runs:
         the PCAP files of 15 INET ini files; each run replaces them. (3) A simulation with an
         OMNeT++ before 6.2.0 stops with an error on these options; there is no version check,
         as in the speed test.
-      - Point (2) is solved after the safety review (`2fbfa0f`), against the first decision of
+      - Point (2) is solved after the safety review (`1e9f251`), against the first decision of
         "no change": OMNeT++ removes an old `.vec` or `.sca` file with the same name at the
         start of each run, also when the files are off
         (`src/envir/omnetppoutvectormgr.cc:65-67`). A test thus removed the result of a manual
@@ -375,7 +381,7 @@ Check, done on 2026-11-12 with the project `mm1k` and real builds and runs:
         file. Check with the complete INET smoke and fingerprint suites: the files of a manual
         run of two configs stayed, and no verdict changed.
 - [x] 4.3a `doc/smoke_tests.md`, `sanitizer_tests.md`, `fingerprint_tests.md` and
-      `statistical_tests.md` tell which result files the tests make and remove (`c460c16`). Self
+      `statistical_tests.md` tell which result files the tests make and remove (`ab622af`). Self
       test `opp_repl/test/self/result_files.py`, 9 cases, in `opp_repl_self_test`.
 - [ ] 4.4 Chart tests: open. They were not measured, because the worktree of the check has no
       `media` folder. The charts read `results/` in place, thus the three options are not
@@ -450,6 +456,7 @@ without them.
 | 2026-11-11 | Plan written. |
 | 2026-11-11 | User: D1 agreed. D2: remove a worktree only when it is provably not in use. D3 agreed. D4 later. |
 | 2026-11-11 | D2: the proof has five parts (section 3). The user has not yet confirmed this definition of the proof. |
+| 2026-11-12 | User: remove the 12 old worktrees; `inet-master-origin/top` and `inet-gm-topic/desy` stay as they are, with no new branch. |
 | 2026-11-12 | User asked for a recheck of all removals. Result: the proof for worktrees has five checks now, and the tests do not remove the result files of a manual run. The second point changes the first decision of "no change"; the user can reject it. |
 | 2026-11-12 | Stage 3 done. Found during the work: the old `delete_worktree=True` did not work, and a build file that git does not ignore keeps a worktree. |
 | 2026-11-12 | User asked if a bisect keeps its worktrees for a later bisect. Answer: yes, also in the plan. The age of the automatic removal becomes a setting, and `None` turns the removal off. |
