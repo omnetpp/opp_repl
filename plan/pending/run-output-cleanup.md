@@ -1,6 +1,6 @@
 # Automatic cleanup of run output
 
-> **Status:** stages 1, 2 and 5 complete; stage 3 is ready to start; stage 4 is measured and waits for D6 and D7 · **Owner:** opp_repl · **Branch:** `topic/run-output-cleanup`, worktree `opp_repl-run-output-cleanup` · **Optional stages:** INET, OMNeT++ · **Written:** 2026-11-11
+> **Status:** stages 1, 2 and 5 complete; stage 3 is ready to start; stage 4 is measured and waits for D7 · **Owner:** opp_repl · **Branch:** `topic/run-output-cleanup`, worktree `opp_repl-run-output-cleanup` · **Optional stages:** INET, OMNeT++ · **Written:** 2026-11-11
 
 opp_repl removes the output of a test or of a comparison when the result is the expected result.
 opp_repl keeps the output when the result is not the expected result, because a person will
@@ -283,15 +283,31 @@ Check, done on 2026-11-11 with real simulations (`examples/inet/nclients`, confi
         (no sanitize build) and the feature tests (not on this machine).
 - [ ] 4.2 Statistical tests: move the removal of the `.sca`, `.vec` and `.vci` files into a
       `finally` block, thus it runs for each simulation result.
-- [ ] 4.3 Tests that do not read results in `results/`: `SimulationTestTask` gives the simulation
-      task a private result folder, `results/<test type>-<pid>/<config>-<run>/`, and removes it
-      after the check as `keep_output` tells. Use the list of test types from step 4.1.
+- [ ] 4.3 The smoke, sanitizer and fingerprint tests and the fingerprint update run with
+      `--record-scalar-results=false --record-vector-results=false --record-eventlog=false`, as the
+      speed test does. The per-object options of the fingerprint test go. These tests then write
+      no result file, thus they need no private result folder and no `keep_output`.
+
+      Facts for this step:
+      - OMNeT++ has the two options from release 6.2.0 (`2c8e5f3d16`, 2024-11-27). They change
+        only the calls into the output managers (`src/envir/envirbase.cc:1593-1670`). The model
+        code, the statistics and `finish()` run as before.
+      - Test on 2026-11-11 with the three options: the smoke test of `examples/inet/nclients`
+        gave the same verdicts (7 PASS, 3 expected ERROR) and left no file, 232 MB before. The
+        fingerprint test of `tutorials/stp` gave 8 PASS and left only the 8 `.pcap` files, 68 MB.
+      - Not solved, with the agreement of the user: (1) a file that a module writes, such as
+        the PCAP files of 15 INET ini files; each run replaces them. (2) OMNeT++ removes an old
+        `.vec` or `.sca` file with the same name at the start of each run, also when the files
+        are off (`src/envir/omnetppoutvectormgr.cc:65-67`), thus a test removes the result of a
+        manual run of the same config; today the test replaces it. (3) A simulation with an
+        OMNeT++ before 6.2.0 stops with an error on these options; there is no version check,
+        as in the speed test.
 - [ ] 4.4 Chart tests: decide after step 4.1. The charts read `results/` in place, thus a private
       folder is not possible. A possible rule is to remove the result files of a directory when
       all its charts pass.
 
-Check for step 4.3: the fingerprint results of the full INET suite are the same as before. A
-config with a fixed `results/` path in its ini file is a risk.
+Check for step 4.3: the verdicts of the full INET smoke and fingerprint suites are the same as
+before.
 
 ### Stage 5 — system settings (no code, each step needs the user's agreement)
 
@@ -332,7 +348,7 @@ without them.
 | D3 | System settings of stage 5 | 5.1 and 5.3 done; 5.2 examined, no change |
 | D4 | Optional stages O1 and O2 | Later, after a measurement |
 | D5 | Name of a worktree that opp_repl makes | The short hash of the commit that the ref gives. The ref name is not possible: `<repository>-<branch>` is the name rule of the user's own worktrees, thus the ref `master` gives `inet-master` |
-| D6 | Open. Smoke, sanitizer and fingerprint tests: a private result folder that the test removes, or no recording | Recommended: a private result folder for each run, removed as `keep_output` tells. The recording code then stays in the smoke test, and a PCAP file goes too |
+| D6 | Smoke, sanitizer and fingerprint tests | They turn the result files off with `record-scalar-results`, `record-vector-results` and `record-eventlog`. No private result folder. The first recommendation, a private folder, was made without knowledge of these options |
 | D7 | Open. Statistical test: result files of a simulation that did not complete | Recommended: the same rule as all other output: keep them only when the result is not the expected result |
 
 ## 7. Out of scope
@@ -349,6 +365,7 @@ without them.
 | 2026-11-11 | Plan written. |
 | 2026-11-11 | User: D1 agreed. D2: remove a worktree only when it is provably not in use. D3 agreed. D4 later. |
 | 2026-11-11 | D2: the proof has five parts (section 3). The user has not yet confirmed this definition of the proof. |
+| 2026-11-12 | User: OMNeT++ can turn the result files off completely, thus the recommendation for D6 changed. User agreed with the three options and with no change for the three points that stay. |
 | 2026-11-11 | User: agreed with the short commit hash as the name of a worktree (D5). |
 | 2026-11-11 | User: agreed with the four checks. opp_repl must not call `git worktree remove --force` by default, and `delete_worktree=True` as the default is wrong. The age is now a policy and not a part of the proof. |
 | 2026-11-11 | 5.2: no new `/var/tmp` rule, because the 30-day rule of the system works. |
