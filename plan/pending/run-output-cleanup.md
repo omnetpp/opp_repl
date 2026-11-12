@@ -1,6 +1,6 @@
 # Automatic cleanup of run output
 
-> **Status:** stages 1, 2 and 5 complete; stage 3 is ready to start; stage 4 is measured and waits for D7 · **Owner:** opp_repl · **Branch:** `topic/run-output-cleanup`, worktree `opp_repl-run-output-cleanup` · **Optional stages:** INET, OMNeT++ · **Written:** 2026-11-11
+> **Status:** stages 1, 2 and 5 complete; all decisions are made; stages 3 and 4 are in work · **Owner:** opp_repl · **Branch:** `topic/run-output-cleanup`, worktree `opp_repl-run-output-cleanup` · **Optional stages:** INET, OMNeT++ · **Written:** 2026-11-11
 
 opp_repl removes the output of a test or of a comparison when the result is the expected result.
 opp_repl keeps the output when the result is not the expected result, because a person will
@@ -281,8 +281,10 @@ Check, done on 2026-11-11 with real simulations (`examples/inet/nclients`, confi
         start. A file can stay only when a simulation stops after it made the result files.
       - Not measured: the chart tests (this worktree has no `media` folder), the sanitizer tests
         (no sanitize build) and the feature tests (not on this machine).
-- [ ] 4.2 Statistical tests: move the removal of the `.sca`, `.vec` and `.vci` files into a
-      `finally` block, thus it runs for each simulation result.
+- [ ] 4.2 The statistical test and the statistical update remove their `.sca`, `.vec` and `.vci`
+      files in a `finally` block, thus also after an error or a cancel. The files are work files
+      of the test, and `keep_output` has no function here. The `.diff` and `.csv` files are in
+      the statistics folder, and this step does not touch them.
 - [ ] 4.3 The smoke, sanitizer and fingerprint tests and the fingerprint update run with
       `--record-scalar-results=false --record-vector-results=false --record-eventlog=false`, as the
       speed test does. The per-object options of the fingerprint test go. These tests then write
@@ -349,7 +351,7 @@ without them.
 | D4 | Optional stages O1 and O2 | Later, after a measurement |
 | D5 | Name of a worktree that opp_repl makes | The short hash of the commit that the ref gives. The ref name is not possible: `<repository>-<branch>` is the name rule of the user's own worktrees, thus the ref `master` gives `inet-master` |
 | D6 | Smoke, sanitizer and fingerprint tests | They turn the result files off with `record-scalar-results`, `record-vector-results` and `record-eventlog`. No private result folder. The first recommendation, a private folder, was made without knowledge of these options |
-| D7 | Open. Statistical test: result files of a simulation that did not complete | Recommended: the same rule as all other output: keep them only when the result is not the expected result |
+| D7 | Statistical test: result files of a simulation that did not complete | The test and its update always remove their three result files. The first recommendation, the general rule, was wrong here: an error and a cancel are unexpected results, thus the rule keeps exactly the files that stay today |
 
 ## 7. Out of scope
 
@@ -365,6 +367,8 @@ without them.
 | 2026-11-11 | Plan written. |
 | 2026-11-11 | User: D1 agreed. D2: remove a worktree only when it is provably not in use. D3 agreed. D4 later. |
 | 2026-11-11 | D2: the proof has five parts (section 3). The user has not yet confirmed this definition of the proof. |
+| 2026-11-12 | User: agreed that the statistical test and its update always remove their result files (D7), after the answer that the `.diff` and `.csv` files stay. |
+| 2026-11-12 | Found, not a part of this plan: no code removes an old `.csv` file of the statistical test, thus it stays after a later PASS. |
 | 2026-11-12 | User: OMNeT++ can turn the result files off completely, thus the recommendation for D6 changed. User agreed with the three options and with no change for the three points that stay. |
 | 2026-11-11 | User: agreed with the short commit hash as the name of a worktree (D5). |
 | 2026-11-11 | User: agreed with the four checks. opp_repl must not call `git worktree remove --force` by default, and `delete_worktree=True` as the default is wrong. The age is now a policy and not a part of the proof. |
