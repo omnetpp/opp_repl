@@ -147,6 +147,15 @@ class BaselineTestCase(unittest.TestCase):
             self.assertIsNone(check_test_baseline("statistical", simulation_project=self._make_project(ref=self.first_commit)))
         self.assertIn("is not checked out", logs.output[0])
 
+    def test_the_check_reports_a_checkout_that_git_cannot_read(self):
+        # a worktree whose repository is not there has a .git file and no commit that git can read
+        os.makedirs(self.checkout_folder)
+        with open(os.path.join(self.checkout_folder, ".git"), "w") as f:
+            f.write("gitdir: /nonexistent/repository/.git/worktrees/statistics\n")
+        with self.assertLogs(baseline_module._logger, level=logging.WARNING) as logs:
+            self.assertIsNone(check_test_baseline("statistical", simulation_project=self._make_project(ref=self.first_commit)))
+        self.assertIn("Cannot read the commit", logs.output[0])
+
     def test_the_check_reads_the_checkout_of_the_baseline_project(self):
         # a comparison between commits keeps the stored results in the project of the user
         simulation_project = self._make_project(ref=self.first_commit)

@@ -166,7 +166,14 @@ def check_test_baseline(kind, simulation_project=None, baseline_simulation_proje
         _logger.warning(f"The {kind} baseline repository {baseline['repository']} is not checked out in {folder}, use opp_checkout_test_baselines")
         return None
     commit = _find_commit(folder, "HEAD")
-    has_changes = bool(_git(folder, "status", "--porcelain", "--untracked-files=no"))
+    if commit is None:
+        # for example a worktree whose repository is not there, as in a container that has only the files
+        _logger.warning(f"Cannot read the commit of the {kind} baseline checkout in {folder}, the results compare with files of an unknown commit")
+        return None
+    try:
+        has_changes = bool(_git(folder, "status", "--porcelain", "--untracked-files=no"))
+    except RuntimeError:
+        has_changes = False
     _logger.info(f"The {kind} baseline is {baseline['repository']} at {commit}" + (" with local changes" if has_changes else ""))
     if ref and _full_hash_pattern.match(ref) and commit != ref:
         _logger.warning(f"The {kind} baseline checkout in {folder} is at {commit}, but the project declares {ref}, use opp_checkout_test_baselines")
