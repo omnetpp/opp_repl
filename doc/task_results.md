@@ -113,7 +113,9 @@ plus information extracted from the simulation's output:
   parses out the error message, the module path where it occurred, and the
   simulation time and event number at the point of failure.
 - **End-of-run position** — the last event number and simulation time
-  reached before the run ended (from the time-limit-reached message).
+  reached before the run ended (from the time-limit-reached message), and
+  in `time_limit_reached` the message itself: `"Simulation time limit
+  reached"`, `"CPU time limit reached"` or `"Realtime limit reached"`.
 - **Output file paths** — the relative paths to the stdout, eventlog,
   scalar (`.sca`), and vector (`.vec`) files that the run produced.
 - **Used NED types** — a sorted list of all NED types that were
@@ -262,7 +264,7 @@ Extends `SimulationTestTaskResult` with fingerprint-specific fields:
 ```python
 tr.expected_fingerprint      # Fingerprint("a82f-d3c1", "tplx")
 tr.calculated_fingerprint    # Fingerprint("b91e-c2a0", "tplx")
-tr.fingerprint_mismatch      # True if they differ
+tr.fingerprint_mismatch      # True if a fingerprint was calculated and it differs
 tr.simulation_task_result    # the underlying SimulationTaskResult
 ```
 

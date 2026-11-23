@@ -93,10 +93,18 @@ Each element in `r.results` is a `FingerprintTestTaskResult` with:
 - **`result`** — `"PASS"`, `"FAIL"`, `"SKIP"`, `"ERROR"`, or `"CANCEL"`
 - **`expected_result`** — the expected outcome stored alongside the fingerprint (usually `"PASS"`)
 - **`expected`** — `True` when `result` matches `expected_result`
-- **`reason`** — human-readable explanation on non-PASS outcomes (e.g. `"Fingerprint mismatch"`, `"Correct fingerprint not found"`)
+- **`reason`** — human-readable explanation on non-PASS outcomes (e.g. `"Fingerprint mismatch"`, `"Correct fingerprint not found"`, `"CPU time limit reached at t=0.710039s"`)
 - **`expected_fingerprint`** — the `Fingerprint` object loaded from the store
 - **`calculated_fingerprint`** — the `Fingerprint` object computed by the simulation
-- **`fingerprint_mismatch`** — `True` when the two fingerprints differ
+- **`fingerprint_mismatch`** — `True` when the simulation calculated a fingerprint and it differs from the stored one
+
+A CPU time limit (`cpu_time_limit`) or a real time limit can stop a run
+before its `sim_time_limit`.  The result is then `ERROR` with the reason
+`"CPU time limit reached at t=..."` or `"Realtime limit reached at t=..."`,
+and the test does not compare the fingerprint: the speed of the machine
+decides where the limit stops the run.  Give each stored run a
+`sim_time_limit` that it reaches well inside the CPU time limit on the
+slowest machine that runs the test.
 
 ```python
 r0 = r.results[0]
@@ -121,7 +129,9 @@ one simulation.  `update_fingerprint_test_results()` returns one
   - `"KEEP"` — every calculated fingerprint matches the stored one; nothing changed
   - `"INSERT"` — a value is new, and no stored value changes
   - `"UPDATE"` — a stored value or its expected result changes
-  - `"ERROR"` — the simulation failed or a fingerprint could not be extracted
+  - `"ERROR"` — the simulation failed, a fingerprint could not be extracted,
+    or a CPU time or real time limit stopped the simulation; the update
+    stores nothing then
 - **`ingredient_updates`** — an `(ingredients, stored entry or None,
   calculated Fingerprint or None)` tuple for each recorded ingredient
 

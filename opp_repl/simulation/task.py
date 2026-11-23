@@ -83,9 +83,11 @@ class SimulationTaskResult(TaskResult):
             stderr = self.subprocess_result.stderr or ""
             self.stdout = stdout
             self.stderr = stderr
-            match = re.search(r"<!> Simulation time limit reached -- at t=(.*), event #(\d+)", stdout)
-            self.last_event_number = int(match.group(2)) if match else None
-            self.last_simulation_time = match.group(1) if match else None
+            # the line of Cmdenv when a time limit stops the run; time_limit_reached is its message
+            match = re.search(r"<!> (Simulation time limit reached|CPU time limit reached|Realtime limit reached) -- at t=(.*), event #(\d+)", stdout + "\n" + stderr)
+            self.time_limit_reached = match.group(1) if match else None
+            self.last_event_number = int(match.group(3)) if match else None
+            self.last_simulation_time = match.group(2) if match else None
             self.elapsed_cpu_time = None # TODO
             regex = r"<!> Error: (.*) -- in module \((.*?)\) (.*?) \(.*?\), at t=(.*?)s, event #(.*)"
             match = re.search(regex, stderr)
@@ -127,6 +129,7 @@ class SimulationTaskResult(TaskResult):
             self.scalar_file_path = None
             self.vector_file_path = None
         else:
+            self.time_limit_reached = None
             self.last_event_number = None
             self.last_simulation_time = None
             self.error_message = None

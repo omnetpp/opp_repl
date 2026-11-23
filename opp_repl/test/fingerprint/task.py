@@ -54,7 +54,8 @@ class FingerprintTestTaskResult(SimulationTestTaskResult):
         self.kwargs = kwargs
         self.expected_fingerprint = expected_fingerprint
         self.calculated_fingerprint = calculated_fingerprint
-        self.fingerprint_mismatch = expected_fingerprint != calculated_fingerprint
+        # a run without a calculated fingerprint (an ERROR, SKIP or CANCEL result) has no mismatch
+        self.fingerprint_mismatch = calculated_fingerprint is not None and expected_fingerprint != calculated_fingerprint
 
     def __repr__(self):
         return "Fingerprint test result: " + self.get_description()
@@ -125,6 +126,7 @@ class FingerprintTestTask(SimulationTestTask):
     def check_simulation_task_result(self, simulation_task_result, **kwargs):
         expected_fingerprint = self.fingerprint
         expected_result = self.test_result
+        error_message = None
         if simulation_task_result.result == "CANCEL":
             result = "CANCEL"
             reason = "Cancel by user"
@@ -134,6 +136,11 @@ class FingerprintTestTask(SimulationTestTask):
             result = "SKIP"
             expected_result = simulation_task_result.expected_result
             reason = simulation_task_result.reason
+            calculated_fingerprint = None
+        elif get_time_limit_error_reason(simulation_task_result):
+            result = "ERROR"
+            reason = get_time_limit_error_reason(simulation_task_result)
+            error_message = "the run stopped before its sim-time-limit " + str(self.sim_time_limit)
             calculated_fingerprint = None
         else:
             calculated_fingerprint = get_calculated_fingerprint(simulation_task_result, self.fingerprint.ingredients)
@@ -146,7 +153,7 @@ class FingerprintTestTask(SimulationTestTask):
             else:
                 result = "PASS"
                 reason = None
-        return FingerprintTestTaskResult(task=self, simulation_task_result=simulation_task_result, expected_fingerprint=expected_fingerprint, calculated_fingerprint=calculated_fingerprint, result=result, expected_result=expected_result, reason=reason)
+        return FingerprintTestTaskResult(task=self, simulation_task_result=simulation_task_result, expected_fingerprint=expected_fingerprint, calculated_fingerprint=calculated_fingerprint, result=result, expected_result=expected_result, reason=reason, error_message=error_message)
 
     def get_append_args(self, simulation_project, fingerprint_arg):
         return ["--fingerprint", fingerprint_arg, *no_result_files_append_args]
@@ -242,6 +249,16 @@ def get_calculated_fingerprint(simulation_result, ingredients):
             else:
                 return None
     return Fingerprint(value, ingredients)
+
+def get_time_limit_error_reason(simulation_result):
+    """
+    Returns the reason of an ERROR result if a CPU time or real time limit stopped the simulation, else None. The
+    speed of the machine decides where such a limit stops the run, so its fingerprint is not the fingerprint of the
+    sim_time_limit of the store: a test does not compare it and an update does not store it.
+    """
+    if simulation_result.time_limit_reached in ["CPU time limit reached", "Realtime limit reached"]:
+        return simulation_result.time_limit_reached + " at t=" + simulation_result.last_simulation_time
+    return None
 
 def check_fingerprint_test_group(simulation_result, fingerprint_test_group, **kwargs):
     fingerprint_test_results = []
@@ -495,6 +512,9 @@ class FingerprintUpdateTask(SimulationUpdateTask):
             ingredients_append_args = ingredients_append_args.union(get_ingredients_append_args(ingredients))
         fingerprint_append_args = ["--fingerprint", fingerprint_arg, *no_result_files_append_args] + sorted(ingredients_append_args)
         simulation_task_result = self.simulation_task.run_protected(output_stream=output_stream, append_args=fingerprint_append_args + append_args, **kwargs)
+        if get_time_limit_error_reason(simulation_task_result):
+            return FingerprintUpdateTaskResult(task=self, simulation_task_result=simulation_task_result, result="ERROR", expected_result=expected_result, reason=get_time_limit_error_reason(simulation_task_result),
+                                               error_message="the run stopped before its sim-time-limit " + str(self.simulation_task.sim_time_limit))
         ingredient_updates = []
         for ingredients in self.ingredients_list:
             stored_fingerprint_entry = self.get_stored_fingerprint_entry(ingredients)
