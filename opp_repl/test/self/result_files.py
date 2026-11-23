@@ -22,6 +22,7 @@ from opp_repl.test.statistical import StatisticalResultsUpdateTask, StatisticalT
 
 # the package attribute opp_repl.test.fingerprint is not this package after the star imports
 FingerprintTestTask = importlib.import_module("opp_repl.test.fingerprint.task").FingerprintTestTask
+no_statistics_append_args = importlib.import_module("opp_repl.test.fingerprint.task").no_statistics_append_args
 speed_test_append_args = importlib.import_module("opp_repl.test.speed.task")._speed_test_append_args
 
 def _make_simulation_config(root_folder):
@@ -67,7 +68,8 @@ class NoResultFilesTestCase(unittest.TestCase):
 
     def test_fingerprint_test(self):
         append_args = FingerprintTestTask.get_append_args(None, None, "abcd-1234/tplx")
-        self.assertEqual(append_args, ["--fingerprint", "abcd-1234/tplx", *no_result_files_append_args])
+        self.assertEqual(append_args, ["--fingerprint", "abcd-1234/tplx", *no_result_files_append_args, "--**.statistic-recording=false"])
+        self.assertEqual(no_statistics_append_args, ["--**.statistic-recording=false"])
 
     def test_speed_test(self):
         for option in no_result_files_append_args:

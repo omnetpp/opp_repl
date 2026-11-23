@@ -34,6 +34,11 @@ all_fingerprint_ingredients_append_args = {
              "--**.fadeOutMode=\"animationTime\"",
              "--**.signalAnimationSpeedChangeTimeMode=\"animationTime\""}}
 
+# The result files are off (no_result_files_append_args), so no result reaches the fingerprint: Envir gives
+# a result to the fingerprint calculator only when it records the result. The statistics only use CPU time,
+# for example about half of the time of a release run of examples/mrp LargeNetworkWithTraffic.
+no_statistics_append_args = ["--**.statistic-recording=false"]
+
 def get_ingredients_append_args(ingredients):
     global all_fingerprint_ingredients_append_args
     # Single =-joined token (not two list items): these ingredient args are
@@ -156,7 +161,7 @@ class FingerprintTestTask(SimulationTestTask):
         return FingerprintTestTaskResult(task=self, simulation_task_result=simulation_task_result, expected_fingerprint=expected_fingerprint, calculated_fingerprint=calculated_fingerprint, result=result, expected_result=expected_result, reason=reason, error_message=error_message)
 
     def get_append_args(self, simulation_project, fingerprint_arg):
-        return ["--fingerprint", fingerprint_arg, *no_result_files_append_args]
+        return ["--fingerprint", fingerprint_arg, *no_result_files_append_args, *no_statistics_append_args]
 
 class FingerprintTestGroupTask(MultipleTestTasks):
     def __init__(self, sim_time_limit=None, **kwargs):
@@ -510,7 +515,7 @@ class FingerprintUpdateTask(SimulationUpdateTask):
         ingredients_append_args = set()
         for ingredients in self.ingredients_list:
             ingredients_append_args = ingredients_append_args.union(get_ingredients_append_args(ingredients))
-        fingerprint_append_args = ["--fingerprint", fingerprint_arg, *no_result_files_append_args] + sorted(ingredients_append_args)
+        fingerprint_append_args = ["--fingerprint", fingerprint_arg, *no_result_files_append_args, *no_statistics_append_args] + sorted(ingredients_append_args)
         simulation_task_result = self.simulation_task.run_protected(output_stream=output_stream, append_args=fingerprint_append_args + append_args, **kwargs)
         if get_time_limit_error_reason(simulation_task_result):
             return FingerprintUpdateTaskResult(task=self, simulation_task_result=simulation_task_result, result="ERROR", expected_result=expected_result, reason=get_time_limit_error_reason(simulation_task_result),

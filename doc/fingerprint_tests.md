@@ -44,6 +44,14 @@ before.  These options need OMNeT++ 6.2.0 or later.  A file that a module
 writes itself, such as a PCAP file, is not a result file of OMNeT++ and is
 written as before.
 
+Without the result files, no result reaches the fingerprint, because Envir
+gives a result to the fingerprint calculator only when it records the result.
+Thus the fingerprint test and the fingerprint update also turn the statistics
+off with `--**.statistic-recording=false`.  The statistics only use CPU time:
+in a release run of `examples/mrp` `LargeNetworkWithTraffic`, they use about
+half of the time.  A model that behaves differently without the listeners of
+its statistics gives a different fingerprint in the test than in a usual run.
+
 OMNeT++ removes an old file with the name of a result file at the start of
 each run.  The test thus also gives the two result files another name with
 `--output-scalar-file` and `--output-vector-file`, and the `.sca` and `.vec`
