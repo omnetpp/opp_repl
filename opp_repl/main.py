@@ -32,7 +32,7 @@ def parse_run_tasks_arguments(task_name, extra_args_fn=None):
     parser.add_argument("--no-dry-run", dest="dry_run", action="store_false")
     parser.add_argument("-u", "--user-interface", choices=["Cmdenv", "Qtenv"], default="Cmdenv", help="simulation user interface: Cmdenv for command line, Qtenv for graphical; overrides the value from the INI file (default: Cmdenv)")
     parser.add_argument("-t", "--sim-time-limit", default=None, help="maximum simulation time to run, overrides the value from the INI file (e.g. 10s, 1h)")
-    parser.add_argument("-T", "--cpu-time-limit", default=None, help="maximum wall-clock time allowed per simulation (e.g. 300s)")
+    parser.add_argument("-T", "--cpu-time-limit", default=None, help="maximum CPU time allowed per simulation (e.g. 300s)")
     parser.add_argument("-f", "--filter", default=None, help="only include simulations matching this regular expression (applies to working directory, INI file, and config name)")
     parser.add_argument("--exclude-filter", default=None, help="exclude simulations matching this regular expression")
     parser.add_argument("-w", "--working-directory-filter", default=None, help="only include simulations from directories matching this regular expression")
