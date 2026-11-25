@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
 """
-Tests the record part of the test map: the run key and id, the readers of the profile list, the
-Cmdenv output and the section query, the reduction of a file trace, and the file trace library on a
-real process.
+Tests the record part and the build tables of the test map: the run key and id, the readers of the
+profile list, the Cmdenv output and the section query, the reduction of a file trace, the readers
+of the build tables, and the file trace library on a real process.
 """
 
 import os
@@ -11,6 +11,7 @@ import tempfile
 import types
 import unittest
 
+from opp_repl.test.test_map.build import *
 from opp_repl.test.test_map.record import *
 
 SHOW_OUTPUT = """Counters:
@@ -110,6 +111,42 @@ class ReduceFileTraceTestCase(unittest.TestCase):
 
     def test_the_path_is_normalized(self):
         self.assertEqual(self.reduce(["open ok $R/examples/x/../x/omnetpp.ini"]), [("read", "examples/x/omnetpp.ini")])
+
+class BuildTablesTestCase(unittest.TestCase):
+    def setUp(self):
+        self.folder = tempfile.TemporaryDirectory()
+        self.root = os.path.realpath(self.folder.name)
+        for path in ["src/inet/a/A.cc", "src/inet/a/A.h", "src/inet/b/B.c", "out/clang-coverage/src/inet/a/A.o", "out/clang-coverage/src/inet/b/B.o"]:
+            os.makedirs(os.path.dirname(os.path.join(self.root, path)), exist_ok=True)
+            open(os.path.join(self.root, path), "w").close()
+
+    def tearDown(self):
+        self.folder.cleanup()
+
+    def test_counter_symbol_of_an_external_and_a_local_function(self):
+        self.assertEqual(get_counter_symbol("_ZN4inet4Ipv48initiateEv"), "__profc__ZN4inet4Ipv48initiateEv")
+        self.assertEqual(get_counter_symbol("SGP4.cc:_ZN9SGP4FuncsL5initlEv"), "__profc_SGP4.cc__ZN9SGP4FuncsL5initlEv")
+        self.assertEqual(get_counter_symbol("inet/a/A.cc;_ZL1fv"), "__profc_inet_a_A.cc__ZL1fv")
+
+    def test_function_table_uses_the_regions_of_file_0(self):
+        export = {"data": [{"functions": [
+            {"name": "_Z1fv", "filenames": [self.root + "/src/inet/a/A.cc", self.root + "/src/inet/a/A.h"],
+             "regions": [[10, 1, 20, 2, 5, 0, 0, 0], [12, 1, 13, 2, 0, 0, 0, 2], [3, 1, 4, 2, 5, 1, 0, 0]]},
+            {"name": "_Z1gv", "filenames": ["/usr/include/omnetpp/cobject.h"], "regions": [[1, 1, 2, 2, 0, 0, 0, 0]]}]}]}
+        self.assertEqual(read_function_table(export, self.root), [["_Z1fv", "src/inet/a/A.cc", 10, 20]])
+
+    def test_nm_counters_of_each_object(self):
+        output = ("/o/A.o:0000000000000000 V __profc__Z1fv\n/o/A.o:0000000000000010 T _Z1fv\n"
+                  "/o/A.o:0000000000000000 n __profc_A.cc__ZL1gv\n/o/B.o:0000000000000000 V __profc__Z1fv\n/o/B.o:0000000000000000 d __profd__Z1fv\n")
+        self.assertEqual(dict(read_nm_counters(output)), {"/o/A.o": {"__profc__Z1fv", "__profc_A.cc__ZL1gv"}, "/o/B.o": {"__profc__Z1fv"}})
+
+    def test_translation_unit_of_an_object(self):
+        self.assertEqual(get_translation_unit(self.root, "src", "out/clang-coverage/src", self.root + "/out/clang-coverage/src/inet/a/A.o"), "src/inet/a/A.cc")
+        self.assertEqual(get_translation_unit(self.root, "src", "out/clang-coverage/src", self.root + "/out/clang-coverage/src/inet/b/B.o"), "src/inet/b/B.c")
+
+    def test_dependency_file_paths_are_relative_to_the_cpp_folder(self):
+        text = "../out/clang-coverage/src/inet/a/A.o: \\\n  inet/a/A.cc inet/a/A.h \\\n  /usr/include/stdio.h\ninet/a/A.h:\n"
+        self.assertEqual(read_dependency_file(text, self.root, "src"), ("src/inet/a/A.cc", ["src/inet/a/A.h"]))
 
 class FileTraceLibraryTestCase(unittest.TestCase):
     def test_library_traces_a_process(self):

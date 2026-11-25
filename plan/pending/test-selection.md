@@ -564,7 +564,8 @@ command lines of fingerprint runs), `measure.py` (times and profiles), `filetrac
     for project files, so strace is not necessary.
 - [x] Measure the time of `llvm-cov export` for the function table and of `nm` over all objects.
   - `llvm-cov export -format=text -skip-expansions` of `libINET_coverage.so`: 94 s, 1.8 GB of
-    memory, 65 MB of JSON. It lists all 76591 functions, also those with count 0. The code
+    memory, 65 MB of JSON. (Phase 1 found that 92 s of this time were lookups on the debuginfod
+    server; without `DEBUGINFOD_URLS` the export takes 1.9 s.) It lists all 76591 functions, also those with count 0. The code
     regions of file 0 give the line range of the body.
   - `nm --defined-only -A` over the 1791 objects: 11.1 s, 549 MB of output. With 8 parallel
     processes 1.65 s, but each process needs its own output file: with one shared output, the
@@ -672,7 +673,27 @@ commits that change only tests and ini files).
   - Checked: the 24 fingerprint runs of `examples/manetrouting`, once without and once with
     records, give the same lcov file (11.2 MB, `cmp` finds no difference). The wall time of the
     test is 20.0 s without and 20.3 s with the records.
-- [ ] Make the function table, the emitter table and the include table.
+- [x] Make the function table, the emitter table and the include table.
+  - `opp_repl/test/test_map/build.py`: `make_test_map_build_tables` gives the three tables of the
+    coverage build as one gzip JSON file (3.6 MB for INET): 75930 functions with file and body
+    lines, 27074 emitter entries (only the functions whose translation units are not only their own
+    source file), and the headers of 1773 translation units. It takes 10 s and 1.8 GB of memory
+    (the JSON of the export).
+  - `llvm-cov` asked the debuginfod server (`DEBUGINFOD_URLS`, set by Ubuntu) for each binary, and
+    each export took 95 to 160 s with less than 2 s of CPU time. opp_repl 1e39d6c starts
+    `llvm-cov` without the variable. This also makes `opp_export_coverage` faster: 2.7 s instead of
+    93 s for 24 runs, with the same lcov file.
+  - The emitter table reads the profile counters (`__profc_<name>`, with the characters
+    `-:;<>/"'` of a local name replaced by `_`), not the code symbols (`T`, `t`, `W`). With the
+    code symbols, 1323 header functions that ran in the 24 runs of `examples/manetrouting` had no
+    emitter, for example the `C2` constructors of `IntrusivePtr`: the objects hold their code and
+    their counter, but no symbol of that name. With the counters, no function that ran is without
+    an emitter. 2635 header functions have no emitter: no object holds their code, and they did
+    not run. A sample of 200 source functions without an entry has its counter in the object of
+    its own file.
+  - The function name of the coverage mapping is the name in the profile, so the functions of a
+    record match the table directly. A function with internal linkage has the name
+    `<file>:<symbol>` (1307 functions).
 - [ ] Add the NED type closure, the ini section chain and the file trace.
 - [ ] Write the map in the layout of 8.3. Add the commands `opp_update_test_map` and
   `opp_show_test_map`.
