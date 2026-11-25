@@ -83,6 +83,7 @@ See [Getting started](doc/getting_started.md) for a full walkthrough.
 - [**Bisecting**](doc/bisecting.md) — bisecting git commits for test failures
 - [**Parameter optimization**](doc/parameter_optimization.md) — parameter optimization
 - [**Code coverage**](doc/coverage.md) — coverage reports
+- [**Test map**](doc/test_map.md) — which functions, NED types, ini sections and files each test used
 - [**Profiling**](doc/profiling.md) — performance profiling with perf and Hotspot
 
 ### Infrastructure

@@ -139,6 +139,33 @@ def _run_fingerprint_tests_extra_args(parser):
 def run_fingerprint_tests_main():
     run_tasks_main(run_fingerprint_tests, "fingerprint tests", extra_args_fn=_run_fingerprint_tests_extra_args)
 
+def _update_test_map_extra_args(parser):
+    _fingerprint_extra_args(parser)
+    parser.add_argument("--records", action="append", dest="records_folders", default=None, metavar="FOLDER", help="a folder of the records of the runs; the run writes into the first one after it removes its records; can be specified multiple times, for example for the records of several CI jobs (default: coverage/test-map/records in the project root)")
+    parser.add_argument("-o", "--output-folder", default=None, help="the folder of the test map (default: coverage/test-map/map in the project root)")
+    parser.add_argument("--build-tables", dest="build_tables_file", default=None, metavar="FILE", help="read the build tables from this file instead of making them from the coverage build")
+    parser.add_argument("--no-run", dest="run", action="store_false", default=True, help="do not run the tests; write the map from the records that the folders hold")
+
+def update_test_map_main():
+    run_tasks_main(update_test_map, "fingerprint tests in coverage mode with records, and writes the test map of the change-based test selection;", extra_args_fn=_update_test_map_extra_args)
+
+def show_test_map_main():
+    parser = argparse.ArgumentParser(description="Shows from a test map which tests used a file or the function at a line, the runs below a folder, or which files the tests that match a filter used.")
+    parser.add_argument("path", nargs="?", default=None, help="a file or a folder, relative to the project root (default: the root)")
+    parser.add_argument("--map", dest="map_folder", default=None, metavar="FOLDER", help="the folder of the test map (default: coverage/test-map/map in the project root)")
+    parser.add_argument("--line", type=int, default=None, help="with a C++ file: the tests that ran the function whose body has this line")
+    parser.add_argument("--tests", dest="list_tests", action="store_true", help="with a file: list the tests that used any part of it")
+    parser.add_argument("--test", dest="test_filter", default=None, metavar="REGEX", help="the files that the runs whose key matches this regular expression used")
+    parser.add_argument("--load", action="append", default=[], metavar="OPP_FILE", help="load one or more .opp configuration files or directories at startup (only needed for the default map folder)")
+    parser.add_argument("-p", "--simulation-project", default=None, help="name of the simulation project (only needed for the default map folder)")
+    args = parser.parse_args(sys.argv[1:])
+    map_folder = args.map_folder
+    if map_folder is None:
+        for opp_file in args.load or find_opp_files():
+            load_opp_file(opp_file)
+        map_folder = get_default_test_map_folder(determine_default_simulation_project(name=args.simulation_project), "map")
+    show_test_map(map_folder, path=args.path, line=args.line, list_tests=args.list_tests, test_filter=args.test_filter)
+
 def run_chart_tests_main():
     run_tasks_main(run_chart_tests, "chart tests")
 

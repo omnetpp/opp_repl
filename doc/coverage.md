@@ -163,35 +163,9 @@ INET's `coverage-tests.yml` workflow follows this pattern.
 
 ## Records of the test map
 
-The test map of the change-based test selection tells which functions, NED
-types, ini sections and files each run used. Its input is a record of each run
-of a coverage build:
-
-```bash
-opp_run_fingerprint_tests -p inet -m coverage --test-map-records records
-```
-
-`run_fingerprint_tests(mode="coverage", test_map_records="records")` does the
-same in Python. Each run writes the folder `records/<run id>/`. The run id is
-the first 10 hex digits of the SHA-1 of the run key, for example
-`fingerprint:examples/adhoc/hostautoconf/omnetpp.ini:General:#0:100s`. The
-tests of one fingerprint group share one run, so the key has no ingredients.
-
-- Each run writes its own profile. After the run, opp_repl merges it into
-  `<run id>.profdata` in the pool, and writes the functions that ran into
-  `functions.txt.gz` in the record.
-- An `LD_PRELOAD` library traces the files that the run opens, examines and
-  lists, and the lookups that fail (`opp_repl/test/test_map/filetrace.c`;
-  opp_repl compiles it with `cc` into the records folder). `files.txt` holds
-  the project files that the run used, without the outputs of the run and
-  without the NED folder walk of omnetpp.
-- `run.json` holds the key, the exit code and the end of the run (its last
-  event number and simulation time), the NED types of the run
-  (`--print-instantiated-ned-types`) and the section chain of its config
-  (`-q sectioninheritance`). opp_repl writes it last, so a record without it
-  is not complete.
-
-The export of the pool gives the same lcov file as without the records.
+A run with `--test-map-records FOLDER` writes a record of the run for the test
+map of the change-based test selection, and its own profile into the pool.
+See the [Test map](test_map.md) guide.
 
 ## Limits
 

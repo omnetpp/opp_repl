@@ -34,6 +34,7 @@ test scripts, and does not modify the underlying simulation binaries.
 - **Release tests** — run a comprehensive validation suite for release builds
 - **Test bisect** — find the git commit that introduced a test failure using binary search
 - **Coverage reports** — generate C++ line-coverage reports using LLVM's coverage tools
+- **Test map** — record which functions, NED types, ini sections and files each test used, for the change-based test selection
 - **Overlay builds** — out-of-tree builds using fuse-overlayfs on top of read-only source trees
 - **SSH cluster execution** — distribute simulation tasks across multiple machines using Dask
 - **GitHub Actions integration** — dispatch CI workflows from the REPL

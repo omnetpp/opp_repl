@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
 """
-Tests the record part and the build tables of the test map: the run key and id, the readers of the
-profile list, the Cmdenv output and the section query, the reduction of a file trace, the readers
-of the build tables, and the file trace library on a real process.
+Tests the test map: the run key and id, the readers of the profile list, the Cmdenv output and the
+section query, the reduction of a file trace, the readers of the build tables, the NED type table and
+closure, the map writer, the queries, and the file trace library on a real process.
 """
 
 import os
@@ -13,6 +13,8 @@ import unittest
 
 from opp_repl.test.test_map.build import *
 from opp_repl.test.test_map.record import *
+from opp_repl.test.test_map.show import *
+from opp_repl.test.test_map.writer import *
 
 SHOW_OUTPUT = """Counters:
   _ZN4inet4Ipv48initiateEv:
@@ -202,6 +204,107 @@ class NedTypeTableTestCase(unittest.TestCase):
     def test_closure_follows_the_references(self):
         self.assertEqual(get_ned_type_closure(["a.Host.Link", "ned.IdealChannel"], self.table), {"a.Host.Link", "a.Host.Cable", "ned.IdealChannel"})
         self.assertEqual(get_ned_type_closure(["a.Host"], self.table), {"a.Host", "a.Host.Link", "a.Host.Cable", "a.INode", "b.Base", "c.d.IApp"})
+
+class WriterTestCase(unittest.TestCase):
+    """Three runs: r0 and r1 ran f, only r2 ran g; all runs used the network type, only r1 read a data file."""
+
+    def setUp(self):
+        import gzip
+        import json
+        self.folder = tempfile.TemporaryDirectory()
+        self.records_folder = os.path.join(self.folder.name, "records")
+        self.map_folder = os.path.join(self.folder.name, "map")
+        functions = {"r000000000": ["_Z1fv"], "r000000001": ["_Z1fv", "_Z1hv"], "r000000002": ["_Z1gv"]}
+        files = {"r000000000": [], "r000000001": ["read examples/x/data.xml", "read examples/x/untracked.txt", "lookup examples/x/missing.xml"], "r000000002": ["listed examples/x"]}
+        for index, run_id in enumerate(sorted(functions)):
+            folder = os.path.join(self.records_folder, run_id)
+            os.makedirs(folder)
+            with gzip.open(os.path.join(folder, "functions.txt.gz"), "wt") as f:
+                f.write("".join(name + "\n" for name in functions[run_id]))
+            with open(os.path.join(folder, "files.txt"), "w") as f:
+                f.write("".join(line + "\n" for line in files[run_id]))
+            record = {"id": run_id, "key": f"fingerprint:examples/x/omnetpp.ini:C{index}:#0:1s", "kind": "fingerprint", "working_directory": "examples/x",
+                      "ini_file": "omnetpp.ini", "config": f"C{index}", "run_number": 0, "sim_time_limit": "1s",
+                      "args": ["opp_run", "--fingerprint", "1234-5678/tplx,0000-0000/~tNl"], "exit_code": 1 if index == 2 else 0,
+                      "end": {"text": None, "event": None, "sim_time": None}, "profile": True, "ned_types": ["x.Net"], "sections": [f"Config C{index}", "General"]}
+            with open(os.path.join(folder, "run.json"), "w") as f:
+                json.dump(record, f)
+        self.build_tables = {"functions": [["_Z1fv", "src/a/A.cc", 10, 20], ["_Z1gv", "src/a/A.cc", 30, 40], ["_Z1hv", "src/a/A.h", 5, 6], ["_Z1kv", "src/a/A.cc", 50, 60]],
+                             "emitters": {"2": ["src/a/A.cc", "src/b/B.cc"]}, "includes": {"src/a/A.cc": ["src/a/A.h"], "src/b/B.cc": ["src/a/A.h"]},
+                             "ned_types": {"x.Net": ["examples/x/Net.ned", ["x.INet"]], "x.INet": ["examples/x/INet.ned", []]}, "ned_errors": []}
+        self.numbers = write_test_map(read_test_map_records([self.records_folder]), self.build_tables, self.folder.name, self.map_folder,
+                                      header={"project": "x"}, tracked_files={"examples/x/data.xml"})
+
+    def tearDown(self):
+        self.folder.cleanup()
+
+    def read(self, path):
+        import json
+        with open(os.path.join(self.map_folder, path)) as f:
+            return json.load(f)
+
+    def test_functions_and_their_runs(self):
+        functions = self.read("src/a/A.cc.json")["functions"]
+        self.assertEqual([item["lines"] for item in functions], [[10, 20], [30, 40], [50, 60]])
+        self.assertEqual(functions[0]["runs"], {"except": ["r000000002"]})
+        self.assertEqual(functions[1]["runs"], ["r000000002"])
+        self.assertNotIn("runs", functions[2])
+
+    def test_translation_units_and_includes(self):
+        self.assertEqual(self.read("src/a/A.cc.json")["tu_runs"], "all")
+        self.assertEqual(self.read("src/b/B.cc.json")["tu_runs"], ["r000000001"])
+        header = self.read("src/a/A.h.json")
+        self.assertEqual(header["functions"][0]["tus"], ["src/a/A.cc", "src/b/B.cc"])
+        self.assertEqual(header["included_by"], ["src/a/A.cc", "src/b/B.cc"])
+
+    def test_ned_types_include_the_closure(self):
+        self.assertEqual(self.read("examples/x/Net.ned.json")["types"], {"x.Net": "all"})
+        self.assertEqual(self.read("examples/x/INet.ned.json")["types"], {"x.INet": "all"})
+
+    def test_sections(self):
+        self.assertEqual(self.read("examples/x/omnetpp.ini.json")["sections"], {"Config C0": ["r000000000"], "Config C1": ["r000000001"], "Config C2": ["r000000002"], "General": "all"})
+
+    def test_data_keeps_tracked_files_and_all_lookups(self):
+        self.assertEqual(self.read("examples/x/data.xml.json")["data"], {"read": ["r000000001"]})
+        self.assertEqual(self.read("examples/x/missing.xml.json")["data"], {"lookup": ["r000000001"]})
+        self.assertFalse(os.path.exists(os.path.join(self.map_folder, "examples/x/untracked.txt.json")))
+
+    def test_folder_index(self):
+        self.assertEqual(self.read("examples/x/index.json"), {"data": 1, "ini": 3, "listed": ["r000000002"], "ned": 3})
+        self.assertEqual(self.read("src/index.json"), {"functions": 3})
+
+    def test_runs_and_tests(self):
+        runs = self.read("runs.json")
+        self.assertEqual([runs[run_id]["normal_end"] for run_id in sorted(runs)], [True, True, False])
+        tests = self.read("tests.json")["fingerprint"]
+        self.assertEqual(tests["fingerprint:examples/x/omnetpp.ini:C0:#0:1s:~tNl"], ["r000000000"])
+        self.assertEqual(len(tests), 6)
+
+    def test_a_folder_that_is_no_map_is_not_removed(self):
+        other = os.path.join(self.folder.name, "other")
+        os.makedirs(other)
+        open(os.path.join(other, "keep.txt"), "w").close()
+        with self.assertRaises(Exception):
+            write_test_map(read_test_map_records([self.records_folder]), self.build_tables, self.folder.name, other, tracked_files=set())
+        self.assertTrue(os.path.exists(os.path.join(other, "keep.txt")))
+
+    def test_records_folder_with_other_files_is_not_cleared(self):
+        open(os.path.join(self.records_folder, "notes.txt"), "w").close()
+        with self.assertRaises(Exception):
+            clear_test_map_records(self.records_folder)
+        self.assertTrue(os.path.exists(os.path.join(self.records_folder, "r000000000", "run.json")))
+
+    def test_show_the_tests_of_a_line(self):
+        import io
+        output = io.StringIO()
+        show_test_map(self.map_folder, path="src/a/A.cc", line=35, output_stream=output)
+        self.assertIn("src/a/A.cc:30-40", output.getvalue())
+        self.assertIn("fingerprint:examples/x/omnetpp.ini:C2:#0:1s:tplx", output.getvalue())
+        self.assertNotIn("C0", output.getvalue())
+
+    def test_fingerprint_ingredients(self):
+        self.assertEqual(get_fingerprint_ingredients(["--fingerprint", "1234-5678/tplx,0000-0000/~tND"]), ["tplx", "~tND"])
+        self.assertEqual(get_fingerprint_ingredients(["--fingerprint=1234-5678/tplx"]), ["tplx"])
 
 class FileTraceLibraryTestCase(unittest.TestCase):
     def test_library_traces_a_process(self):
