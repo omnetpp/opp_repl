@@ -5,7 +5,8 @@ runs used which part of the source file of the same name (see the test selection
 
 - ``<path>.json`` of a C++ file: ``functions``, for each function body its line range, its name, its
   number of instances (template instantiations), the runs that ran it and the translation units
-  that emit it (when they are not only the file itself); ``tu_runs`` of a translation unit (the runs
+  that emit it (when they are not only the file itself; more than 20 as the id of a set in
+  ``emitter-sets.json``); ``tu_runs`` of a translation unit (the runs
   that ran a function that it emits); ``included_by`` of a header (the translation units that
   include it).
 - ``<path>.json`` of a NED file: ``types``, for each declared type the runs that used it (the
@@ -15,7 +16,8 @@ runs used which part of the source file of the same name (see the test selection
   runs that used the file so.
 - ``<folder>/index.json``: the number of runs that used something below the folder, for each kind,
   and ``listed``, the runs that listed the folder.
-- ``runs.json`` (the run table), ``tests.json`` (the test table) and ``header.json``.
+- ``runs.json`` (the run table), ``tests.json`` (the test table), ``emitter-sets.json`` (the sets of
+  more than 20 translation units that emit a function) and ``header.json``.
 
 A set of runs is ``"all"``, ``{"except": [run ids]}`` if it holds more than half of the runs, or a
 list of run ids. Each map file has one JSON value on each line, so that a git diff shows one function
@@ -26,6 +28,7 @@ import collections
 import datetime
 import glob
 import gzip
+import hashlib
 import json
 import logging
 import os
@@ -40,7 +43,7 @@ __sphinx_mock__ = True # ignore this module in documentation
 
 _logger = logging.getLogger(__name__)
 
-TEST_MAP_VERSION = 1
+TEST_MAP_VERSION = 2
 
 def read_test_map_records(records_folders):
     """Returns the complete records (the ``run.json`` of each run) of the records folders, sorted by run id. A later folder wins for the same run id."""
@@ -192,6 +195,7 @@ def write_test_map(records, build_tables, root_folder, output_folder, header=Non
         entry["units"].update(emitters.get(str(index), [file_name]))
     demangled = _demangle([entry["names"][0] for file_entries in entries.values() for entry in file_entries.values()])
     tu_bits = collections.defaultdict(int)
+    emitter_sets = {}
     for file_name, file_entries in entries.items():
         items = []
         for (first_line, last_line), entry in sorted(file_entries.items()):
@@ -204,8 +208,12 @@ def write_test_map(records, build_tables, root_folder, output_folder, header=Non
                     tu_bits[unit] |= entry["bits"]
                 use[file_name]["functions"] |= entry["bits"]
             units = sorted(entry["units"] - {file_name})
-            if units:
-                item["tus"] = units if len(units) <= 20 else {"count": len(units)}
+            if len(units) > 20:
+                set_id = hashlib.sha1("\n".join(units).encode("utf-8")).hexdigest()[:10]
+                emitter_sets[set_id] = units
+                item["tus"] = {"count": len(units), "set": set_id}
+            elif units:
+                item["tus"] = units
             items.append(item)
         files[file_name]["functions"] = items
     for unit, bits in tu_bits.items():
@@ -298,6 +306,7 @@ def write_test_map(records, build_tables, root_folder, output_folder, header=Non
                 tests["fingerprint"][record["key"] + ":" + ingredients] = [record["id"]]
         else:
             tests[record["kind"]][record["key"]] = [record["id"]]
+    write("emitter-sets.json", {"sets": emitter_sets}, True)
     write("runs.json", runs, True)
     write("tests.json", dict(tests), False)
     header = dict(header or {}, runs=len(records), unresolved_ned_types=sorted(unresolved_types), ned_errors=build_tables.get("ned_errors", []))

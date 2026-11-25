@@ -106,7 +106,7 @@ file tells which runs used which part of the source file of the same name:
 
 | Map file | Content |
 | --- | --- |
-| `src/.../Ipv4.cc.json` | `functions`: for each function body, its line range, its name, the runs that ran it and the translation units that emit it; `tu_runs`: the runs that ran a function that the translation unit emits |
+| `src/.../Ipv4.cc.json` | `functions`: for each function body, its line range, its name, the runs that ran it and the translation units that emit it (more than 20 as the id of a set); `tu_runs`: the runs that ran a function that the translation unit emits |
 | `src/.../Ipv4.h.json` | the functions of the header, and `included_by`: the translation units that include it |
 | `src/.../Ipv4.ned.json` | `types`: for each declared type, the runs that used it (the instantiated types and the types that they refer to) |
 | `examples/.../omnetpp.ini.json` | `sections`: for each section, the runs whose section chain has it |
@@ -114,12 +114,14 @@ file tells which runs used which part of the source file of the same name:
 | `<folder>/index.json` | the number of runs that used something below the folder, for each kind; `listed`: the runs that listed the folder |
 | `runs.json` | for each run: its key, exit code, end, section chain, and `normal_end` |
 | `tests.json` | for each test kind and test key: its runs |
+| `emitter-sets.json` | the sets of more than 20 translation units that emit a function, by id |
 | `header.json` | the project, the map commit, the omnetpp commit, the opp_repl commit, the compiler, the enabled features, the date |
 
 A set of runs is `"all"`, `{"except": [run ids]}` if it holds more than half
 of the runs, or a list of run ids. Each map file has one JSON value on each
 line, so that a git diff of two maps shows one function or one key on each
-line.
+line. This is version 2 of the map; version 1 had only the number of more than
+20 translation units.
 
 ## Query a map
 

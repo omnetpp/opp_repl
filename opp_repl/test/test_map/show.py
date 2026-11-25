@@ -10,7 +10,7 @@ import sys
 
 __sphinx_mock__ = True # ignore this module in documentation
 
-_TABLE_FILES = {"runs.json", "tests.json", "header.json"}
+_TABLE_FILES = {"runs.json", "tests.json", "header.json", "emitter-sets.json"}
 
 def read_test_map_file(map_folder, path):
     """Returns the content of the map file of *path* (a source file), or None if the map has none."""

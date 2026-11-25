@@ -257,6 +257,19 @@ class WriterTestCase(unittest.TestCase):
         self.assertEqual(header["functions"][0]["tus"], ["src/a/A.cc", "src/b/B.cc"])
         self.assertEqual(header["included_by"], ["src/a/A.cc", "src/b/B.cc"])
 
+    def test_more_than_20_emitters_are_a_set(self):
+        import json
+        units = [f"src/t/T{index:02}.cc" for index in range(21)]
+        build_tables = dict(self.build_tables, functions=self.build_tables["functions"] + [["_Z1mv", "src/a/A.h", 8, 9]],
+                            emitters=dict(self.build_tables["emitters"], **{"4": units}))
+        map_folder = os.path.join(self.folder.name, "map2")
+        write_test_map(read_test_map_records([self.records_folder]), build_tables, self.folder.name, map_folder, header={"project": "x"}, tracked_files=set())
+        with open(os.path.join(map_folder, "src/a/A.h.json")) as f:
+            item = json.load(f)["functions"][1]
+        self.assertEqual(item["tus"]["count"], 21)
+        with open(os.path.join(map_folder, "emitter-sets.json")) as f:
+            self.assertEqual(json.load(f)["sets"][item["tus"]["set"]], units)
+
     def test_ned_types_include_the_closure(self):
         self.assertEqual(self.read("examples/x/Net.ned.json")["types"], {"x.Net": "all"})
         self.assertEqual(self.read("examples/x/INet.ned.json")["types"], {"x.INet": "all"})
