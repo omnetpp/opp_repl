@@ -1,6 +1,6 @@
 # Change-based test selection
 
-> **Status:** phase 1 started · **Owner:** opp_repl · **Also changes:** INET (weekly coverage
+> **Status:** phase 1 done, phase 2 next · **Owner:** opp_repl · **Also changes:** INET (weekly coverage
 > workflow, `inet.opp`), the `inet-framework/coverage` repository, optionally omnetpp (section 11)
 
 For a change, find the tests whose outcome can differ, in every test suite, and run only those
@@ -709,8 +709,37 @@ commits that change only tests and ini files).
     Each instantiated type is in the table, except the omnetpp type `ned.IdealChannel`.
   - This is the recommendation of D3 (the closure in opp_repl first). omnetpp change O1 is still
     open.
-- [ ] Write the map in the layout of 8.3. Add the commands `opp_update_test_map` and
+- [x] Write the map in the layout of 8.3. Add the commands `opp_update_test_map` and
   `opp_show_test_map`.
+  - `opp_repl/test/test_map/writer.py` (`write_test_map`, `update_test_map`) and `show.py`
+    (`show_test_map`), opp_repl c72a01c; the guide is `doc/test_map.md`. Run sets are Python
+    integers used as bit sets, and each distinct set is converted to text once.
+  - `opp_update_test_map` removes the old records of its records folder (and refuses a folder
+    with other files), runs the fingerprint tests with records, makes the build tables and writes
+    the map. With `--no-run` and more than one `--records`, it writes the map of the records of
+    other runs, for example of the CI splits. It does not remove a map folder that holds no
+    `header.json`.
+  - The header has the map commit and `changed_files` (a tree with changes), the omnetpp commit,
+    the opp_repl commit (from git, because `_version.py` can be old), the compiler, the enabled
+    features and the date.
+  - The full map of 28f1dc534c (all fingerprint tests, coverage build, 32 cores): 1847 runs,
+    1846 tests PASS and 1 ERROR (expected), 6 min 50 s for the tests and 438 s in total; build
+    tables 10 s; map writer 6 s, with 2 GB of memory for the whole command.
+  - Map: 6438 files, 45 MB of text, 4.4 MB as `tar.gz`, a git pack of 3.8 MB (phase 0 predicted
+    5.4 MB). The largest map file is `Ieee80211VhtMode.cc.json` (1.5 MB), then `runs.json`
+    (0.9 MB). 57087 function bodies, 19986 of them ran; 1317 NED files, 306 ini files and 651
+    data files; 4726 fingerprint tests in `tests.json`.
+  - Records: 173 MB (146 MB of them the function lists, 7894 to 14981 functions for each run,
+    median 11087). The per-run profiles in the pool: 2.9 GB. Phase 5 must keep these sizes in mind
+    for the CI artifacts.
+  - The only run with `normal_end` false is the expected ERROR
+    (`tests/fingerprint/ethernet-nonstandardspeed.ini`, exit code 1). Its run number is an
+    iteration filter, so its key is
+    `fingerprint:tests/fingerprint/ethernet-nonstandardspeed.ini:General:#$datarate==5Gbps   && $duplex==false:5s`.
+  - Checked: 300 random function bodies that ran have exactly the runs of the records; the 35 self
+    tests pass.
+  - The growth for one week was not measured for the full map; it needs the map of a second commit
+    (phase 0 measured 125 to 146 KB for 20 and 200 runs).
 
 ### Phase 2 — the selection
 
