@@ -361,6 +361,11 @@ def coverage_report(lcov_files, output_folder=".", previous_file=None, html=Fals
         root_folder = simulation_project.get_full_path(".") if simulation_project else os.getcwd()
         title = simulation_project.get_name() if simulation_project else "coverage"
         # --quiet: without it, genhtml prints a block for each source file (thousands of lines for INET)
-        args = ["genhtml", lcov_file, f"--output-directory={os.path.abspath(os.path.join(output_folder, 'html'))}", "--branch-coverage", "--demangle-cpp", "--quiet", f"--title={title}"]
+        # --ignore-errors: llvm-cov puts the branch counts of a switch case on the case line, also when
+        # the case never ran; lcov 2.4 stops on such a line ("inconsistent"). lcov 2.4 also gives an
+        # "unsupported" warning about gcov function end lines, which do not apply to llvm-cov data. A
+        # category that occurs twice also suppresses its messages. lcov 2.0 accepts both categories.
+        args = ["genhtml", lcov_file, f"--output-directory={os.path.abspath(os.path.join(output_folder, 'html'))}", "--branch-coverage", "--demangle-cpp", "--quiet",
+                "--ignore-errors", "inconsistent,inconsistent,unsupported,unsupported", f"--title={title}"]
         run_command_with_logging(args, cwd=root_folder, error_message="Generating the HTML coverage report failed", command_line_logger=_logger)
     return summary

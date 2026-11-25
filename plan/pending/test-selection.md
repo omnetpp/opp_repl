@@ -1,6 +1,6 @@
 # Change-based test selection
 
-> **Status:** plan, not started · **Owner:** opp_repl · **Also changes:** INET (weekly coverage
+> **Status:** phase 0 started · **Owner:** opp_repl · **Also changes:** INET (weekly coverage
 > workflow, `inet.opp`), the `inet-framework/coverage` repository, optionally omnetpp (section 11)
 
 For a change, find the tests whose outcome can differ, in every test suite, and run only those
@@ -423,9 +423,23 @@ All are optional. Each one removes a workaround in opp_repl.
 
 ### Phase 0 — repair the weekly report, and measure
 
-- [ ] Repair the report job of the weekly coverage workflow (section 2: `genhtml` stops on
-  `L3Socket.cc:48`). Find the cause first: the lcov merge in opp_repl, or a newer `lcov` on
-  `ubuntu-latest`. The map run builds on this workflow.
+- [x] Repair the report job of the weekly coverage workflow (section 2: `genhtml` stops on
+  `L3Socket.cc:48`). The map run builds on this workflow.
+  - Cause: `ubuntu-latest` became Ubuntu 26.04 between the runs of 2026-11-08 and 2026-11-15. The
+    tests jobs went from clang 18 to clang 21, and the report job went from `lcov` 2.0 to `lcov`
+    2.4. The coverage code of opp_repl did not change (36d35ee..155ac50).
+  - The data is correct LLVM output. `llvm-cov` puts the branch counts of a `switch` case on the
+    `case` line. When the case never ran, the line count is 0, but the "not this case" branch has
+    a count. The 9 lcov files of 2026-11-22 have 0 to 1309 such lines each. `lcov` 2.4 stops on
+    them (`inconsistent`).
+  - clang 21 also writes branch records for `ASSERT` lines without a line record. `lcov` 2.0 cannot
+    read this data with any option. This combination does not occur in CI.
+  - Repair: `genhtml --ignore-errors inconsistent,inconsistent,unsupported,unsupported`. The counts
+    stay as `llvm-cov` wrote them. `lcov` 2.0 accepts the option.
+  - Checked: the commands of the report job in `ubuntu:26.04` (`lcov` 2.4-3) with the 9 lcov files
+    of the run of 2026-11-22 (INET 858477687b) write the summary and the HTML (160 MB): lines
+    68.46%, functions 68.68%, branches 57.91%. The branch rate went up by 4.64 points, because
+    clang 21 writes more branch records.
 - [ ] Build INET with `-m coverage`. Run 20 fingerprint tests, each with its own `LLVM_PROFILE_FILE`.
 - [ ] Measure: size of one `.profraw`, time to reduce it to the functions that ran
   (`llvm-profdata merge -sparse` and `show --all-functions`, or `show` on the raw file), the
