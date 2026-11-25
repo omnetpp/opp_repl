@@ -694,7 +694,21 @@ commits that change only tests and ini files).
   - The function name of the coverage mapping is the name in the profile, so the functions of a
     record match the table directly. A function with internal linkage has the name
     `<file>:<symbol>` (1307 functions).
-- [ ] Add the NED type closure, the ini section chain and the file trace.
+- [x] Add the NED type closure, the ini section chain and the file trace.
+  - The section chain and the file trace are in the records (item 1).
+  - The build tables have a NED type table: `opp_nedtool c -x -m` converts the NED folders of the
+    project to one XML file (0.16 s), and `read_ned_type_table` gives for each of the 2008 INET
+    types its file and the types that it refers to: `extends` and `like` of the declaration, and
+    the `like` interfaces of its submodules and connections. The names resolve with the rules of
+    `NedResourceCache::lookupNedType` of omnetpp, in the same contexts (the parent for the
+    declaration, the compound module or its top-level type for the body). For a wildcard import,
+    omnetpp takes the first match, so the table takes all matches. Only the built-in omnetpp types
+    `DatarateChannel` and `ned.DatarateChannel` stay unresolved.
+  - `get_ned_type_closure` adds the references to the instantiated types of a run, recursively.
+    In the 24 runs of `examples/manetrouting`, 60 to 75 instantiated types give 171 to 191 types.
+    Each instantiated type is in the table, except the omnetpp type `ned.IdealChannel`.
+  - This is the recommendation of D3 (the closure in opp_repl first). omnetpp change O1 is still
+    open.
 - [ ] Write the map in the layout of 8.3. Add the commands `opp_update_test_map` and
   `opp_show_test_map`.
 
@@ -755,7 +769,8 @@ Open:
   limit.
 - **D3** NED closure: in opp_repl first, or omnetpp change O1 first. Recommended: opp_repl first; O1
   when the failed lookups cost too much (4.3).
-- **D4** File trace: `strace` or `LD_PRELOAD`. Phase 0 decides.
+- **D4 (decided by the phase 0 measurement)** File trace: `LD_PRELOAD` (about 1% against 33% for
+  `strace`, the same project files).
 - **D5** Maximum age of the map before opp_repl gives a warning.
 
 ## 14. Risks

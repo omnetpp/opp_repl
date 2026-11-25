@@ -148,6 +148,61 @@ class BuildTablesTestCase(unittest.TestCase):
         text = "../out/clang-coverage/src/inet/a/A.o: \\\n  inet/a/A.cc inet/a/A.h \\\n  /usr/include/stdio.h\ninet/a/A.h:\n"
         self.assertEqual(read_dependency_file(text, self.root, "src"), ("src/inet/a/A.cc", ["src/inet/a/A.h"]))
 
+NED_XML = """<files>
+<ned-file filename="src/a/Host.ned">
+  <package name="a"/>
+  <import import-spec="b.Base"/>
+  <import import-spec="c.**"/>
+  <compound-module name="Host">
+    <extends name="Base"/>
+    <interface-name name="INode"/>
+    <types>
+      <channel name="Link"><extends name="Cable"/></channel>
+      <channel name="Cable"/>
+    </types>
+    <submodules>
+      <submodule name="app" like-type="IApp"/>
+      <submodule name="eth" type="Eth"/>
+    </submodules>
+    <connections>
+      <connection src-module="app" dest-module="eth" type="Link"/>
+      <connection src-module="app" dest-module="eth" like-type="Link"/>
+    </connections>
+  </compound-module>
+  <module-interface name="INode"/>
+</ned-file>
+<ned-file filename="src/b/Base.ned">
+  <package name="b"/>
+  <compound-module name="Base"><extends name="ned.Unknown"/></compound-module>
+</ned-file>
+<ned-file filename="src/c/d/IApp.ned">
+  <package name="c.d"/>
+  <module-interface name="IApp"/>
+</ned-file>
+</files>"""
+
+class NedTypeTableTestCase(unittest.TestCase):
+    def setUp(self):
+        import xml.etree.ElementTree
+        self.table, self.unresolved = read_ned_type_table(xml.etree.ElementTree.fromstring(NED_XML))
+
+    def test_types_and_files(self):
+        self.assertEqual(sorted(self.table), ["a.Host", "a.Host.Cable", "a.Host.Link", "a.INode", "b.Base", "c.d.IApp"])
+        self.assertEqual(self.table["a.Host.Link"][0], "src/a/Host.ned")
+
+    def test_references_resolve_by_import_package_wildcard_and_inner_type(self):
+        # Base: exact import; INode: same package; IApp: wildcard import c.**; Link: inner type
+        self.assertEqual(self.table["a.Host"][1], ["a.Host.Link", "a.INode", "b.Base", "c.d.IApp"])
+        # an inner type extends another inner type of its compound module
+        self.assertEqual(self.table["a.Host.Link"][1], ["a.Host.Cable"])
+
+    def test_a_type_outside_the_table_is_unresolved(self):
+        self.assertEqual(self.unresolved, ["ned.Unknown"])
+
+    def test_closure_follows_the_references(self):
+        self.assertEqual(get_ned_type_closure(["a.Host.Link", "ned.IdealChannel"], self.table), {"a.Host.Link", "a.Host.Cable", "ned.IdealChannel"})
+        self.assertEqual(get_ned_type_closure(["a.Host"], self.table), {"a.Host", "a.Host.Link", "a.Host.Cable", "a.INode", "b.Base", "c.d.IApp"})
+
 class FileTraceLibraryTestCase(unittest.TestCase):
     def test_library_traces_a_process(self):
         with tempfile.TemporaryDirectory() as folder:

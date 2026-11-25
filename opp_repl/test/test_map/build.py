@@ -10,7 +10,10 @@ map:
   a constructor under another name. The linker keeps one copy of an inline or template function,
   so the binary does not tell which translation units emit it;
 - the include table: for each translation unit, the project headers that it includes, from the
-  ``.d`` files of the build.
+  ``.d`` files of the build;
+- the NED type table: for each NED type of the project's NED folders, its file and the types that
+  it refers to by ``extends``, by ``like`` in its declaration, and by ``like`` in its submodules and
+  connections, resolved with the rules of omnetpp (``opp_nedtool`` gives the syntax tree).
 
 See the test selection plan of opp_repl (``plan/pending/test-selection.md``, section 5.1).
 """
@@ -24,7 +27,9 @@ import logging
 import os
 import re
 import subprocess
+import tempfile
 import time
+import xml.etree.ElementTree
 
 __sphinx_mock__ = True # ignore this module in documentation
 
@@ -113,6 +118,119 @@ def read_dependency_file(text, root_folder, cpp_folder):
             headers.append(path)
     return translation_unit, sorted(set(headers))
 
+_NED_TYPE_TAGS = {"simple-module", "compound-module", "module-interface", "channel", "channel-interface"}
+
+def _get_ned_wildcard_regex(import_spec):
+    # the PatternMatcher of omnetpp for an import: "**" matches across dots, "*" and "?" do not
+    regex = re.escape(import_spec).replace(r"\*\*", ".*").replace(r"\*", "[^.]*").replace(r"\?", "[^.]")
+    return re.compile(regex + "$")
+
+def read_ned_type_table(ned_xml):
+    """
+    Returns the NED type table from the XML of ``opp_nedtool c -x -m``: ``({qualified name: [file,
+    [referred types]]}, [unresolved references])``. The referred types are the resolved names of
+    ``extends`` and of ``like`` in the declaration, and of the ``like`` interfaces of the submodules
+    and connections. The names resolve as in omnetpp (``NedResourceCache::lookupNedType``): a name
+    with a dot is fully qualified; a simple name is an inner type of the enclosing compound module,
+    then an exactly imported type, then a type of the same package, then a type of a wildcard
+    import. omnetpp takes the first match of a wildcard import, so the table takes all matches.
+    """
+    types = {}
+    def add(element, ned_file, package, imports, outer_qname, outer_is_inner):
+        qname = (outer_qname + "." if outer_qname else (package + "." if package else "")) + element.get("name")
+        types[qname] = {"element": element, "file": ned_file, "package": package, "imports": imports, "outer": outer_qname}
+        for types_element in element.findall("types"):
+            for inner in types_element:
+                if inner.tag in _NED_TYPE_TAGS:
+                    add(inner, ned_file, package, imports, qname, outer_qname is not None)
+    for ned_file in ned_xml.iter("ned-file"):
+        package_element = ned_file.find("package")
+        package = package_element.get("name") if package_element is not None else ""
+        imports = [element.get("import-spec") for element in ned_file.findall("import")]
+        for element in ned_file:
+            if element.tag in _NED_TYPE_TAGS:
+                add(element, ned_file.get("filename"), package, imports, None, False)
+    by_simple_name = collections.defaultdict(list)
+    for qname in types:
+        by_simple_name[qname.rsplit(".", 1)[-1]].append(qname)
+    wildcard_regexes = {}
+    def lookup(name, info, inner_context_qname):
+        if "." in name:
+            return [name] if name in types else []
+        if inner_context_qname is not None and inner_context_qname + "." + name in types:
+            return [inner_context_qname + "." + name]
+        for import_spec in info["imports"]:
+            if import_spec in types and (import_spec.endswith("." + name) or import_spec == name):
+                return [import_spec]
+        qname = info["package"] + "." + name if info["package"] else name
+        if qname in types:
+            return [qname]
+        matches = set()
+        for import_spec in info["imports"]:
+            if "*" in import_spec or "?" in import_spec:
+                regex = wildcard_regexes.setdefault(import_spec, _get_ned_wildcard_regex(import_spec))
+                matches.update(q for q in by_simple_name.get(name, []) if regex.match(q))
+        return sorted(matches)
+    table = {}
+    unresolved = set()
+    for qname, info in types.items():
+        element = info["element"]
+        referred = set()
+        def refer(name, inner_context_qname):
+            resolved = lookup(name, info, inner_context_qname)
+            if resolved:
+                referred.update(resolved)
+            else:
+                unresolved.add(name)
+        # extends and like of the declaration: the context is the parent, so an inner type can
+        # refer to the other inner types of its compound module
+        declaration_context = info["outer"] if info["outer"] and types[info["outer"]]["element"].tag == "compound-module" else None
+        for tag in ("extends", "interface-name"):
+            for child in element.findall(tag):
+                refer(child.get("name"), declaration_context)
+        # like of the submodules and connections: the context is the compound module itself, or
+        # its top-level type if it is an inner type
+        if element.tag == "compound-module":
+            body_context = info["outer"] or qname
+            for child in element.iter():
+                if child.tag in ("submodule", "connection") and child.get("like-type"):
+                    refer(child.get("like-type"), body_context)
+        table[qname] = [info["file"], sorted(referred - {qname})]
+    return table, sorted(unresolved)
+
+def get_ned_type_closure(instantiated_types, ned_types):
+    """
+    Returns the NED types that a run used: its instantiated types, and the types that they refer to
+    in the NED type table, recursively (the base types, the interfaces, and the interfaces of their
+    ``like`` submodules and connections). A type that is not in the table (for example ``ned.*``)
+    stays in the result, without its references.
+    """
+    result = set()
+    stack = list(instantiated_types)
+    while stack:
+        qname = stack.pop()
+        if qname not in result:
+            result.add(qname)
+            entry = ned_types.get(qname)
+            if entry:
+                stack.extend(entry[1])
+    return result
+
+def make_ned_type_table(simulation_project):
+    """Returns the NED type table of the project's NED folders (see :py:func:`read_ned_type_table`), and the errors of ``opp_nedtool``."""
+    omnetpp_project = simulation_project.get_omnetpp_project()
+    nedtool = os.path.join(omnetpp_project.get_root_path(), "bin", "opp_nedtool")
+    root_folder = simulation_project.get_full_path(".")
+    with tempfile.TemporaryDirectory(dir=root_folder) as folder:
+        output_file = os.path.join(folder, "ned.xml")
+        args = [nedtool, "c", "-x", "-m", "-o", output_file, *simulation_project.ned_folders]
+        result = subprocess.run(args, cwd=root_folder, env=omnetpp_project.get_env(), capture_output=True, text=True)
+        if not os.path.exists(output_file):
+            raise Exception("Converting the NED files to XML failed:\n" + (result.stdout + result.stderr)[-2000:])
+        table, unresolved = read_ned_type_table(xml.etree.ElementTree.parse(output_file).getroot())
+    errors = [line for line in (result.stdout + result.stderr).splitlines() if "Error" in line]
+    return table, unresolved, errors
+
 def make_test_map_build_tables(simulation_project, profile_file, mode="coverage", num_threads=None):
     """
     Makes the build tables of the coverage build of *simulation_project* (see the module
@@ -122,8 +240,10 @@ def make_test_map_build_tables(simulation_project, profile_file, mode="coverage"
     Returns (dict):
         ``{"version", "functions", "emitters", "includes"}``: ``functions`` is the function table,
         ``emitters`` maps the index of a function in the table to its translation units if they are
-        not only the source file of the function, and ``includes`` maps each translation unit to its
-        project headers.
+        not only the source file of the function, ``includes`` maps each translation unit to its
+        project headers, ``ned_types`` is the NED type table, ``ned_unresolved`` lists the NED type
+        references that did not resolve (for example the omnetpp types ``ned.*``), and ``ned_errors``
+        holds the errors of ``opp_nedtool`` (a NED file with a syntax error is not in the table).
     """
     from opp_repl.test.coverage import get_coverage_objects, get_coverage_tool, get_coverage_tool_env
     num_threads = num_threads or os.cpu_count()
@@ -175,7 +295,10 @@ def make_test_map_build_tables(simulation_project, profile_file, mode="coverage"
             if translation_unit:
                 includes[translation_unit] = headers
     _logger.info(f"The include table has {len(includes)} translation units ({time.time() - start_time:.1f} s)")
-    return {"version": TEST_MAP_BUILD_TABLES_VERSION, "functions": functions, "emitters": emitters, "includes": includes}
+    ned_types, ned_unresolved, ned_errors = make_ned_type_table(simulation_project)
+    _logger.info(f"The NED type table has {len(ned_types)} types ({time.time() - start_time:.1f} s)")
+    return {"version": TEST_MAP_BUILD_TABLES_VERSION, "functions": functions, "emitters": emitters, "includes": includes,
+            "ned_types": ned_types, "ned_unresolved": ned_unresolved, "ned_errors": ned_errors}
 
 def write_test_map_build_tables(build_tables, file_name):
     """Writes the build tables as gzip-compressed JSON."""
