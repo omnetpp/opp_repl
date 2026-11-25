@@ -23,6 +23,7 @@ from opp_repl.test.smoke import *
 from opp_repl.test.speed import *
 from opp_repl.test.statistical import *
 from opp_repl.test.task import *
+from opp_repl.test.test_map import *
 from opp_repl.test.validation import *
 
 if importlib.util.find_spec("matplotlib"):

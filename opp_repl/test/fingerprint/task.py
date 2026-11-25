@@ -427,11 +427,16 @@ def get_fingerprint_test_tasks(stored_only=False, **kwargs):
     return get_tasks(**kwargs)
 get_fingerprint_test_tasks.__signature__ = combine_signatures(get_fingerprint_test_tasks, collect_fingerprint_test_groups, get_fingerprint_test_task, get_simulation_tasks)
 
-def run_fingerprint_tests(**kwargs):
+def run_fingerprint_tests(test_map_records=None, **kwargs):
     """
     Runs one or more fingerprint tests that match the provided filter criteria.
 
     Parameters:
+        test_map_records (string or None):
+            A folder for the records of the test map (see :py:mod:`opp_repl.test.test_map`). Each run
+            writes its record into this folder, and its profile into the profile pool. Needs the
+            coverage build (``mode="coverage"``).
+
         kwargs (dict):
             The filter criteria parameters are inherited from the :py:func:`get_fingerprint_test_tasks` function.
 
@@ -440,6 +445,12 @@ def run_fingerprint_tests(**kwargs):
     """
     kwargs = apply_project_test_defaults("fingerprint", kwargs)
     multiple_fingerprint_test_tasks = get_fingerprint_test_tasks(**kwargs)
+    if test_map_records:
+        if kwargs.get("mode") != "coverage":
+            raise Exception("The records of the test map need the coverage build (mode coverage)")
+        # lazy: the test map imports the coverage module, which imports the simulation modules
+        from opp_repl.test.test_map.record import get_test_map_simulation_runner_class
+        kwargs["simulation_runner_class"] = get_test_map_simulation_runner_class(test_map_records, "fingerprint")
     return multiple_fingerprint_test_tasks.run(**kwargs)
 run_fingerprint_tests.__signature__ = combine_signatures(run_fingerprint_tests, get_fingerprint_test_tasks)
 

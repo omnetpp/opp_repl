@@ -1,6 +1,6 @@
 # Change-based test selection
 
-> **Status:** phase 0 started · **Owner:** opp_repl · **Also changes:** INET (weekly coverage
+> **Status:** phase 1 started · **Owner:** opp_repl · **Also changes:** INET (weekly coverage
 > workflow, `inet.opp`), the `inet-framework/coverage` repository, optionally omnetpp (section 11)
 
 For a change, find the tests whose outcome can differ, in every test suite, and run only those
@@ -256,7 +256,7 @@ The map records each distinct run once. Two tests that start the same run share 
 
 | Suite | Test key | Runs | Map run differs from the test by |
 | --- | --- | --- | --- |
-| fingerprint | config, run, sim time limit, ingredients | one simulation | nothing; the ingredients change only the hash, so one record serves all ingredient sets |
+| fingerprint | config, run, sim time limit, ingredients | one simulation for the group of ingredient sets of the run | nothing; the map run is the test run of the group, so one record serves all ingredient sets (the `~` ingredients add the computed CRC, checksum and FCS modes, and these change the code that runs) |
 | statistical | config, run 0 | one simulation, release | coverage build; R-NDEBUG covers the release-only code |
 | smoke | config, run 0 | one simulation, 1 s CPU time | the bound, see section 7 |
 | sanitizer | config, run 0 | as smoke, sanitizer build | as smoke; the sanitizer only examines code that ran |
@@ -311,9 +311,11 @@ The map run and the present coverage report use the same build (`-m coverage`, t
 `LLVM_PROFILE_FILE` changes:
 
 - Now: `<pool>/%4m.profraw`. The LLVM runtime merges all processes of a suite into 4 files.
-- Map run: `<pool>/<run id>/%p.profraw`. Each run writes its own files. Directly after the run,
-  opp_repl merges them into a sparse `<run id>.profdata` (only the functions that ran), reads the
-  function list from it, and removes the `.profraw` files.
+- Map run: `<records>/<run id>/profraw/%p.profraw`. Each run writes its own files. Directly after
+  the run, opp_repl merges them into a sparse `<pool>/<run id>.profdata` (only the functions that
+  ran), reads the function list from it, and removes the `.profraw` files. The other processes of
+  a coverage build, for example the config queries of opp_repl, still write into the `%4m` files
+  of the pool.
 
 At the end of a suite, `llvm-profdata merge` of the per-run `.profdata` files gives the suite
 profile. `opp_export_coverage` writes the same lcov file from it as now, so the coverage report does
@@ -637,10 +639,39 @@ command lines of fingerprint runs), `measure.py` (times and profiles), `filetrac
 
 ### Phase 1 — the map for the fingerprint tests
 
-- [ ] Set `LLVM_PROFILE_FILE` for each run, reduce the profile to a sparse `.profdata` and the
+Phase 1 works in the opp_repl worktree `opp_repl-test-map` (branch `topic/test-map`). The checks
+ran on the coverage build of the worktree `inet-coverage-more-suites` (INET 28f1dc534c and two
+commits that change only tests and ini files).
+
+- [x] Set `LLVM_PROFILE_FILE` for each run, reduce the profile to a sparse `.profdata` and the
   function list after the run, and remove the `.profraw` files (8.1).
-- [ ] Merge the per-run `.profdata` files of a suite into the suite profile. Make sure that
+  - `opp_repl/test/test_map/record.py`: the option `--test-map-records FOLDER` of
+    `opp_run_fingerprint_tests` (`run_fingerprint_tests(test_map_records=...)`, only with
+    `-m coverage`) gives the run the simulation runner `TestMapSimulationRunner`. The runner runs
+    the process as the subprocess runner does, with its own `LLVM_PROFILE_FILE`, the trace library
+    in `LD_PRELOAD` and `--print-instantiated-ned-types=true`. So the map run is the test run: the
+    fingerprint group runs with all its ingredient sets, and the test checks the same output.
+  - The run key is `<kind>:<ini path>:<config>:#<run>:<sim time limit>`, and the run id is the
+    first 10 hex digits of its SHA-1. With 8 digits, 10000 runs have a collision with a
+    probability of about 1%; with 10 digits, about 0.005%.
+  - The record `<records>/<run id>/` has `run.json` (the key, the parameters, the exit code, the
+    end of the run, the NED types and the section chain), `functions.txt.gz` (about 93 KB for
+    12700 functions) and `files.txt`. The runner writes `run.json` last.
+  - The end of the run is the last `<!>` line with an event number. The fingerprint lines come
+    after the stop line and have no event number.
+  - The trace library now writes `write` for an open that only writes or truncates. The record
+    leaves out these outputs and all paths in the result folder of the run. Before this change, the
+    `.rt` and `.elog` files of `results/` were reads and lookups.
+  - The section query runs once for each ini file and config in a process, with the profile to
+    `/dev/null`.
+  - Self tests: `opp_repl/test/self/test_map.py` (15 tests, also the trace library on a real
+    process).
+- [x] Merge the per-run `.profdata` files of a suite into the suite profile. Make sure that
   `opp_export_coverage` gives the same lcov file as with the `%4m` pool.
+  - `merge_coverage_profiles` merges the `.profdata` files of the pool too (opp_repl 578ad7a).
+  - Checked: the 24 fingerprint runs of `examples/manetrouting`, once without and once with
+    records, give the same lcov file (11.2 MB, `cmp` finds no difference). The wall time of the
+    test is 20.0 s without and 20.3 s with the records.
 - [ ] Make the function table, the emitter table and the include table.
 - [ ] Add the NED type closure, the ini section chain and the file trace.
 - [ ] Write the map in the layout of 8.3. Add the commands `opp_update_test_map` and

@@ -132,8 +132,12 @@ def _fingerprint_extra_args(parser):
     parser.add_argument("--no-stored-only", dest="stored_only", action="store_false", help="use every selected run; an update inserts the fingerprints that the store does not hold")
     parser.add_argument("--append-args", nargs=argparse.REMAINDER, default=None, metavar="ARGS", help="pass all following arguments to opp_run, for example --append-args --fingerprint-modules='**.host[0].**'; must be the last option")
 
+def _run_fingerprint_tests_extra_args(parser):
+    _fingerprint_extra_args(parser)
+    parser.add_argument("--test-map-records", default=None, metavar="FOLDER", help="write the record of each run for the test map into this folder (one folder for each run), and the profile of each run into the profile pool; needs -m coverage")
+
 def run_fingerprint_tests_main():
-    run_tasks_main(run_fingerprint_tests, "fingerprint tests", extra_args_fn=_fingerprint_extra_args)
+    run_tasks_main(run_fingerprint_tests, "fingerprint tests", extra_args_fn=_run_fingerprint_tests_extra_args)
 
 def run_chart_tests_main():
     run_tasks_main(run_chart_tests, "chart tests")
