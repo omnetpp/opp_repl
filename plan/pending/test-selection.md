@@ -502,11 +502,12 @@ All are optional. Each one removes a workaround in opp_repl.
     - statistical: INET c5d48a5cb4 on the branch `topic/reordering-expected-sequence-number`
       gives `expectedSequenceNumber` the start value 0. Network7 passes in debug and release, and
       the fingerprints of `tutorials/protocol` do not change.
-    - smoke: INET cceb1e73d7 on `topic/coverage-more-suites` removes the 5 wrong markers
-      (osg/earth ×3, dymo and gpsr `DynamicIPv6`). The 3 lwIP markers in
-      `examples/inet/nclients` are correct for the default features (opp_repl drops no config
-      there, because TcpLwip has only the NED package `inet.transportlayer.tcp_lwip`), and wrong
-      with all features. They wait for a decision.
+    - smoke: INET 0af9da9b1e on `topic/coverage-more-suites` removes the 8 wrong markers
+      (`examples/inet/nclients` lwIP ×3, osg/earth ×3, dymo and gpsr `DynamicIPv6`). The lwIP
+      markers recorded an error that the configs had also with TcpLwip built. Now the
+      fingerprint store on master records PASS for them. With TcpLwip off they give ERROR,
+      the same as the 8 lwIP configs of `bulktransfer` and `tcpclientserver`, which have no
+      marker.
 The measurements below ran on 2026-11-25 on this machine (32 cores, clang 23), with the coverage
 build of the worktree `inet-coverage-more-suites` (INET 28f1dc534c, all features, omnetpp-6.x in
 coverage mode). The prototype scripts are in `plan/pending/test-selection/`: `capture.py` (the
