@@ -450,7 +450,7 @@ All are optional. Each one removes a workaround in opp_repl.
     68.5%, functions 68.9%, branches 58.1%.
 - [x] Add the statistical, chart, smoke and validation tests to the weekly coverage run (D6). INET
   commit 0798401b78 on the local branch `topic/coverage-more-suites` (worktree
-  `inet-coverage-more-suites`), not pushed.
+  `inet-coverage-more-suites`), pushed to `origin` on 2026-11-25 without a pull request.
   - New jobs: `statistical-0` and `statistical-1` (945 tests in 2 splits), `chart` (236 charts,
     4752 simulations), `smoke` (945 runs) and `validation` (8 tests). Each writes one lcov file
     with the name of its suite. `-m coverage` replaces the release mode of the `inet.opp` defaults.
@@ -467,7 +467,31 @@ All are optional. Each one removes a workaround in opp_repl.
     `native-coverage-ccache` cache.
   - Checked locally (coverage build of 28f1dc534c): samples of the four commands as `run_suite`
     runs them pass, and each export gives an lcov file with its test name and hit lines.
-- [ ] Run the workflow of the branch on GitHub, and record the job times.
+- [x] Run the workflow of the branch on GitHub, and record the job times. The manual run
+  45618369076 (INET 0798401b78) passed in all 11 jobs in 91 minutes.
+  - Job times (each job includes about 32 minutes to compile INET), with the test time in
+    parentheses: fingerprint 29 to 42 minutes (10 to 17), suites 47, statistical-0 44 (25),
+    statistical-1 55 (28), chart 90 (71), smoke 36 (10), validation 41 (3), report 1. Coverage
+    mode is about 3 times slower than release mode for the statistical tests and about 5 times
+    slower for the chart tests, not 6 times. The chart job used 90 of its 240 minutes.
+  - Report: lines 68.75% (+0.58), functions 68.87%, branches 58.26%. Lines for each new suite:
+    statistical 58.87%, smoke 58.16%, chart 20.76%, validation 7.09%.
+  - Three suites gave a warning with exit code 1. The coverage data of the three suites is
+    complete:
+    - module: `Lan80211MobilityIndependence_1` and `Ieee80211BlockAckVariant_1` FAIL. Both tests
+      start `bin/inet --debug`, and the coverage job has no debug build. The master run
+      45588176059 has the same 2 failures. Both tests pass in `module-tests.yml` (debug).
+    - statistical-1: `tutorials/protocol -c Network7` FAIL, also locally in coverage mode. Only
+      `Network7.server.app` differs: release gets 3 packets, coverage gets 0. The cause is an
+      INET defect: `Reordering::expectedSequenceNumber`
+      (`src/inet/protocolelement/ordering/Reordering.h`) has no start value. In release, the
+      value happens to be 0, so the stored baseline records undefined behavior.
+    - smoke: 8 runs `PASS (unexpected)` against an `#expected-result = "ERROR"` marker. For
+      `examples/inet/nclients` (3 lwIP configs) and `showcases/visualizer/osg/earth` (3), the
+      markers assume the default features, but `_scripts/github/build-inet.sh` enables all
+      features. For `DynamicIPv6` of `examples/manetrouting/dymo` and `gpsr`, the reason is not
+      known. The markers come from a7d373ce7b (2022), and no release run of the smoke tests
+      exists for comparison. No other GitHub workflow runs the smoke tests.
 - [ ] Build INET with `-m coverage`. Run 20 fingerprint tests, each with its own `LLVM_PROFILE_FILE`.
 - [ ] Measure: size of one `.profraw`, time to reduce it to the functions that ran
   (`llvm-profdata merge -sparse` and `show --all-functions`, or `show` on the raw file), the
