@@ -168,7 +168,7 @@ selects). A file belongs to the first class whose rule applies.
 | R9 | A removed `.h` file | as R4 |
 | R10 | A `.msg` file | v1: the tests of the TUs that include the generated `_m.h`, and the tests that ran a function of the `_m.cc`. v2: generate the `_m` files at both sides and apply R1–R9 to their diff. |
 | R11 | Build files: `Makefile`, `makefrag`, `.oppbuildspec`, `.oppfeatures`, `.oppfeaturestate`, the build fields of `inet.opp` | all tests |
-| R-NDEBUG | A function g has a release-only block (`#ifdef NDEBUG`, or the `#else` of `#ifndef NDEBUG`) that calls project functions | the map adds these callees to each run in release mode that ran g. A scan of the 15 files makes the list. |
+| R-NDEBUG | A function g has a release-only block (`#ifdef NDEBUG`, or the `#else` of `#ifndef NDEBUG`) that calls project functions | the map adds these callees to each run in release mode that ran g. A scan of the 15 files makes the list. For 28f1dc534c the list is empty (phase 0). |
 
 A hunk that is not fully inside a known function body is "outside all function bodies". This
 includes the signature line and the member initializer list of a constructor. This default is
@@ -214,7 +214,9 @@ the included files (from the file trace, 5.4).
 `access`) or listed. The record includes lookups that failed. The tool is a file trace of the
 process tree (`strace -f -e trace=%file`, or an `LD_PRELOAD` library; phase 0 measures both). The
 trace also covers `xmldoc()`, `readCSV()`, mobility traces, pcap input, audio files and other
-files that INET reads directly.
+files that INET reads directly. Phase 0 chose the `LD_PRELOAD` library: it costs about 1%, strace
+costs about 33%, and it sees the same project files. The NED folder walk of omnetpp lists and
+examines all folders of the NED path in each run, so the map leaves the walk out (phase 0).
 
 **Rules.**
 
@@ -347,8 +349,9 @@ used which part of the source file of the same name:
 | `map/<folder>/index.json` | for the folder: the number of runs that used something below it, for each kind |
 | `map/runs.json`, `map/tests.json`, `map/header.json` | the tables of 8.2 |
 
-A set that contains almost all runs is written as "all except ...". Phase 0 measures if this is
-enough, or if the map also needs a table of shared run sets.
+A set that contains almost all runs is written as "all except ...". Phase 0 measured that this is
+enough for the fingerprint map (about 22 MB of text for 1847 runs), but the map of all suites
+(about 120 MB) also needs a table of shared run sets: at 200 runs, 15269 functions share 1200 sets.
 
 With this layout:
 
@@ -372,7 +375,7 @@ The history of `master` can lose old commits (user decision, 2026-11-25). The re
 commits of the last N weeks. When the history gets longer, the job makes a new root commit with the
 tree of the oldest kept week, puts the newer commits on top of it, and does a force push. The file
 `history.jsonl` keeps all summary lines, so the coverage history does not get shorter. Phase 0
-measures the size of a weekly map and sets N. A base commit that is older than the oldest kept map
+set N = 52 (about 1.3 MB for each week for all suites). A base commit that is older than the oldest kept map
 gets no map, and then the selection selects all tests.
 
 A developer can also make a map locally (`opp_update_test_map`).
@@ -492,18 +495,135 @@ All are optional. Each one removes a workaround in opp_repl.
       features. For `DynamicIPv6` of `examples/manetrouting/dymo` and `gpsr`, the reason is not
       known. The markers come from a7d373ce7b (2022), and no release run of the smoke tests
       exists for comparison. No other GitHub workflow runs the smoke tests.
-- [ ] Build INET with `-m coverage`. Run 20 fingerprint tests, each with its own `LLVM_PROFILE_FILE`.
-- [ ] Measure: size of one `.profraw`, time to reduce it to the functions that ran
+  - Repairs (2026-11-25, local, not pushed):
+    - module: INET 6921020a07 on `topic/coverage-more-suites` removes `--debug` from the two
+      tests, and opp_repl f5801f3 gives the test program `MODE` of the run. Both tests pass in
+      coverage mode with `MODE` unset.
+    - statistical: INET c5d48a5cb4 on the branch `topic/reordering-expected-sequence-number`
+      gives `expectedSequenceNumber` the start value 0. Network7 passes in debug and release, and
+      the fingerprints of `tutorials/protocol` do not change.
+    - smoke: INET cceb1e73d7 on `topic/coverage-more-suites` removes the 5 wrong markers
+      (osg/earth ×3, dymo and gpsr `DynamicIPv6`). The 3 lwIP markers in
+      `examples/inet/nclients` are correct for the default features (opp_repl drops no config
+      there, because TcpLwip has only the NED package `inet.transportlayer.tcp_lwip`), and wrong
+      with all features. They wait for a decision.
+The measurements below ran on 2026-11-25 on this machine (32 cores, clang 23), with the coverage
+build of the worktree `inet-coverage-more-suites` (INET 28f1dc534c, all features, omnetpp-6.x in
+coverage mode). The prototype scripts are in `plan/pending/test-selection/`: `capture.py` (the
+command lines of fingerprint runs), `measure.py` (times and profiles), `filetrace.c` (the
+`LD_PRELOAD` trace), `tracecmp2.py` (strace against `LD_PRELOAD`), `maprun.py` (the map run) and
+`mapwrite.py` (the map in the layout of 8.3).
+
+- [x] Build INET with `-m coverage`. Run 20 fingerprint tests, each with its own `LLVM_PROFILE_FILE`.
+  - The 20 tests are the test with the median time in 20 folders with many tests (from
+    `examples/wireless` to `examples/sctp`). All 20 runs verified their fingerprints.
+  - `capture.py` takes the command lines from opp_repl without a run (a `simulation_runner_class`
+    that records them). It must apply the defaults of `inet.opp`
+    (`apply_project_test_defaults("fingerprint", ...)`: `stored_only`, `select_fingerprint`,
+    `ingredients_list`, `cpu_time_limit`). Without them, opp_repl makes the tasks with the sim time
+    limit of the ini file, and 4 of the 20 tests skip with "Correct fingerprint not found". With them,
+    INET has 1847 fingerprint runs.
+  - `<run id>/%p.profraw` is correct. Seven modules of a run are instrumented (`opp_run_coverage`,
+    the omnetpp libraries and `libINET_coverage.so`). With `%p`, all seven write into the same file
+    (95331 functions = the sum of the 7 modules with `%m`), so no data is lost.
+- [x] Measure: size of one `.profraw`, time to reduce it to the functions that ran
   (`llvm-profdata merge -sparse` and `show --all-functions`, or `show` on the raw file), the
   number of functions in the binary, functions for each run.
-- [ ] Measure the overhead of `strace -f -e trace=%file` and of an `LD_PRELOAD` trace on the same
+  - One `.profraw` for each run, 23.8 MB for each run (counters of all 95331 functions).
+  - `merge -sparse`: 0.32 s, result 1.2 to 2.1 MB (median 1.6 MB). `show --all-functions` on the
+    sparse file: 0.014 s. `show --all-functions` on the raw file: 0.28 s. Both give the same list.
+  - A merge of the 20 sparse files into a suite profile: 0.08 s, 3.4 MB.
+  - Functions: 95331 in the 7 modules, 76591 in `libINET_coverage.so`, 75930 of them in INET
+    sources. For each run, 8074 to 13204 functions ran (median 11208, omnetpp functions included).
+    In the 20 runs together, 15657 INET functions ran (20.6%).
+- [x] Measure the overhead of `strace -f -e trace=%file` and of an `LD_PRELOAD` trace on the same
   20 runs. Examine if `strace` works in the podman and GitHub containers.
-- [ ] Measure the time of `llvm-cov export` for the function table and of `nm` over all objects.
-- [ ] List the release-only blocks in the 15 `NDEBUG` files.
-- [ ] Write the map of the 20 runs in the layout of 8.3 for two INET commits one week apart.
+  - Wall time against the mean of two plain runs: `strace` +33% (median, range 6% to 49%; the
+    sum of the 20 runs 25.9 s → 31.0 s). `LD_PRELOAD` +1% (median), which is below the
+    difference of the two plain runs (1.7%).
+  - Completeness, compared on the real paths in the INET tree: both traces have the same 19261
+    folders. The `LD_PRELOAD` trace has all project files of the strace except two kinds: about
+    600 library lookups of the dynamic loader in the working directory of each run, and `readlink`
+    calls on path components inside glibc `realpath` (the trace has the full path of the
+    `realpath` call). The library lookups occur because `get_env` gives
+    `LD_LIBRARY_PATH=<omnetpp>/lib:` with an empty entry, which means the working directory. The
+    build rules (R11) cover shared libraries.
+  - The trace library needs these hooks: `open`, `open64`, `openat`, `openat64`, `__open_2`,
+    `fopen`, `fopen64`, `stat`, `lstat`, `fstatat`, `statx`, `access`, `faccessat`, `opendir`,
+    `readlink`, `realpath`, `glob`, `chdir` and `fchdir`. omnetpp walks the NED folders with
+    `chdir` and `glob("*")` (`FileGlobber`, `src/common/fileglobber.cc`), and `glob` opens the
+    folders inside glibc, so the library records the `glob` call and follows `chdir`. It writes
+    physical paths: `showcases/*/doc/media` are links into the `media` baseline checkout.
+  - The GitHub test jobs run on the `ubuntu-latest` machine, not in a container. The
+    `LD_PRELOAD` trace works in the rootless podman image `ghci-ci:26.04`. That image has no
+    strace, and I did not install one.
+  - Decision: the map run uses the `LD_PRELOAD` trace. It costs nothing measurable and is complete
+    for project files, so strace is not necessary.
+- [x] Measure the time of `llvm-cov export` for the function table and of `nm` over all objects.
+  - `llvm-cov export -format=text -skip-expansions` of `libINET_coverage.so`: 94 s, 1.8 GB of
+    memory, 65 MB of JSON. It lists all 76591 functions, also those with count 0. The code
+    regions of file 0 give the line range of the body.
+  - `nm --defined-only -A` over the 1791 objects: 11.1 s, 549 MB of output. With 8 parallel
+    processes 1.65 s, but each process needs its own output file: with one shared output, the
+    lines mix.
+  - The `.d` files give their paths relative to `src/`, because `make` runs there.
+- [x] List the release-only blocks in the 15 `NDEBUG` files. There are 5:
+  `INETDefs.h:12` (the precompiled header), `ModuleRefByGate.h:43` and `ModuleRefByPar.h:46` (a
+  shorter `cRuntimeError` message), `Chunk.h:34` (`CHUNK_CHECK_USAGE_ENABLED 0`) and
+  `TcpSackRexmitQueue.cc:547` (an early return). The `#else` parts of the macros that depend on
+  `NDEBUG` (`DEBUG_CHECK_IMPLEMENTATION` in `DebugDefs.h:168`, `CHUNK_CHECK_USAGE` in
+  `Chunk.h:43`) call no more functions than the debug parts. No release-only block calls a project
+  function, so the R-NDEBUG list is empty for 28f1dc534c, and release mode runs a subset of the
+  functions of coverage mode. The map run keeps the scan, because a new block can come.
+- [x] Write the map of the 20 runs in the layout of 8.3 for two INET commits one week apart.
   Measure the size of each map, and the growth of a git pack when the second map comes on top of
   the first. Compute the values for all runs from these numbers.
-- [ ] Write the numbers into this plan. Set N, the number of weeks that the history keeps (8.4).
+  - Commits: bc39ec7571 (2026-11-17) and 28f1dc534c (2026-11-25), 141 commits apart. A second
+    sample has 200 runs (the 20 runs and 180 random runs, seed 1) at both commits.
+  - The map run (`maprun.py`) gives each run its profile, the `LD_PRELOAD` trace,
+    `--print-instantiated-ned-types=true` (`src/sim/csimulation.cc:72`) and
+    `-q sectioninheritance` (0.18 s for each run, because the process loads the 1 GB library;
+    phase 1 can read the chain from the ini file in Python instead).
+  - The run id is the first 8 hex digits of the SHA-1 of `"fingerprint " + <test name>`.
+  - Map content (`mapwrite.py`): for each function body, the line range, one demangled name, the
+    run ids and the TUs that emit it (when they differ from the file itself); `tu_runs` for each
+    TU; `included_by` for each header; NED types; ini sections; data files. A type of a `types:`
+    section belongs to the file of its outer type. `ned.IdealChannel` and `ned.DatarateChannel`
+    are omnetpp types and stay unresolved.
+  - File trace in the map: in all runs, the only folder listings are the NED walk of omnetpp
+    (`glob("*")` in 963 to 988 folders for each run), and INET code lists no folder. The walk also
+    examines each entry with `stat`. The map drops the walk, the successful `stat` calls in walked
+    folders and the failed lookups of broken links (for example `doc/media` without the `media`
+    checkout). It keeps reads and examinations of files that git tracks, and failed lookups of
+    any path in the tree. Rule F2 thus applies only to `opendir` and `O_DIRECTORY` listings, and
+    N2 covers the NED walk.
+  - Sizes:
+
+    | Runs | Map files | Text | `tar.gz` | Git pack, first map | Growth for one week | Files changed |
+    | --- | --- | --- | --- | --- | --- | --- |
+    | 20 | 4497 | 14 MB | 1.67 MB | 1973 KB | 125 KB | 197 |
+    | 200 | 5022 | 17 MB | 1.87 MB | 2307 KB | 146 KB | 219 |
+
+  - The run lists grow by about 1000 run ids for each run (22456 ids for 20 runs, 204421 for 200
+    runs), that is about 12 KB of text for each run. The functions that ran share few distinct run
+    sets: 300 sets for 10910 functions (20 runs), 1200 sets for 15269 functions (200 runs). The
+    largest map file has 200 KB at 200 runs (`SctpHeader_m.cc.json`).
+  - The map writer needs 15 s for 20 runs and 64 s for 200 runs (Python set operations), and
+    0.8 GB of memory. Phase 1 must make it faster for all suites.
+  - Values for all runs, linear in the number of runs from the two samples: for the 1847
+    fingerprint runs, a pack of about 5.4 MB, about 0.34 MB for each week, and about 22 MB of run
+    lists in the text. For about 10000 runs of all suites, about 20 MB, about 1.3 MB for each week
+    and about 120 MB of text. With the larger text, the largest files grow to some MB. So "all
+    except" is enough for the fingerprint map, but the map of all suites needs the table of shared
+    run sets (8.3).
+  - Map run cost for each run: 0.33 s for the profile, about 1% for the trace, and 0.18 s for the
+    section query. For the 1847 fingerprint runs, that is about 15 minutes of CPU time.
+  - Found by the way: two fingerprint runs, `tutorials/protocol -c Network4` and `-c Network6`,
+    mismatch in the local coverage build (clang 23) at both commits, but pass on GitHub
+    (clang 21). Under examination. One run of bc39ec7571
+    (`showcases/wireless/sensornetwork -c StatisticLMac`) stops with exit code 1.
+- [x] Write the numbers into this plan. Set N, the number of weeks that the history keeps (8.4).
+  N = 52: with about 1.3 MB for each week for all suites, a year of history is about 90 MB.
 
 ### Phase 1 — the map for the fingerprint tests
 
