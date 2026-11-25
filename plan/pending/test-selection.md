@@ -269,6 +269,11 @@ The map records each distinct run once. Two tests that start the same run share 
 run can still change its speed a little (code layout, cache). The speed tests are noisy, so the
 plan accepts this and keeps them in the weekly full run.
 
+The speed tests cannot run now. They give `--measure-cpu-usage=true` to each run, and omnetpp
+(`omnetpp-6.x`, `master`) has no such option, so each run stops at startup with `Unknown
+command-line configuration option --measure-cpu-usage`. Until omnetpp has the option, the speed
+suite has no map records, and the weekly run does not include it.
+
 **The build** is not a test that the selection skips. It runs before each selection.
 
 ## 7. CPU-time limits and the end of a run
@@ -313,8 +318,9 @@ profile. `opp_export_coverage` writes the same lcov file from it as now, so the 
 not change. Phase 1 compares the two lcov files of one suite to make sure of this.
 
 The map needs more suites than the present run (section 6): statistical, smoke, chart, validation
-and speed. These come into the weekly run in phase 3 (user decision, 2026-11-25). The coverage
-report then also includes them.
+and speed. Statistical, smoke, chart and validation come into the weekly run in phase 0 (user
+decisions of 2026-11-25), and the coverage report then also includes them. Speed cannot run now
+(section 6).
 The run stays weekly and only on master (the maintainer decision D12 of the coverage plan).
 
 ### 8.2 Content
@@ -440,6 +446,28 @@ All are optional. Each one removes a workaround in opp_repl.
     of the run of 2026-11-22 (INET 858477687b) write the summary and the HTML (160 MB): lines
     68.46%, functions 68.68%, branches 57.91%. The branch rate went up by 4.64 points, because
     clang 21 writes more branch records.
+  - Checked on GitHub: the manual run 45588176059 (INET c7e7cdaabd) passed in all 6 jobs. Lines
+    68.5%, functions 68.9%, branches 58.1%.
+- [x] Add the statistical, chart, smoke and validation tests to the weekly coverage run (D6). INET
+  commit 0798401b78 on the local branch `topic/coverage-more-suites` (worktree
+  `inet-coverage-more-suites`), not pushed.
+  - New jobs: `statistical-0` and `statistical-1` (945 tests in 2 splits), `chart` (236 charts,
+    4752 simulations), `smoke` (945 runs) and `validation` (8 tests). Each writes one lcov file
+    with the name of its suite. `-m coverage` replaces the release mode of the `inet.opp` defaults.
+  - `omnetpp.scave` loads only the bindings `scave_bindings`, `scave_bindings_dbg` and
+    `scave_bindings_sanitize`, not `scave_bindings_coverage`. A coverage job builds omnetpp only in
+    coverage mode, so the statistical, chart and validation jobs also run
+    `make MODE=release scave` in omnetpp (23 s on 32 cores in a new tree).
+  - Times in release mode on GitHub: statistical 18 minutes, chart 15 minutes (simulations),
+    validation 24 s. Coverage mode is about 6 times slower (fingerprint split 0: 3.9 minutes in
+    release, 22.6 in debug, 24.3 in coverage). The chart test runs all its simulations before the
+    split applies (`MultipleChartTestTasks.run_protected`), so the chart job is one job with a
+    timeout of 240 minutes.
+  - Each coverage job compiles INET from the start (32 minutes on GitHub): the restore found no
+    `native-coverage-ccache` cache.
+  - Checked locally (coverage build of 28f1dc534c): samples of the four commands as `run_suite`
+    runs them pass, and each export gives an lcov file with its test name and hit lines.
+- [ ] Run the workflow of the branch on GitHub, and record the job times.
 - [ ] Build INET with `-m coverage`. Run 20 fingerprint tests, each with its own `LLVM_PROFILE_FILE`.
 - [ ] Measure: size of one `.profraw`, time to reduce it to the functions that ran
   (`llvm-profdata merge -sparse` and `show --all-functions`, or `show` on the raw file), the
@@ -475,7 +503,8 @@ All are optional. Each one removes a workaround in opp_repl.
 
 ### Phase 3 — the other suites
 
-- [ ] Statistical (with R-NDEBUG), speed.
+- [ ] Statistical (with R-NDEBUG), speed (speed only after omnetpp has `--measure-cpu-usage`,
+  section 6).
 - [ ] Smoke and sanitizer, after decision D2.
 - [ ] The opp tests: per-test profiles and the `.d` files of the test builds; packet as one run.
 - [ ] Chart and validation, with the traced process tree.
@@ -509,7 +538,8 @@ All are optional. Each one removes a workaround in opp_repl.
   (`-m coverage`), and it is the weekly coverage run. The map goes into the `inet-framework/coverage`
   repository, so that people can browse it (8.4).
 - **D6 (decided 2026-11-25)** The weekly run gets the suites that the map needs and that it does
-  not run now: statistical, smoke, chart, validation and speed (8.1).
+  not run now: statistical, smoke, chart, validation and speed (8.1). The user moved this step into
+  phase 0. Speed cannot run now (section 6).
 - **D7 (decided 2026-11-25)** The `master` branch of `inet-framework/coverage` can lose old history
   (8.4).
 
@@ -525,8 +555,9 @@ Open:
 ## 14. Risks
 
 - The per-run profiles can be too slow or too large for the runners. Phase 0 measures this.
-- More suites make the weekly run longer. The fingerprint jobs already have a timeout of 150
-  minutes. The statistical, smoke and chart runs can need more jobs.
+- More suites make the weekly run longer. The jobs have a timeout of 150 minutes, and the chart job
+  has 240 minutes, because its simulations cannot be split now. If the chart job gets near the
+  limit, the split of the chart tests must also divide their simulations (an opp_repl change).
 - The map can make the `inet-framework/coverage` repository grow fast. The job drops old history
   (D7). A force push to `master` needs a deploy key that is allowed to do it.
 - Wide headers (`Packet.h`, `INETDefs.h`) select almost all tests. This is correct, but such a
