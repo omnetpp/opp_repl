@@ -67,13 +67,18 @@ def clear_coverage_profiles(simulation_project):
         os.remove(file_name)
 
 def merge_coverage_profiles(simulation_project, mode="coverage"):
-    """Merges the raw profiles of the pool into ``merged.profdata`` in the pool folder, and returns its path."""
+    """
+    Merges the profiles of the pool into ``merged.profdata`` in the pool folder, and returns its path.
+    The pool holds the raw profiles of the processes (``*.profraw``) and the profile of each run that
+    wrote a record of the test map (``<run id>.profdata``, see :py:mod:`opp_repl.test.test_map`).
+    """
     profile_folder = simulation_project.get_coverage_profile_folder()
-    profile_files = sorted(glob.glob(os.path.join(profile_folder, "*.profraw")))
-    if not profile_files:
-        raise Exception(f"No .profraw files in {profile_folder}, was the project built and run in coverage mode?")
-    input_list_file = os.path.join(profile_folder, "profraw_files.txt")
     merged_profile_file = os.path.join(profile_folder, "merged.profdata")
+    profile_files = sorted(glob.glob(os.path.join(profile_folder, "*.profraw")) +
+                           [f for f in glob.glob(os.path.join(profile_folder, "*.profdata")) if f != merged_profile_file])
+    if not profile_files:
+        raise Exception(f"No .profraw or .profdata files in {profile_folder}, was the project built and run in coverage mode?")
+    input_list_file = os.path.join(profile_folder, "profraw_files.txt")
     with open(input_list_file, "w") as f:
         f.write("\n".join(profile_files) + "\n")
     args = [get_coverage_tool(simulation_project, "llvm-profdata", mode=mode), "merge", "-sparse", f"--input-files={input_list_file}", f"-output={merged_profile_file}"]

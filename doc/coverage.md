@@ -44,6 +44,9 @@ No extra Python packages are necessary.
    if the project builds no library. The report covers only the project's C++
    folders (`cpp_folders`). The source paths are relative to the project root.
    An optional test name marks each record with the suite that produced it.
+   The pool can also hold one `<run id>.profdata` file for each run that wrote
+   a record of the test map (see below). The merge adds these files, so the
+   counts are the same as without the records.
 3. **Report.** `coverage_report()` (`opp_coverage_report`) merges one or more
    lcov files, for example the exports of several test suites or CI jobs, and
    writes a summary, a history line, Markdown and, if you ask for it, HTML.
