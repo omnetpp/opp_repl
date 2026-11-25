@@ -37,6 +37,15 @@ def get_coverage_tool(simulation_project, name, mode="coverage"):
         _logger.debug(f"Cannot find the compiler version for {name}: {e}")
     return name
 
+def get_coverage_tool_env():
+    """
+    Returns the environment for ``llvm-cov``: the environment of the process without
+    ``DEBUGINFOD_URLS``. If that variable is set (Ubuntu sets it by default), ``llvm-cov`` asks the
+    debuginfod servers over the network for each binary. For INET, an export then takes about 100 to
+    160 s instead of 2 s, and the build ids of the binaries go to the server.
+    """
+    return {key: value for key, value in os.environ.items() if key != "DEBUGINFOD_URLS"}
+
 def get_coverage_objects(simulation_project, mode="coverage"):
     """
     Returns the binaries that hold the coverage mapping of the project's own code: its dynamic
@@ -125,7 +134,7 @@ def export_coverage(simulation_project=None, output_file="coverage.lcov", test_n
             objects[0], *[f"-object={o}" for o in objects[1:]], *get_coverage_filter_args(simulation_project)]
     _logger.info(" ".join(args))
     # the lcov text of a large project has millions of lines, too many for the line logger of run_command_with_logging
-    result = subprocess.run(args, capture_output=True, text=True)
+    result = subprocess.run(args, capture_output=True, text=True, env=get_coverage_tool_env())
     if result.returncode != 0:
         raise Exception("Exporting the coverage failed:\n" + result.stderr[-2000:])
     with open(output_file, "w") as f:
@@ -144,7 +153,7 @@ def generate_coverage_report(simulation_project=None, output_dir="coverage", mod
         output_path = simulation_project.get_full_path(output_dir)
         args = [get_coverage_tool(simulation_project, "llvm-cov", mode=mode), "show", objects[0], *[f"-object={o}" for o in objects[1:]],
                 f"-instr-profile={merged_profile_file}", "-format=html", f"-output-dir={output_path}", *get_coverage_filter_args(simulation_project)]
-        run_command_with_logging(args, error_message="Generating the coverage report failed", command_line_logger=_logger)
+        run_command_with_logging(args, error_message="Generating the coverage report failed", env=get_coverage_tool_env(), command_line_logger=_logger)
     finally:
         clear_coverage_profiles(simulation_project)
     return result
