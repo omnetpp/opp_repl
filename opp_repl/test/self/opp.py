@@ -50,6 +50,7 @@ class OppTestOutputTestCase(unittest.TestCase):
         """Takes the place of opp_test: the run step writes test.out into the folder that opp_test
         makes for the test, and prints the result."""
         if args[:2] == ["opp_test", "run"]:
+            self.opp_test_env = kwargs.get("env")
             test_name = re.sub(r"[^A-Za-z0-9_]", "_", os.path.splitext(os.path.basename(args[args.index("-p") + 2]))[0])
             test_directory = os.path.join(cwd, args[args.index("-w") + 1], test_name)
             os.makedirs(test_directory, exist_ok=True)
@@ -95,6 +96,11 @@ class OppTestOutputTestCase(unittest.TestCase):
         task_result, has_output = self._run_task("PASS", expected_result="FAIL")
         self.assertFalse(task_result.expected)
         self.assertTrue(has_output)
+
+    def test_test_program_gets_the_mode_of_the_run(self):
+        # a test script that starts bin/inet without --debug or --release picks its binary from MODE
+        self._run_task("PASS")
+        self.assertEqual(self.opp_test_env["MODE"], "release")
 
     def test_test_name_with_other_characters(self):
         # opp_test changes such characters to "_" in the name of the folder
