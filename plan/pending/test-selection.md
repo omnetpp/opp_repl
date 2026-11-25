@@ -1,6 +1,6 @@
 # Change-based test selection
 
-> **Status:** phase 1 done, phase 2 next · **Owner:** opp_repl · **Also changes:** INET (weekly coverage
+> **Status:** phase 2 done except the removal of the old filter (waits for the user), phase 3 next · **Owner:** opp_repl · **Also changes:** INET (weekly coverage
 > workflow, `inet.opp`), the `inet-framework/coverage` repository, optionally omnetpp (section 11)
 
 For a change, find the tests whose outcome can differ, in every test suite, and run only those
@@ -132,6 +132,9 @@ The fingerprint tests already make these assumptions. The plan writes them down:
 3. There are no ODR violations: each inline or template function has the same definition in all
    translation units.
 4. Code that only a release build compiles (`#ifdef NDEBUG`) is handled by rule R-NDEBUG (5.1).
+5. A global variable that one translation unit defines and other translation units read does not
+   get its value from a header that the readers do not include. Rule R4 finds the code that a header
+   change can change, not the data (phase 2).
 
 ## 5. Inputs and rules
 
@@ -159,14 +162,14 @@ selects). A file belongs to the first class whose rule applies.
 | --- | --- | --- |
 | R1 | Only comments or white space, and no line shift | none |
 | R2 | Inside the body of function f, at A | the tests that ran f (all instantiations) |
-| R3 | Comment or white space only, with a line shift | as R2, for each function below the hunk in the file, because `__LINE__` changes (`ASSERT`, error messages) |
-| R4 | In a `.h` file, outside all function bodies: class definition, declaration, macro, constant, default member value, `#include` | the tests of each TU that includes the header, at A or at C |
-| R5 | Inside a `constexpr` or `consteval` function | as R4, because the compiler can evaluate it, and then no counter shows it |
+| R3 | A hunk with a line shift (another number of old and new lines), also a code hunk | only the kinds that compare a text output (the opp tests): as R2, for each function below the hunk in the file, because `__LINE__` changes. `__LINE__` goes only into log lines, error messages and the names of static objects (phase 2), so the other kinds do not change |
+| R4 | In a `.h` file, outside all function bodies: class definition, declaration, macro, constant, default member value, `#include` | the tests that ran a function f whose emitting TUs all include a changed header. Under the one-definition rule, a TU without a changed header has the same text at both sides, so its copy of f, and so all copies, stay the same. The first version of this rule, the tests of each TU that includes the header, selected all runs for 1983 of 2018 INET headers (phase 2) |
+| R5 | Inside a `constexpr` or `consteval` function, or a function with a deduced return type (`auto` without `->`; not a lambda) | as R4 in a header, R6 in a `.cc` file, because the compiler can evaluate the body, or the callers can change with it, and then no counter shows it |
 | R6 | In a `.cc` file, outside all function bodies: global data, static members, registration macros (`Define_Module`, `Register_Class`, `Register_Serializer`, and other items), `#include`, `using` | all tests that load the library, because the static initialization of each process runs this code |
 | R7 | A new or a removed `.cc` file | all tests that load the library (static initialization) |
 | R8 | A new `.h` file | none, because only a changed file can include it, and that file has its own hunk |
 | R9 | A removed `.h` file | as R4 |
-| R10 | A `.msg` file | v1: the tests of the TUs that include the generated `_m.h`, and the tests that ran a function of the `_m.cc`. v2: generate the `_m` files at both sides and apply R1–R9 to their diff. |
+| R10 | A `.msg` file | v1: as R4 for the generated `_m.h`. The `_m.cc` includes it, and each process runs the constructors of its class descriptors, so v1 selects all tests. v2: generate the `_m` files at both sides and apply R1–R9 to their diff. |
 | R11 | Build files: `Makefile`, `makefrag`, `.oppbuildspec`, `.oppfeatures`, `.oppfeaturestate`, the build fields of `inet.opp` | all tests |
 | R-NDEBUG | A function g has a release-only block (`#ifdef NDEBUG`, or the `#else` of `#ifndef NDEBUG`) that calls project functions | the map adds these callees to each run in release mode that ran g. A scan of the 15 files makes the list. For 28f1dc534c the list is empty (phase 0). |
 
@@ -192,7 +195,7 @@ declares each type. Option O1 (section 11) moves this to omnetpp.
 | N1 | Changed NED file, the same declared types | the tests that used a type of this file |
 | N2 | Types added, removed or renamed, a changed package, a new or removed NED file | N1, and the tests that used a type with the same simple name as an added type, because a name lookup can find another type |
 | N3 | `package.ned` (package, `@namespace`) | the tests that used a type in the package or below it |
-| N4 | The NED path at C does not load (syntax error, duplicate type) | all simulation tests, because each simulation loads all NED files |
+| N4 | The NED path at C does not load (syntax error, duplicate type, a declared package that does not agree with the folder, as `NedResourceCache::addFile` of omnetpp checks) | all simulation tests, because each simulation loads all NED files |
 | N5 | NED file outside the NED path | rule F1 (data file) |
 
 ### 5.3 ini
@@ -350,6 +353,7 @@ used which part of the source file of the same name:
 | `map/<path>.json` of a data file | the run ids that opened or looked up the file |
 | `map/<folder>/index.json` | for the folder: the number of runs that used something below it, for each kind |
 | `map/runs.json`, `map/tests.json`, `map/header.json` | the tables of 8.2 |
+| `map/emitter-sets.json` | the sets of more than 20 TUs that emit a function, by id (map version 2, phase 2) |
 
 A set that contains almost all runs is written as "all except ...". Phase 0 measured that this is
 enough for the fingerprint map (about 22 MB of text for 1847 runs), but the map of all suites
@@ -391,8 +395,8 @@ did this test use", and gives the summary for each folder. It reads the same fil
 
 **Commands.**
 
-- `opp_select_tests -p inet --changes <rev | rev..rev | worktree | patch file> [--map <file>]
-  [--kind <kind>...] [--explain]` prints the selected tests of each kind. `--explain` gives the rule
+- `opp_select_tests -p inet --changes <rev | rev..rev | rev...rev | worktree | patch file> [--map <folder>]
+  [--kind <kind>...] [--explain] [--summary] [--json]` prints the selected tests of each kind. `--explain` gives the rule
   and the changed place that selected each test. The summary gives "selected N of M" for each kind.
 - `--changes` on each `opp_run_*_tests` command and on `opp_run_all_tests`. This option replaces
   `affected_by_modification_filter`.
@@ -743,18 +747,87 @@ commits that change only tests and ini files).
 
 ### Phase 2 — the selection
 
-- [ ] Write the diff reader for diff(A,B) ∪ diff(A,C), with hunks and both sides of each file.
-- [ ] Write the rules of section 5 and the always-selected tests of 4.3.
-- [ ] Add `opp_select_tests` with `--explain`, and `--changes` on the `opp_run_*_tests` commands.
+Phase 2 works in the opp_repl worktree `opp_repl-test-selection` (branch `topic/test-selection`,
+from main f6d900a). The checks use the map of version 2 that the phase 1 records give
+(`opp_update_test_map --no-run`, 8 s), and a scratch INET worktree at the map commit 0af9da9b1e.
+
+- [x] Write the diff reader for diff(A,B) ∪ diff(A,C), with hunks and both sides of each file.
+  - `opp_repl/test/test_map/changes.py` (opp_repl 96f319a): `git diff -U0 --no-renames` (a rename
+    is a removal and an addition), the text of each side from git or from the working tree, and
+    the untracked files of the working tree as added files. `Changes` gives B and C for
+    `worktree`, a commit (B is its first parent), `rev1..rev2`, `rev1...rev2` (rev2 can be
+    `worktree`) and a patch file. A patch goes into a temporary index on `HEAD`
+    (`git apply --cached`, `git write-tree`), so the index and the working tree do not change.
+  - When A = B, the selection reads only diff(A,C).
+- [x] Write the rules of section 5 and the always-selected tests of 4.3.
+  - `opp_repl/test/test_map/select.py` (opp_repl ea88342). A lexer gives the tokens of each line
+    without comments and white space (white space stays a token between two punctuation
+    characters and in a directive). A hunk is trivial (R1) if its old and new tokens are the
+    same and no line outside the hunks changed its tokens (an opened comment).
+  - The body of a function in the map is the line of `{` to the line of `}`, so a hunk on the
+    signature line or on a line of a brace is outside the body.
+  - R4 changed: the rule of the plan selected all runs for 1983 of 2018 headers, because 1626 of
+    1710 TUs have all runs: inline functions that run in each process are in almost all TUs.
+    The new rule (5.1) needs all emitting TUs of each function, so the map has version 2 with
+    `emitter-sets.json` (opp_repl fa0933d, 367 sets, 2.3 MB). For each header of INET alone: 620
+    headers select all runs, 248 select none, and the median header selects 253 of 1847 runs.
+    With only the number of more than 20 emitters (version 1), 732 headers select all runs.
+  - The remaining all-run headers come from the static initialization of the TUs that include
+    them: the constructors and destructors of the generated class descriptors (each `_m.cc`),
+    the serializer registrations, the static mode tables of 802.11, and value types such as
+    `Ipv4Address` and `ClockTime` in static objects. Without the descriptors, 361 headers select
+    all runs (phase 6).
+  - R3 changed: the opp tests only (5.1). A new statement in `Ipv4::handleIndication` then
+    selects 105 instead of 2994 of 4726 fingerprint tests.
+  - N4 also checks the declared package of each new or changed NED file against the package
+    that omnetpp expects (the package of `package.ned` in the root of the NED folder, and the
+    folders below it). All 1655 NED files of INET in the NED folders agree.
+  - The environment check (4.3) compares the header of the map with this environment. The
+    opp_repl and omnetpp commits count as the same if their diff changes only documentation,
+    plan files, `opp_repl/test/test_map/` and the self tests.
+  - Checked on the full map, one change for each rule (`--changes worktree` in the scratch
+    tree, each 0.1 to 0.7 s): a comment selects 0 tests; a changed string literal in
+    `handleIcmpErrorIndication` 105 (R2, 39 runs); an `#include` all (R6); a new member in
+    `Ipv4.h` 3003 (R4, 1045 runs); `timeToLive` in `Ipv4.ned` 2994 (N1, 1042 runs); a new type
+    `inet.foo.Ipv4` 2994 (N2); a second `inet.networklayer.ipv4.Ipv4`, a NED syntax error and a
+    wrong package all (N4); a changed section of `examples/ethernet/lans/omnetpp.ini` 2 (I1),
+    a new section 0, an iteration variable in `General` 2 (I3); a data file 3 (F1); a comment in
+    `Ipv4Header.msg` all (R10); `.oppfeatures` all (R11); the statistical baseline pin in
+    `inet.opp` 0 fingerprint tests (E5); one store entry 1 (E1). The 3 tests of the run that did
+    not end normally come on top of each number.
+  - Self tests: `opp_repl/test/self/test_selection.py` (28 tests, also the rules on a small map in
+    a git repository).
+- [x] Add `opp_select_tests` with `--explain`, and `--changes` on the `opp_run_*_tests` commands.
+  - opp_repl 9cda698. All `opp_run_*_tests` commands take `--changes`, `--test-map` and
+    `--ignore-environment`. `run_fingerprint_tests` keeps the selected tests of each group of
+    ingredients, and `run_all_tests` does so for its fingerprint tests. The other kinds run all
+    tests, and the command says so. `--changes` with `--test-map-records` is an error.
+  - Checked: a dry run of the fingerprint tests of INET with the changed string literal as a
+    patch selects 105 of 4726 tests, the same as `opp_select_tests`, so the keys of the test
+    tasks are the keys of the map.
+  - The guide is the section "Select tests" of `doc/test_map.md`.
 - [ ] Remove `dependency.py`, `affected_by_modification_filter`, the `dependency_store` field and
   INET `tests/dependency.json`. Before the removal, show the evidence of section 2 that nothing
   uses them.
+  - The evidence (2026-11-25), shown to the user; the removal waits for the user's agreement:
+    - opp_repl 2a08716 (2026-04-29) added `opp_repl/simulation/dependency.py` (197 lines) and
+      `affected_by_modification_filter`. Its users are only `opp_repl/simulation/__init__.py`
+      (`import *`), `get_simulation_tasks` (`opp_repl/simulation/task.py`, the parameter and 15
+      lines), the `dependency_store` field of `SimulationProject` (`project.py`) and one line of
+      `doc/opp_files.md`. No command, test or other module calls them.
+      `opp_repl/test/self/dependency.py` tests the optional Python packages, not this code.
+    - opp_ci, opp_env, opp_dev, inet-gpl and INET (`python/`, workflows) do not use them.
+    - INET cb9d11aab7 (2026-05-07) added `tests/dependency.json` (17229 lines); three commits of
+      2026-06-12 to 2026-06-17 (for example 88098c2146) removed the entries of removed examples.
+      `inet.opp` does not set `dependency_store`, so no code reads the file.
 
 ### Phase 3 — the other suites
 
 - [ ] Statistical (with R-NDEBUG), speed (speed only after omnetpp has `--measure-cpu-usage`,
   section 6).
-- [ ] Smoke and sanitizer, after decision D2.
+- [ ] Smoke and sanitizer, after decision D2. The `#expected-result` comments of the ini files are
+  expected results of the smoke tests. The ini rule ignores comments, so they need their own
+  rule, as E1 for the store (phase 2: INET 0af9da9b1e changes only these comments).
 - [ ] The opp tests: per-test profiles and the `.d` files of the test builds; packet as one run.
 - [ ] Chart and validation, with the traced process tree.
 - [ ] Feature tests (v1 rule).
@@ -780,6 +853,12 @@ commits that change only tests and ini files).
 - [ ] I2 v2: section logic for included ini files.
 - [ ] H5: instrument omnetpp.
 - [ ] Refresh the map for each test that a selected run executes in coverage mode.
+- [ ] R4: the constructors and destructors of the generated class descriptors depend only on the
+  name of their class and of its base class, which their own `.msg` file declares. If R4 leaves
+  them out, 361 instead of 620 INET headers select all runs (phase 2). This is an assumption
+  about the generated code, so it needs a decision.
+- [ ] R2: the column of the braces, so that a change on the line of a one-line function body
+  (`int get() const { return x; }`) is inside the body.
 
 ## 13. Decisions
 
