@@ -427,7 +427,7 @@ def get_fingerprint_test_tasks(stored_only=False, **kwargs):
     return get_tasks(**kwargs)
 get_fingerprint_test_tasks.__signature__ = combine_signatures(get_fingerprint_test_tasks, collect_fingerprint_test_groups, get_fingerprint_test_task, get_simulation_tasks)
 
-def run_fingerprint_tests(test_map_records=None, **kwargs):
+def run_fingerprint_tests(test_map_records=None, changes=None, test_map=None, ignore_environment=False, **kwargs):
     """
     Runs one or more fingerprint tests that match the provided filter criteria.
 
@@ -437,6 +437,19 @@ def run_fingerprint_tests(test_map_records=None, **kwargs):
             writes its record into this folder, and its profile into the profile pool. Needs the
             coverage build (``mode="coverage"``).
 
+        changes (string or None):
+            Run only the tests whose outcome this change can change, from the test map (see
+            :py:func:`opp_repl.test.test_map.select.select_tests`): ``worktree``, a commit, a range
+            ``rev1..rev2`` or ``rev1...rev2``, or a patch file.
+
+        test_map (string or None):
+            The folder of the test map for *changes*. Default: ``coverage/test-map/map`` in the
+            project root.
+
+        ignore_environment (bool):
+            With *changes*: a difference between the environment of the map and this one gives a
+            warning instead of selecting all tests.
+
         kwargs (dict):
             The filter criteria parameters are inherited from the :py:func:`get_fingerprint_test_tasks` function.
 
@@ -445,6 +458,13 @@ def run_fingerprint_tests(test_map_records=None, **kwargs):
     """
     kwargs = apply_project_test_defaults("fingerprint", kwargs)
     multiple_fingerprint_test_tasks = get_fingerprint_test_tasks(**kwargs)
+    if changes:
+        if test_map_records:
+            raise Exception("The records of the test map need all tests, so they cannot run with a selection of changes")
+        # lazy: the test map imports the coverage module, which imports the simulation modules
+        from opp_repl.test.test_map.select import get_test_selection_for_run, select_test_tasks
+        test_selection = get_test_selection_for_run(kwargs["simulation_project"], changes, test_map=test_map, ignore_environment=ignore_environment, kinds=["fingerprint"])
+        select_test_tasks("fingerprint", multiple_fingerprint_test_tasks, test_selection)
     if test_map_records:
         if kwargs.get("mode") != "coverage":
             raise Exception("The records of the test map need the coverage build (mode coverage)")

@@ -35,6 +35,19 @@ def get_all_test_tasks(**kwargs):
     return MultipleTestTasks(tasks=test_tasks, **dict(kwargs, name="test group", start=None, end=None, concurrent=False))
 get_all_test_tasks.__signature__ = combine_signatures(get_all_test_tasks, get_simulation_tasks)
 
-def run_all_tests(**kwargs):
-    return get_all_test_tasks(**kwargs).run(**kwargs)
+def run_all_tests(changes=None, test_map=None, ignore_environment=False, **kwargs):
+    """
+    Runs the tests of all kinds. With *changes*, only the tests whose outcome the change can change
+    run (see :py:func:`opp_repl.test.fingerprint.task.run_fingerprint_tests`); a kind of test that the
+    test map does not hold runs all its tests.
+    """
+    multiple_test_tasks = get_all_test_tasks(**kwargs)
+    if changes:
+        # lazy: the test map imports the coverage module, which imports the simulation modules
+        from opp_repl.test.test_map.select import get_test_selection_for_run, select_test_tasks
+        test_selection = get_test_selection_for_run(kwargs.get("simulation_project"), changes, test_map=test_map, ignore_environment=ignore_environment)
+        for kind_test_tasks in multiple_test_tasks.tasks:
+            kind = "fingerprint" if isinstance(kind_test_tasks, MultipleFingerprintTestTasks) else kind_test_tasks.name
+            select_test_tasks(kind, kind_test_tasks, test_selection)
+    return multiple_test_tasks.run(**kwargs)
 run_all_tests.__signature__ = combine_signatures(run_all_tests, get_all_test_tasks)

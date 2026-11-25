@@ -1,6 +1,7 @@
 import argparse
 import glob
 import importlib.util
+import inspect
 import json
 import logging
 import socket
@@ -57,6 +58,9 @@ def parse_run_tasks_arguments(task_name, extra_args_fn=None):
     parser.add_argument("--no-handle-exception", dest="handle_exception", action="store_false")
     parser.add_argument("--result-file", default=None, help="write JSON result to this file; use '-' for stdout (after the text output)")
     parser.add_argument("--keep-output", choices=["unexpected", "all", "none"], default=None, help="which runs keep their output files, such as the work folder of an opp test: unexpected keeps them only when the result is not the expected result (default), all always keeps them, none always removes them")
+    parser.add_argument("--changes", default=None, help="run only the tests whose outcome this change can change, from the test map of the change-based test selection: worktree (the working tree against HEAD), a commit, a range rev1..rev2 or rev1...rev2 (rev2 can be worktree), or a patch file; a kind of test that the map does not hold runs all its tests")
+    parser.add_argument("--test-map", default=None, metavar="FOLDER", help="the folder of the test map for --changes (default: coverage/test-map/map in the project root)")
+    parser.add_argument("--ignore-environment", action="store_true", help="with --changes: give a warning instead of selecting all tests when the environment differs from the map (the omnetpp or opp_repl commit, the compiler, the features)")
     parser.set_defaults(concurrent=True, build=True, dry_run=False, handle_exception=True)
     if extra_args_fn is not None:
         extra_args_fn(parser)
@@ -101,6 +105,11 @@ def run_tasks_main(main_function, task_name, extra_args_fn=None):
         initialize_logging(args.log_level, args.external_command_log_level, args.log_file)
         _logger.debug(f"Processing command line arguments: {args}")
         kwargs = process_run_tasks_arguments(args)
+        if "changes" not in inspect.signature(main_function).parameters:
+            if kwargs.get("changes"):
+                _logger.warning(f"The test selection does not hold the {task_name} yet, so all of them run")
+            for name in ("changes", "test_map", "ignore_environment"):
+                kwargs.pop(name, None)
         _logger.debug(f"Calling main function with: {kwargs}")
         result = main_function(**kwargs)
         _logger.debug(f"Main function returned: {result}")
@@ -165,6 +174,33 @@ def show_test_map_main():
             load_opp_file(opp_file)
         map_folder = get_default_test_map_folder(determine_default_simulation_project(name=args.simulation_project), "map")
     show_test_map(map_folder, path=args.path, line=args.line, list_tests=args.list_tests, test_filter=args.test_filter)
+
+def select_tests_main():
+    parser = argparse.ArgumentParser(description="Selects, from the test map, the tests whose outcome a change can change, and prints them for each kind of test, with the changed files and the rules that selected them.")
+    parser.add_argument("--changes", default="worktree", help="the change: worktree (the working tree against HEAD, the default), a commit, a range rev1..rev2 or rev1...rev2 (rev2 can be worktree), or a patch file")
+    parser.add_argument("--map", dest="map_folder", default=None, metavar="FOLDER", help="the folder of the test map (default: coverage/test-map/map in the project root)")
+    parser.add_argument("--kind", action="append", dest="kinds", default=None, metavar="KIND", help="a kind of test, for example fingerprint; can be specified multiple times (default: the kinds of the map)")
+    parser.add_argument("--explain", action="store_true", help="also print the rules of each changed file and the reasons for each selected test")
+    parser.add_argument("--summary", action="store_true", help="print only the number of selected tests of each kind")
+    parser.add_argument("--json", action="store_true", help="print the selection as JSON")
+    parser.add_argument("--ignore-environment", action="store_true", help="give a warning instead of selecting all tests when the environment differs from the map (the omnetpp or opp_repl commit, the compiler, the features)")
+    parser.add_argument("--load", action="append", default=[], metavar="OPP_FILE", help="load one or more .opp configuration files or directories at startup")
+    parser.add_argument("-p", "--simulation-project", default=None, help="name of the simulation project (auto-detected from the working directory if not specified)")
+    parser.add_argument("-l", "--log-level", choices=["ERROR", "WARN", "INFO", "DEBUG"], default="WARN", help="controls the verbosity of log messages (default: WARN)")
+    args = parser.parse_args(sys.argv[1:])
+    initialize_logging(args.log_level, "WARN", None)
+    try:
+        for opp_file in args.load or find_opp_files():
+            load_opp_file(opp_file)
+        simulation_project = determine_default_simulation_project(name=args.simulation_project)
+        test_selection = select_tests(simulation_project=simulation_project, changes=args.changes, map_folder=args.map_folder, kinds=args.kinds, ignore_environment=args.ignore_environment)
+        if args.json:
+            print(json.dumps(test_selection.to_dict(), indent=1))
+        else:
+            print_test_selection(test_selection, explain=args.explain, list_tests=not args.summary)
+    except Exception as e:
+        _logger.error(str(e))
+        sys.exit(1)
 
 def run_chart_tests_main():
     run_tasks_main(run_chart_tests, "chart tests")

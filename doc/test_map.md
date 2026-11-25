@@ -2,9 +2,10 @@
 
 The test map tells, for each test, which C++ functions, NED types, ini sections
 and other files its runs used at one commit of the project (the map commit).
-The change-based test selection of opp_repl will read the map and a diff, and
-select only the tests that a change can affect. The selection is not written
-yet. Now the map holds the fingerprint tests.
+The change-based test selection (`opp_select_tests`, and the `--changes` option
+of the test commands) reads the map and a diff, and selects only the tests whose
+outcome the change can change. Now the map holds only the fingerprint tests; the
+tests of the other kinds all run.
 
 The map comes from a run of the tests with the coverage build (see the
 [Coverage](coverage.md) guide). The same runs also give the coverage report.
@@ -138,9 +139,95 @@ opp_show_test_map -p inet --test 'examples/ethernet/lans/omnetpp.ini:MixedLAN:'
 
 `--map FOLDER` reads another map. `show_test_map()` does the same in Python.
 
+## Select tests
+
+`opp_select_tests` prints, for each kind of test, the tests whose outcome a
+change can change:
+
+```bash
+# the working tree and its untracked files against HEAD (the default)
+opp_select_tests -p inet
+# a commit, a range, a branch since its merge base, or a patch file
+opp_select_tests -p inet --changes HEAD
+opp_select_tests -p inet --changes master..topic
+opp_select_tests -p inet --changes master...worktree
+opp_select_tests -p inet --changes fix.patch
+# also the rules of each changed file and the reasons for each test
+opp_select_tests -p inet --explain
+```
+
+The commands that run tests take the same option, and run only the selected
+tests. A kind of test that the map does not hold runs all its tests.
+
+```bash
+opp_run_fingerprint_tests -p inet --changes master...worktree
+```
+
+Options:
+
+- `--changes CHANGE` — `worktree`, a commit (against its first parent),
+  `rev1..rev2`, `rev1...rev2` (from the merge base of the two), or the path of a
+  patch file (applied to `HEAD` in a temporary index, so the working tree does
+  not change). `rev2` can be `worktree`.
+- `--map FOLDER` (`--test-map FOLDER` for the commands that run tests) — the
+  folder of the map.
+- `--kind KIND` — only this kind of test; give it more than one time for more
+  kinds.
+- `--summary` — only the numbers; `--json` — the selection as JSON.
+- `--ignore-environment` — see the list of the tests that are always selected.
+
+`select_tests(simulation_project=..., changes=...)` does the same in Python.
+
+### How the selection works
+
+The map describes the map commit A. A change goes from the base B to the target
+C. The selection reads diff(A,B) and diff(A,C), and selects each test whose
+inputs one of the two diffs changes. If neither diff changes what a test used,
+the test has the same outcome at B and at C. So an old map gives a wider
+selection, but not a wrong one.
+
+| Changed file | Selected tests |
+| --- | --- |
+| C++ file, only comments or white space | none |
+| C++ file, inside a function body | the tests that ran the function |
+| C++ source, outside the function bodies; a new or removed source | all tests, because the static initialization of each process can change |
+| C++ header, outside the function bodies; a removed header | the tests that ran a function whose emitting translation units all include a changed header |
+| C++ file, the body of a `constexpr` function or of a function with a deduced return type | as outside the function bodies |
+| `.msg` file | as its generated `_m.h` header; a new or removed `.msg` file selects all tests |
+| NED file | the tests that used a type of the file; for a new type, also the tests that used a type with the same simple name; for `package.ned`, all types of the package |
+| NED file that omnetpp cannot load: a syntax error, a type that another file declares too, a package that does not agree with the folder | all tests |
+| ini file | the tests whose section chain has a changed section; for a change of iteration variables, `repeat` or `constraint`, all tests of the ini file; the tests whose ini file includes the file |
+| fingerprint store | the tests whose entry changed, without the timestamp |
+| `.opp` file | for changed test parameters of a kind, all tests of that kind; for other changed fields, all tests |
+| build file: `Makefile` and `makefrag` in the root or in a C++ folder, `.oppbuildspec`, `.oppfeatures`, `.oppfeaturestate`, `.nedfolders`, `.nedexclusions` | all tests |
+| other file | the tests that read, examined or looked up the file; for a new or removed file, also the tests that listed its folder |
+
+A C++ change that moves lines changes `__LINE__` below it. `__LINE__` goes only
+into log lines, error messages and the names of static objects. So a moved line
+selects only the tests that compare a text output, the opp tests.
+
+These tests are always selected:
+
+- a test that is not in the map, for example a new config or a new run number;
+- a test whose run in the map did not end normally;
+- a test that matches a regular expression in the list
+  `test_parameters[kind]["test_selection"]["always"]` of the `.opp` file;
+- all tests, if the environment differs from the map: the map comes from a tree
+  with changes, the opp_repl or omnetpp commit differs in a file other than
+  documentation, or the compiler or the enabled features differ.
+  `--ignore-environment` gives a warning instead.
+
 ## Limits
 
 - Only the fingerprint tests write records now.
+- The selection is correct if the assumptions of section 4.4 of the plan
+  (`plan/pending/test-selection.md`) are true: the tests are deterministic, the
+  build mode does not change the path of the code (no undefined behavior), and
+  each inline and template function has the same definition in all translation
+  units.
+- Some rules are wide. Each process runs the constructors of the generated
+  class descriptors, so a change of a header that a `_m.cc` file includes
+  selects all tests.
 - A run that does not end normally (an exit code other than 0, no profile, or
   no section chain) has `normal_end` false in `runs.json`. Such a run can have
   used inputs that the map does not show, for example NED lookups that failed.
