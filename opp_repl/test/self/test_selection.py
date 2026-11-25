@@ -1,14 +1,20 @@
 #!/usr/bin/env python3
 """
-Tests the diff reader of the change-based test selection, and the change syntax on a git repository.
+Tests the change-based test selection: the C++ tokens and the trivial hunks, the ini sections, the
+diff reader and the change syntax on a git repository, the expected NED package, and the rules of the
+selection on a small map in a git repository.
 """
 
+import json
 import os
 import subprocess
 import tempfile
+import types
 import unittest
 
 from opp_repl.test.test_map.changes import *
+from opp_repl.test.test_map.select import *
+from opp_repl.test.test_map.select import _is_inside
 
 def git(folder, *args):
     return subprocess.run(["git", "-C", folder, *args], capture_output=True, text=True, check=True).stdout.strip()
@@ -31,6 +37,69 @@ def write_files(folder, files):
         os.makedirs(os.path.dirname(full_path), exist_ok=True)
         with open(full_path, "w") as f:
             f.write(text)
+
+class TokenTestCase(unittest.TestCase):
+    def test_comments_and_white_space_are_left_out(self):
+        tokens = tokenize_cpp_lines("int a = 1; // one\n/* two\n three */ int  b=2;\n")
+        self.assertEqual(tokens[0], ["int", "a", "=", "1", ";"])
+        self.assertEqual(tokens[1], [])
+        self.assertEqual(tokens[2], ["int", "b", "=", "2", ";"])
+
+    def test_literals_keep_their_text(self):
+        tokens = tokenize_cpp_lines('s = "a // b"; c = \'x\'; r = R"x(a\nb)x"; n = 1\'000;\n')
+        self.assertIn('"a // b"', tokens[0])
+        self.assertIn("'x'", tokens[0])
+        self.assertIn('R"x(a\nb)x"', tokens[0])
+        self.assertIn("1'000", tokens[1])
+
+    def test_white_space_between_punctuation_is_a_token(self):
+        self.assertNotEqual(tokenize_cpp_lines("a + +b;")[0], tokenize_cpp_lines("a ++b;")[0])
+        self.assertEqual(tokenize_cpp_lines("a+b;")[0], tokenize_cpp_lines("a + b;")[0])
+
+    def test_directives_keep_white_space_and_end(self):
+        self.assertNotEqual(tokenize_cpp_lines("#define F(x) x\n")[0], tokenize_cpp_lines("#define F (x) x\n")[0])
+        self.assertEqual(tokenize_cpp_lines("#include \"a.h\"\n")[0][-1], "<eod>")
+
+    def test_a_splice_continues_a_comment(self):
+        tokens = tokenize_cpp_lines("// a \\\nint x;\nint y;\n")
+        self.assertEqual(tokens[1], [])
+        self.assertEqual(tokens[2], ["int", "y", ";"])
+
+class TrivialHunkTestCase(unittest.TestCase):
+    def trivial(self, old, new, hunks):
+        return get_trivial_hunks(tokenize_cpp_lines(old), tokenize_cpp_lines(new), hunks)
+
+    def test_a_changed_comment_is_trivial(self):
+        self.assertEqual(self.trivial("int a;\n// x\nint b;\n", "int a;\n// y\nint b;\n", [(2, 1, 2, 1)]), [True])
+
+    def test_a_changed_statement_is_not_trivial(self):
+        self.assertEqual(self.trivial("int a;\nint b;\n", "int a;\nint c;\n", [(2, 1, 2, 1)]), [False])
+
+    def test_a_new_comment_line_is_trivial(self):
+        self.assertEqual(self.trivial("int a;\nint b;\n", "int a;\n// new\nint b;\n", [(1, 0, 2, 1)]), [True])
+
+    def test_an_opened_comment_makes_all_hunks_not_trivial(self):
+        # the new "/*" hides the line below the hunk
+        self.assertEqual(self.trivial("// x\nint a;\n// y */\n", "/* x\nint a;\n// y */\n", [(1, 1, 1, 1)]), [False])
+
+class InsideTestCase(unittest.TestCase):
+    def test_lines_of_the_body(self):
+        self.assertTrue(_is_inside([10, 20], 11, 2))
+        self.assertFalse(_is_inside([10, 20], 10, 1)) # the line of the opening brace
+        self.assertFalse(_is_inside([10, 20], 19, 2)) # the line of the closing brace
+        self.assertTrue(_is_inside([10, 20], 10, 0)) # new lines after the opening brace
+        self.assertFalse(_is_inside([10, 20], 20, 0)) # new lines after the closing brace
+
+class IniTestCase(unittest.TestCase):
+    def test_sections_and_entries(self):
+        sections, error = read_ini_sections('a = 1\n[General]\nb = "x # y" # comment\n[Config Foo]\nextends = Bar\ninclude other.ini\n[Bar]\nc = 1 \\\n  + 2\n')
+        self.assertIsNone(error)
+        self.assertEqual(sections["General"], [("a", "1"), ("b", '"x # y"')])
+        self.assertEqual(sections["Config Foo"], [("extends", "Bar"), ("include", "other.ini")])
+        self.assertEqual(sections["Config Bar"], [("c", "1   + 2")])
+
+    def test_a_line_that_is_not_an_entry_is_an_error(self):
+        self.assertIsNotNone(read_ini_sections("[General]\nnot an entry\n")[1])
 
 class DiffTestCase(unittest.TestCase):
     def test_parse_diff(self):
@@ -63,6 +132,154 @@ class DiffTestCase(unittest.TestCase):
             self.assertEqual(patch.base, first)
             self.assertEqual(Side(folder, patch.target).read("a.txt"), "1\nx\n3\n")
             self.assertEqual(git(folder, "status", "--porcelain", "--untracked-files=no"), "")
+
+class ExpectedNedPackageTestCase(unittest.TestCase):
+    def test_root_package_and_folders(self):
+        side = types.SimpleNamespace(read=lambda path: {"examples/package.ned": "// x\npackage inet.examples;\n"}.get(path))
+        self.assertEqual(get_expected_ned_package("examples/a/b/X.ned", ["src", "examples"], side), "inet.examples.a.b")
+        self.assertEqual(get_expected_ned_package("src/inet/X.ned", ["src", "examples"], side), "inet")
+        self.assertIsNone(get_expected_ned_package("other/X.ned", ["src", "examples"], side))
+
+class FakeProject:
+    def __init__(self, root_folder):
+        self.root_folder = root_folder
+        self.cpp_folders = ["src"]
+        self.msg_folders = ["src"]
+        self.ned_folders = ["src"]
+        self.test_parameters = {"fingerprint": {"store": "store.json"}}
+
+    def get_name(self):
+        return "fake"
+
+    def get_full_path(self, path):
+        return os.path.join(self.root_folder, path)
+
+SOURCES = {
+    "src/a.h": "#pragma once\nstruct A {\n    int x;\n    int get() {\n        return x;\n    }\n};\n",
+    "src/a.cc": "#include \"a.h\"\n\nint f()\n{\n    return 1;\n}\n\nint g()\n{\n    return 2;\n}\n",
+    "src/b.cc": "#include \"a.h\"\n\nint h()\n{\n    return 3;\n}\n",
+    "examples/omnetpp.ini": "[General]\na = 1\n[Config One]\nb = 1\n[Config Two]\nb = 2\n",
+    "examples/data.xml": "<x/>\n",
+    "store.json": json.dumps([{"working_directory": "examples", "ini_file": "omnetpp.ini", "config": "One", "run_number": 0, "sim_time_limit": "1s",
+                               "test_result": "PASS", "ingredients": "tplx", "fingerprint": "1111-1111", "timestamp": 1}]),
+}
+
+def run_entry(run_id, config, normal_end=True):
+    return {"key": f"fingerprint:examples/omnetpp.ini:{config}:#0:1s", "kind": "fingerprint", "working_directory": "examples", "ini_file": "omnetpp.ini",
+            "config": config, "run_number": 0, "sim_time_limit": "1s", "exit_code": 0, "end": None, "normal_end": normal_end,
+            "sections": [f"Config {config}", "General"]}
+
+MAP_FILES = {
+    "header.json": {"version": 2, "project": "fake"},
+    "runs.json": {"r1": run_entry("r1", "One"), "r2": run_entry("r2", "Two"), "r3": run_entry("r3", "Three", normal_end=False)},
+    "tests.json": {"fingerprint": {f"fingerprint:examples/omnetpp.ini:{config}:#0:1s:tplx": [run_id] for run_id, config in [("r1", "One"), ("r2", "Two"), ("r3", "Three")]}},
+    "src/a.h.json": {"functions": [{"lines": [4, 6], "name": "A::get()", "runs": ["r2"], "tus": ["src/b.cc"]}], "included_by": ["src/a.cc", "src/b.cc"]},
+    "src/a.cc.json": {"functions": [{"lines": [4, 6], "name": "f()", "runs": ["r1"]}, {"lines": [9, 11], "name": "g()", "runs": "all"}], "tu_runs": "all"},
+    "src/b.cc.json": {"functions": [{"lines": [4, 6], "name": "h()", "runs": ["r2"]}], "tu_runs": ["r2"]},
+    "examples/omnetpp.ini.json": {"sections": {"Config One": ["r1"], "Config Two": ["r2"], "General": ["r1", "r2"]}, "data": {"read": ["r1", "r2"]}},
+    "examples/data.xml.json": {"data": {"read": ["r2"]}},
+    "examples/index.json": {"data": 2, "listed": ["r1"]},
+}
+
+class SelectionTestCase(unittest.TestCase):
+    """The rules on a repository with two C++ files, a header, an ini file, a data file and a store, and a map of three runs."""
+    def setUp(self):
+        self.folder = tempfile.TemporaryDirectory()
+        self.root = os.path.join(self.folder.name, "project")
+        os.makedirs(self.root)
+        self.map_commit = make_repository(self.root, SOURCES)
+        self.map_folder = os.path.join(self.folder.name, "map")
+        for path, content in MAP_FILES.items():
+            full_path = os.path.join(self.map_folder, path)
+            os.makedirs(os.path.dirname(full_path), exist_ok=True)
+            with open(full_path, "w") as f:
+                json.dump(content, f)
+        self.test_map = TestMap(self.map_folder)
+        self.project = ProjectInfo(FakeProject(self.root))
+
+    def tearDown(self):
+        self.folder.cleanup()
+
+    def select(self, files):
+        write_files(self.root, files)
+        selection = select_side(self.test_map, self.project, get_file_changes(self.root, self.map_commit, WORKTREE), "A..C")
+        runs = 0
+        for bits, reason in selection.entries:
+            runs |= bits
+        return {self.test_map.run_ids[index] for index in range(len(self.test_map.run_ids)) if runs >> index & 1}, selection
+
+    def test_a_body_change_selects_the_runs_of_the_function(self):
+        runs, selection = self.select({"src/a.cc": SOURCES["src/a.cc"].replace("return 1;", "return 5;")})
+        self.assertEqual(runs, {"r1"})
+        self.assertEqual([reason.rule for _, reason in selection.entries], ["R2"])
+
+    def test_a_comment_selects_nothing(self):
+        runs, selection = self.select({"src/a.cc": SOURCES["src/a.cc"].replace("return 1;", "return 1; // one")})
+        self.assertEqual((runs, selection.everything), (set(), []))
+
+    def test_a_line_shift_is_rule_R3(self):
+        runs, selection = self.select({"src/a.cc": SOURCES["src/a.cc"].replace("int g()", "// new\nint g()")})
+        self.assertEqual([reason.rule for _, reason in selection.entries], ["R3"])
+
+    def test_a_change_outside_the_bodies_of_a_source_selects_all(self):
+        runs, selection = self.select({"src/a.cc": "#include <vector>\n" + SOURCES["src/a.cc"]})
+        self.assertEqual([reason.rule for reason in selection.everything], ["R6"])
+
+    def test_a_header_change_selects_the_functions_whose_emitters_include_it(self):
+        # all three functions of the map: each translation unit that emits them includes a.h
+        runs, selection = self.select({"src/a.h": SOURCES["src/a.h"].replace("int x;", "int x;\n    int y;")})
+        self.assertEqual(runs, {"r1", "r2", "r3"})
+        self.assertIn("R4", [reason.rule for _, reason in selection.entries])
+
+    def test_a_new_source_selects_all(self):
+        runs, selection = self.select({"src/c.cc": "int k() { return 0; }\n"})
+        self.assertEqual([reason.rule for reason in selection.everything], ["R7"])
+
+    def test_an_ini_section_selects_its_runs(self):
+        runs, selection = self.select({"examples/omnetpp.ini": SOURCES["examples/omnetpp.ini"].replace("b = 2", "b = 3")})
+        self.assertEqual(runs, {"r2"})
+
+    def test_an_iteration_variable_selects_the_runs_of_the_file(self):
+        runs, selection = self.select({"examples/omnetpp.ini": SOURCES["examples/omnetpp.ini"].replace("b = 2", "b = ${x=1,2}")})
+        self.assertEqual(runs, {"r1", "r2", "r3"})
+
+    def test_a_data_file_and_a_listed_folder(self):
+        runs, _ = self.select({"examples/data.xml": "<y/>\n"})
+        self.assertEqual(runs, {"r2"})
+        runs, _ = self.select({"examples/data.xml": SOURCES["examples/data.xml"], "examples/new.xml": "<z/>\n"})
+        self.assertEqual(runs, {"r1"})
+
+    def test_a_changed_store_entry_selects_its_test(self):
+        entries = json.loads(SOURCES["store.json"])
+        entries[0]["fingerprint"] = "2222-2222"
+        _, selection = self.select({"store.json": json.dumps(entries)})
+        self.assertEqual([(kind, key) for kind, key, _ in selection.tests], [("fingerprint", "fingerprint:examples/omnetpp.ini:One:#0:1s:tplx")])
+
+    def test_a_build_file_selects_all(self):
+        _, selection = self.select({"src/makefrag": "X = 1\n"})
+        self.assertEqual([reason.rule for reason in selection.everything], ["R11"])
+
+    def test_a_changed_timestamp_selects_nothing(self):
+        entries = json.loads(SOURCES["store.json"])
+        entries[0]["timestamp"] = 2
+        _, selection = self.select({"store.json": json.dumps(entries)})
+        self.assertEqual(selection.tests, [])
+
+class TestSelectionTestCase(unittest.TestCase):
+    def test_tests_outside_the_map_and_line_shifts(self):
+        with tempfile.TemporaryDirectory() as folder:
+            for path, content in MAP_FILES.items():
+                full_path = os.path.join(folder, path)
+                os.makedirs(os.path.dirname(full_path), exist_ok=True)
+                with open(full_path, "w") as f:
+                    json.dump(content, f)
+            test_map = TestMap(folder)
+            kind = KindSelection("fingerprint", tests=None)
+            selection = TestSelection(test_map, None, folder, [], [], {"fingerprint": kind})
+            self.assertTrue(selection.is_selected("fingerprint", "fingerprint:examples/new.ini:General:#0:1s:tplx"))
+            self.assertFalse(selection.is_selected("fingerprint", "fingerprint:examples/omnetpp.ini:One:#0:1s:tplx"))
+            self.assertTrue(selection.is_selected("smoke", "smoke:x"))
+            self.assertEqual(test_map.get_abnormal_runs(), 1 << 2)
 
 if __name__ == "__main__":
     unittest.main()
