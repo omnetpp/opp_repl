@@ -618,10 +618,19 @@ command lines of fingerprint runs), `measure.py` (times and profiles), `filetrac
     run sets (8.3).
   - Map run cost for each run: 0.33 s for the profile, about 1% for the trace, and 0.18 s for the
     section query. For the 1847 fingerprint runs, that is about 15 minutes of CPU time.
-  - Found by the way: two fingerprint runs, `tutorials/protocol -c Network4` and `-c Network6`,
-    mismatch in the local coverage build (clang 23) at both commits, but pass on GitHub
-    (clang 21). Under examination. One run of bc39ec7571
-    (`showcases/wireless/sensornetwork -c StatisticLMac`) stops with exit code 1.
+  - Error of the prototype: `capture.py` records the first task of each fingerprint group
+    (`tplx`) alone. The real test runs the group in one run, with all ingredient sets
+    (`--fingerprint 7935-71f1/tplx,0000-0000/~tNl,0000-0000/~tND`), and the `~` ingredients add
+    `--fingerprintcalculator-class=inet::FingerprintCalculator` and `--**.crcMode="computed"
+    --**.checksumMode="computed" --**.fcsMode="computed"`. So the map runs of phase 0 did not run
+    the computed CRC, checksum and FCS code, nor the INET fingerprint calculator. In 198 of the
+    200 runs the `tplx` fingerprint is the same; in `tutorials/protocol -c Network4` and
+    `-c Network6` the computed FCS changes the trajectory, and the fingerprint does not match.
+    Through opp_repl, both pass in coverage, debug and release mode. The sizes and times above
+    change only a little, but the counts of functions for each run are a little too low. Phase 1
+    must run each group as the test runs it.
+  - One run of bc39ec7571 (`showcases/wireless/sensornetwork -c StatisticLMac`) stops with exit
+    code 1 in the prototype run. I did not examine it.
 - [x] Write the numbers into this plan. Set N, the number of weeks that the history keeps (8.4).
   N = 52: with about 1.3 MB for each week for all suites, a year of history is about 90 MB.
 
