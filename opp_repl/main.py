@@ -160,6 +160,7 @@ def _update_test_map_extra_args(parser):
     parser.add_argument("-o", "--output-folder", default=None, help="the folder of the test map (default: coverage/test-map/map in the project root)")
     parser.add_argument("--build-tables", dest="build_tables_file", default=None, metavar="FILE", help="read the build tables from this file instead of making them from the coverage build")
     parser.add_argument("--no-run", dest="run", action="store_false", default=True, help="do not run the tests; write the map from the records that the folders hold")
+    parser.add_argument("--update-from", default=None, metavar="FOLDER", help="update this old map, which needs its build tables: run only the tests that the selection of the changes from the old map commit to HEAD gives, and keep the data of the old map for the other runs; fails after it writes the map if the new record of a run that the selection does not give differs from the old map (check V5)")
 
 def update_test_map_main():
     run_tasks_main(update_test_map, "tests in coverage mode with records (the fingerprint tests, or the kinds of --kind), and writes the test map of the change-based test selection;", extra_args_fn=_update_test_map_extra_args)

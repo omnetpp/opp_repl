@@ -1204,10 +1204,15 @@ of the new commands.
   the fingerprint map of a push run, `opp_run_all_tests --changes` would run all tests of each
   other kind, and that is the unfiltered campaign that `run-the-gates.md` does not ask for.
 - [ ] Updated maps (D14, 15.6), on the local branches:
-  - [ ] U1: the map holds its build tables; the header fields `update_of`, `full_commit`,
+  - [x] U1: the map holds its build tables; the header fields `update_of`, `full_commit`,
     `updates`; `commit` in `runs.json`; the data of a run from a map, with the self test of 15.6
-    item 6.
-  - [ ] U2: `--update-from` of `opp_update_test_map`, with the check of the join and the check V5.
+    item 6. `read_test_map_runs` of `writer.py`. Checked also on the 4751 chart records of phase
+    4: the second map is the same as the first in each file, except `unresolved_ned_types` of the
+    header (the map does not tell which run used a NED type outside the NED type table); 20 s to
+    read the runs of the map.
+  - [x] U2: `--update-from` of `opp_update_test_map`, with the check of the join and the check V5
+    (`get_updated_test_map_records`). A run command now accepts `--changes` with
+    `--test-map-records`: such records are the new records of an update.
   - [ ] U3: `--sample FRACTION` of the run commands and of `opp_select_tests`.
   - [ ] U4: `doc/test_map.md`.
   - [ ] U5: INET `get-test-map.sh` (`FULL_ONLY`, `NEED_BUILD_TABLES`, the scheduled runs,

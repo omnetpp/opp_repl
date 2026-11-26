@@ -78,6 +78,23 @@ def get_fingerprint_ingredients(args):
             return [fingerprint.split("/", 1)[1] for fingerprint in value.split(",") if "/" in fingerprint]
     return []
 
+def _get_record_functions(record):
+    # the functions that the run ran: in memory for a run of an old map, else in functions.txt.gz of its folder
+    if "functions" in record:
+        return record["functions"]
+    functions_file = os.path.join(record["folder"], "functions.txt.gz")
+    if not os.path.exists(functions_file):
+        return []
+    with gzip.open(functions_file, "rt") as f:
+        return [name for name in f.read().split("\n") if name]
+
+def _get_record_files(record):
+    # the (kind, path) pairs of the files that the run used: in memory for a run of an old map, else in files.txt of its folder
+    if "files" in record:
+        return record["files"]
+    with open(os.path.join(record["folder"], "files.txt"), errors="surrogateescape") as f:
+        return [tuple(line.rstrip("\n").partition(" ")[::2]) for line in f]
+
 class RunSets:
     """Writes a set of runs, given as a bit set over the run indices, as ``"all"``, ``{"except": [...]}`` or a list of run ids."""
     def __init__(self, run_ids):
@@ -199,6 +216,93 @@ def read_test_map_members(records_folders):
                 members[os.path.basename(members_file)[:-len("-tests.json")]].update(json.load(f))
     return dict(members)
 
+# the files of a map that describe the map and not a file of the project
+TEST_MAP_TOP_LEVEL_FILES = ["header.json", "runs.json", "tests.json", "emitter-sets.json", "release-only.json"]
+
+def read_test_map_runs(map_folder, build_tables):
+    """
+    Returns the data of each run of the map in *map_folder* as records for :py:func:`write_test_map`,
+    sorted by run id, and the members of the kinds whose test is not one run (as
+    :py:func:`read_test_map_members` gives them). *build_tables* are the build tables of the map
+    commit: the map gives only the line range of a function that a run ran, and the function table
+    gives the names of the functions of each line range.
+
+    A record holds the functions, the files, the listed folders, the NED types (with their closure),
+    the section chain, the headers that the own code of a test includes, and the entry of the run in
+    ``runs.json``. The writer, with these records and the same build tables, writes the same map
+    (section 15.6 of the test selection plan), except the NED types of the header that are not in the
+    NED type table: the map does not tell which run used them.
+    """
+    def read(path):
+        with open(os.path.join(map_folder, path), errors="surrogateescape") as f:
+            return json.load(f)
+    header = read("header.json")
+    runs = read("runs.json")
+    tests = read("tests.json")
+    run_ids = sorted(runs)
+    def decode(value):
+        if value == "all":
+            return run_ids
+        if isinstance(value, dict):
+            excluded = set(value["except"])
+            return [run_id for run_id in run_ids if run_id not in excluded]
+        return value
+    names = collections.defaultdict(list)
+    for name, file_name, first_line, last_line in build_tables["functions"]:
+        names[(file_name, first_line, last_line)].append(name)
+    data = {run_id: {"functions": set(), "files": set(), "ned_types": set(), "includes": set()} for run_id in run_ids}
+    for folder, _, file_names in os.walk(map_folder):
+        relative_folder = os.path.relpath(folder, map_folder)
+        relative_folder = "" if relative_folder == "." else relative_folder
+        for file_name in file_names:
+            if not file_name.endswith(".json") or (not relative_folder and file_name in TEST_MAP_TOP_LEVEL_FILES):
+                continue
+            obj = read(os.path.join(relative_folder, file_name))
+            if file_name == "index.json":
+                for run_id in decode(obj.get("listed", [])):
+                    data[run_id]["files"].add(("listed", relative_folder))
+                continue
+            path = os.path.join(relative_folder, file_name[:-len(".json")])
+            for item in obj.get("functions", []):
+                if "runs" in item:
+                    function_names = names.get((path, *item["lines"]))
+                    if not function_names:
+                        raise Exception(f"The build tables have no function at {path}:{item['lines'][0]}-{item['lines'][1]}, so they are not the build tables of the map {map_folder}")
+                    for run_id in decode(item["runs"]):
+                        data[run_id]["functions"].update(function_names)
+            for kind, value in obj.get("data", {}).items():
+                for run_id in decode(value):
+                    data[run_id]["files"].add((kind, path))
+            for qname, value in obj.get("types", {}).items():
+                for run_id in decode(value):
+                    data[run_id]["ned_types"].add(qname)
+            for run_id in decode(obj.get("test_runs", [])):
+                data[run_id]["includes"].add(path)
+    ingredients = collections.defaultdict(list)
+    for key, test_run_ids in tests.get("fingerprint", {}).items():
+        for run_id in test_run_ids:
+            if key.startswith(runs[run_id]["key"] + ":"):
+                ingredients[run_id].append(key[len(runs[run_id]["key"]) + 1:])
+    records = []
+    for run_id in run_ids:
+        run = runs[run_id]
+        record = {name: run[name] for name in ("key", "kind", "working_directory", "ini_file", "config", "run_number", "sim_time_limit", "exit_code", "end", "sections")}
+        record.update(id=run_id, commit=run.get("commit") or header.get("commit"),
+                      # is_normal_end() of the record gives the value of the map
+                      profile=run["normal_end"], functions=sorted(data[run_id]["functions"]), files=sorted(data[run_id]["files"]),
+                      ned_types=sorted(data[run_id]["ned_types"]), includes=sorted(data[run_id]["includes"]))
+        if run["kind"] == "fingerprint":
+            record["ingredients"] = ingredients[run_id]
+        records.append(record)
+    # a kind whose test keys are not the keys of their runs (the chart tests) has members
+    members = {}
+    for kind, kind_tests in tests.items():
+        if kind in ("fingerprint", "sanitizer"):
+            continue
+        if any(len(test_run_ids) != 1 or runs[test_run_ids[0]]["key"] != key for key, test_run_ids in kind_tests.items()):
+            members[kind] = {key: [runs[run_id]["key"] for run_id in test_run_ids] for key, test_run_ids in kind_tests.items()}
+    return records, members
+
 def write_test_map(records, build_tables, root_folder, output_folder, header=None, tracked_files=None, release_only_blocks=None, members=None):
     """
     Writes the test map of *records* (see :py:func:`read_test_map_records`) and *build_tables* (see
@@ -226,12 +330,8 @@ def write_test_map(records, build_tables, root_folder, output_folder, header=Non
     # the functions that ran
     function_runs = collections.defaultdict(list)
     for index, record in enumerate(records):
-        functions_file = os.path.join(record["folder"], "functions.txt.gz")
-        if os.path.exists(functions_file):
-            with gzip.open(functions_file, "rt") as f:
-                for name in f.read().split("\n"):
-                    if name:
-                        function_runs[name].append(index)
+        for name in _get_record_functions(record):
+            function_runs[name].append(index)
     _logger.info(f"Read the functions of {len(records)} runs ({time.time() - start_time:.1f} s)")
     functions = build_tables["functions"]
     emitters = build_tables["emitters"]
@@ -327,13 +427,11 @@ def write_test_map(records, build_tables, root_folder, output_folder, header=Non
     data_bits = collections.defaultdict(lambda: collections.defaultdict(int))
     listed_bits = collections.defaultdict(int)
     for index, record in enumerate(records):
-        with open(os.path.join(record["folder"], "files.txt"), errors="surrogateescape") as f:
-            for line in f:
-                kind, _, path = line.rstrip("\n").partition(" ")
-                if kind == "listed":
-                    listed_bits[path] |= 1 << index
-                elif kind == "lookup" or path in tracked_files:
-                    data_bits[path][kind] |= 1 << index
+        for kind, path in _get_record_files(record):
+            if kind == "listed":
+                listed_bits[path] |= 1 << index
+            elif kind == "lookup" or path in tracked_files:
+                data_bits[path][kind] |= 1 << index
     for file_name, kinds in data_bits.items():
         files[file_name]["data"] = {kind: run_sets.to_json(bits) for kind, bits in kinds.items()}
         for bits in kinds.values():
@@ -371,9 +469,11 @@ def write_test_map(records, build_tables, root_folder, output_folder, header=Non
     for record in records:
         runs[record["id"]] = {"key": record["key"], "kind": record["kind"], "working_directory": record["working_directory"], "ini_file": record["ini_file"],
                               "config": record["config"], "run_number": record["run_number"], "sim_time_limit": record["sim_time_limit"],
-                              "exit_code": record["exit_code"], "end": record["end"], "normal_end": is_normal_end(record), "sections": record["sections"]}
+                              "exit_code": record["exit_code"], "end": record["end"], "normal_end": is_normal_end(record), "sections": record["sections"],
+                              # the commit of the record: an updated map keeps the runs of the old map (15.6 of the plan)
+                              "commit": record.get("commit") or (header or {}).get("commit")}
         if record["kind"] == "fingerprint":
-            for ingredients in get_fingerprint_ingredients(record["args"]):
+            for ingredients in record["ingredients"] if "ingredients" in record else get_fingerprint_ingredients(record["args"]):
                 tests["fingerprint"][record["key"] + ":" + ingredients] = [record["id"]]
         elif record["kind"] not in (members or {}):
             tests[record["kind"]][record["key"]] = [record["id"]]
@@ -450,11 +550,146 @@ def get_test_map_run_function(kind):
     module_name, function_name = TEST_MAP_RUN_FUNCTIONS[kind]
     return getattr(importlib.import_module(module_name), function_name)
 
-def update_test_map(simulation_project=None, records_folders=None, output_folder=None, build_tables_file=None, run=True, kinds=None, **kwargs):
+# the file of the build tables in a map: an update of the map needs them (section 15.6 of the plan)
+TEST_MAP_BUILD_TABLES_FILE = "build-tables.json.gz"
+
+def _get_entries_of_functions(build_tables):
+    # the line range (file, first line, last line) of each function name of the function table
+    return {name: (file_name, first_line, last_line) for name, file_name, first_line, last_line in build_tables["functions"]}
+
+def _get_run_data(record, tracked_files, build_tables, old_entries):
+    # the data of a run that check V5 compares: the function bodies of the old function table that
+    # it ran (and the names that the old table does not have), the files as the map holds them, the
+    # NED types of the NED type table, the section chain, the includes and the end
+    new_names = {name for name, _, _, _ in build_tables["functions"]}
+    functions = set()
+    unknown = set()
+    for name in _get_record_functions(record):
+        if name in old_entries:
+            functions.add(old_entries[name])
+        elif name in new_names:
+            unknown.add(name)
+    files = {(kind, path) for kind, path in _get_record_files(record) if kind in ("listed", "lookup") or (kind and path in tracked_files)}
+    ned_types = {qname for qname in get_ned_type_closure(record["ned_types"] or [], build_tables["ned_types"]) if qname in build_tables["ned_types"]}
+    return {"functions": functions, "functions that the old map does not have": unknown, "files": files, "NED types": ned_types,
+            "sections": record["sections"], "includes": set(record.get("includes") or []), "end": (record["exit_code"], record["end"])}
+
+def _compare_run_data(new, old):
+    # the differences of two results of _get_run_data, as text
+    differences = []
+    for name, new_value in new.items():
+        old_value = old.get(name, set() if isinstance(new_value, set) else None)
+        if isinstance(new_value, set):
+            for label, values in (("also", new_value - old_value), ("no longer", old_value - new_value)):
+                if values:
+                    examples = ", ".join(":".join(map(str, value)) if isinstance(value, tuple) else str(value) for value in sorted(values)[:3])
+                    differences.append(f"{name}: {label} {len(values)}, for example {examples}")
+        elif new_value != old_value:
+            differences.append(f"{name}: {new_value} instead of {old_value}")
+    return differences
+
+def get_updated_test_map_records(simulation_project, old_map_folder, records, members, build_tables, tracked_files=None):
+    """
+    Returns the records and the members of the map that updates the map in *old_map_folder* with the
+    new *records* and *members* of the build tables *build_tables* (section 15.6 of the test selection
+    plan). The selection of the changes from the old map commit to ``HEAD``, with the old map, decides:
+
+    - a run with a new record gets the new record;
+    - another run of the old map that the selection does not give, and whose test is a test at
+      ``HEAD``, keeps the data of the old map (:py:func:`read_test_map_runs`), if each function body
+      that it ran keeps a name in the new function table;
+    - the map has no other run, so the selection always gives its tests.
+
+    Returns (tuple):
+        the records, the members, the fields of the header (``update_of``, ``full_commit`` and
+        ``updates``; a map without old runs is a full map), and the differences of check V5: for each
+        new record of a run that the selection does not give, how its data differ from the old map.
+    """
+    from opp_repl.test.test_map.build import read_test_map_build_tables
+    from opp_repl.test.test_map.select import TestMap, select_tests
+    root_folder = simulation_project.get_full_path(".")
+    if tracked_files is None:
+        tracked_files = set(subprocess.run(["git", "-C", root_folder, "ls-files", "-z"], capture_output=True, text=True, check=True).stdout.split("\0"))
+    old_build_tables_file = os.path.join(old_map_folder, TEST_MAP_BUILD_TABLES_FILE)
+    if not os.path.exists(old_build_tables_file):
+        raise Exception(f"The map {old_map_folder} has no {TEST_MAP_BUILD_TABLES_FILE}, so it cannot be updated; make a full map")
+    old_map = TestMap(old_map_folder)
+    old_header = old_map.header
+    if old_header.get("version") != TEST_MAP_VERSION:
+        raise Exception(f"The map {old_map_folder} has version {old_header.get('version')}, so it cannot be updated to version {TEST_MAP_VERSION}; make a full map")
+    old_commit = old_header.get("commit")
+    if old_header.get("changed_files") or not old_commit:
+        raise Exception(f"The map {old_map_folder} does not describe a commit, so it cannot be updated; make a full map")
+    old_build_tables = read_test_map_build_tables(old_build_tables_file)
+    if subprocess.run(["git", "-C", root_folder, "merge-base", "--is-ancestor", old_commit, "HEAD"], capture_output=True).returncode != 0:
+        raise Exception(f"The commit {old_commit[:10]} of the map {old_map_folder} is not an ancestor of HEAD, so the map cannot be updated")
+    selection = select_tests(simulation_project=simulation_project, changes=f"{old_commit}..HEAD", map_folder=old_map_folder)
+    selected = set()
+    for kind, kind_selection in selection.kinds.items():
+        kind_tests = old_map.tests.get(kind, {})
+        keys = kind_tests if kind_selection.everything else kind_selection.selected
+        for key in keys:
+            selected.update(kind_tests.get(key, []))
+    universe = {kind: set(kind_selection.tests) for kind, kind_selection in selection.kinds.items() if kind_selection.tests is not None}
+    old_records, old_members = read_test_map_runs(old_map_folder, old_build_tables)
+    old_entries = _get_entries_of_functions(old_build_tables)
+    new_names = {name for name, _, _, _ in build_tables["functions"]}
+    names_of_entries = collections.defaultdict(list)
+    for name, entry in old_entries.items():
+        names_of_entries[entry].append(name)
+    new_ids = {record["id"] for record in records}
+    old_by_id = {record["id"]: record for record in old_records}
+    kept = []
+    counts = collections.Counter()
+    for old_record in old_records:
+        run_id = old_record["id"]
+        if run_id in new_ids:
+            counts["new"] += 1
+        elif run_id in selected:
+            counts["selected without a new record"] += 1
+        elif any(kind in universe and not any(key in universe[kind] for key in keys) for kind, keys in _group_tests(old_map.run_tests.get(old_map.run_index[run_id], [])).items()):
+            counts["not a test at HEAD"] += 1
+        elif not all(any(name in new_names for name in names_of_entries[entry]) for entry in {old_entries[name] for name in old_record["functions"]}):
+            counts["a function without a name in the new build tables"] += 1
+        else:
+            kept.append(old_record)
+    _logger.info(f"The update of the map of {old_commit[:10]} keeps {len(kept)} runs of {len(old_records)}; the others: {dict(counts)}")
+    differences = {}
+    for record in records:
+        if record["id"] in old_by_id and record["id"] not in selected:
+            new_data = _get_run_data(record, tracked_files, build_tables, old_entries)
+            old_record = old_by_id[record["id"]]
+            old_data = {"functions": {old_entries[name] for name in old_record["functions"]}, "functions that the old map does not have": set(),
+                        "files": set(old_record["files"]), "NED types": {qname for qname in old_record["ned_types"] if qname in build_tables["ned_types"]},
+                        "sections": old_record["sections"], "includes": set(old_record["includes"]), "end": (old_record["exit_code"], old_record["end"])}
+            run_differences = _compare_run_data(new_data, old_data)
+            if run_differences:
+                differences[record["key"]] = run_differences
+    result_ids = new_ids | {record["id"] for record in kept}
+    result_members = {}
+    for kind, kind_members in old_members.items():
+        # a test keeps its old members only if the map has all of its runs
+        result_members[kind] = {key: run_keys for key, run_keys in kind_members.items() if all(get_test_map_run_id(run_key) in result_ids for run_key in run_keys)}
+    for kind, kind_members in (members or {}).items():
+        result_members.setdefault(kind, {}).update(kind_members)
+    if kept:
+        header = {"update_of": old_commit, "full_commit": old_header.get("full_commit") or old_commit, "updates": (old_header.get("updates") or 0) + 1}
+    else:
+        header = {"updates": 0}
+    return sorted(records + kept, key=lambda record: record["id"]), result_members, header, differences
+
+def _group_tests(run_tests):
+    # the test keys of a run for each kind
+    result = collections.defaultdict(list)
+    for kind, key in run_tests:
+        result[kind].append(key)
+    return result
+
+def update_test_map(simulation_project=None, records_folders=None, output_folder=None, build_tables_file=None, run=True, kinds=None, update_from=None, sample=None, **kwargs):
     """
     Makes the test map: runs the tests of each kind in coverage mode with records (unless *run* is
     false), makes the build tables of the coverage build (unless *build_tables_file* gives them),
-    and writes the map.
+    and writes the map. The map holds its build tables (``build-tables.json.gz``).
 
     Parameters:
         records_folders (list of strings or None):
@@ -475,6 +710,17 @@ def update_test_map(simulation_project=None, records_folders=None, output_folder
         kinds (list of strings or None):
             The kinds of test that run, one after the other, for example ``["fingerprint",
             "statistical"]`` (see :py:data:`TEST_MAP_RUN_FUNCTIONS`). Default: ``["fingerprint"]``.
+
+        update_from (string or None):
+            The folder of an old map, which can be *output_folder*. The run runs only the tests that
+            the selection of the changes from the old map commit to ``HEAD`` gives, and the map keeps
+            the data of the old map for the other runs (see :py:func:`get_updated_test_map_records`).
+            The command fails after it writes the map if the new record of a run that the selection
+            does not give differs from the old map (check V5).
+
+        sample (float or None):
+            With *update_from*: the part of the tests that the selection does not give that also run,
+            chosen at random, for check V5.
 
         kwargs (dict):
             The parameters of the run command of each kind, for example
@@ -498,16 +744,34 @@ def update_test_map(simulation_project=None, records_folders=None, output_folder
     result = None
     if run:
         clear_test_map_records(records_folders[0])
+        if update_from:
+            with open(os.path.join(update_from, "header.json")) as f:
+                kwargs = dict(kwargs, changes=f"{json.load(f)['commit']}..HEAD", test_map=os.path.abspath(update_from), **({"sample": sample} if sample else {}))
         results = [run_function(simulation_project=simulation_project, test_map_records=records_folders[0], **dict(kwargs, mode=mode)) for run_function in run_functions]
         result = results[0] if len(results) == 1 else MultipleTestTaskResults(results=results)
     if build_tables_file:
         build_tables = read_test_map_build_tables(build_tables_file)
     else:
         build_tables = make_test_map_build_tables(simulation_project, merge_coverage_profiles(simulation_project, mode=mode), mode=mode)
-        write_test_map_build_tables(build_tables, os.path.join(records_folders[0], "build-tables.json.gz"))
+        write_test_map_build_tables(build_tables, os.path.join(records_folders[0], TEST_MAP_BUILD_TABLES_FILE))
     records = read_test_map_records(records_folders)
+    members = read_test_map_members(records_folders)
+    header = get_test_map_header(simulation_project, mode=mode)
+    differences = {}
+    if update_from:
+        records, members, header_fields, differences = get_updated_test_map_records(simulation_project, os.path.abspath(update_from), records, members, build_tables)
+        header.update(header_fields)
+    else:
+        header.update(updates=0)
+    if header["updates"] == 0:
+        header["full_commit"] = header["commit"]
     if not records:
         raise Exception(f"No records of the test map in {', '.join(records_folders)}")
-    write_test_map(records, build_tables, simulation_project.get_full_path("."), output_folder, header=get_test_map_header(simulation_project, mode=mode),
-                   release_only_blocks=get_release_only_blocks(simulation_project), members=read_test_map_members(records_folders))
+    write_test_map(records, build_tables, simulation_project.get_full_path("."), output_folder, header=header,
+                   release_only_blocks=get_release_only_blocks(simulation_project), members=members)
+    write_test_map_build_tables(build_tables, os.path.join(output_folder, TEST_MAP_BUILD_TABLES_FILE))
+    if differences:
+        for key, run_differences in sorted(differences.items()):
+            _logger.error(f"Check V5: the run {key} differs from the old map, which the selection did not select it for: {'; '.join(run_differences)}")
+        raise Exception(f"Check V5 failed: the new records of {len(differences)} runs that the selection did not give differ from the old map; the map is written")
     return result

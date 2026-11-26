@@ -370,9 +370,143 @@ class WriterTestCase(unittest.TestCase):
         self.assertEqual((result.stdout, result.returncode), ("before\nafter arg\n", 3))
         self.assertEqual(read_ned_types_file(folder), ["x.Net"])
 
+    def assert_same_map_again(self, records, members=None):
+        # the writer, with the data of the runs of a map and the same build tables, writes the same map
+        import json
+        first = os.path.join(self.folder.name, "first")
+        second = os.path.join(self.folder.name, "second")
+        write_test_map(records, self.build_tables, self.folder.name, first, header={"project": "x"}, tracked_files={"examples/x/data.xml"}, members=members)
+        runs, read_members = read_test_map_runs(first, self.build_tables)
+        write_test_map(runs, self.build_tables, self.folder.name, second, header={"project": "x"}, tracked_files={"examples/x/data.xml"}, members=read_members)
+        def read_files(folder):
+            result = {}
+            for path, _, names in os.walk(folder):
+                for name in names:
+                    with open(os.path.join(path, name)) as f:
+                        result[os.path.relpath(os.path.join(path, name), folder)] = json.load(f)
+            return result
+        self.assertEqual(read_files(first), read_files(second))
+        return runs
+
+    def test_the_data_of_the_runs_give_the_same_map(self):
+        runs = self.assert_same_map_again(read_test_map_records([self.records_folder]))
+        self.assertEqual(runs[1]["functions"], ["_Z1fv", "_Z1hv"])
+        self.assertEqual(runs[1]["files"], [("lookup", "examples/x/missing.xml"), ("read", "examples/x/data.xml")])
+        self.assertEqual(runs[2]["files"], [("listed", "examples/x")])
+        self.assertEqual(runs[0]["ingredients"], ["tplx", "~tNl"])
+        self.assertEqual([is_normal_end(run) for run in runs], [True, True, False])
+
+    def test_the_data_of_smoke_opp_and_chart_runs_give_the_same_map(self):
+        records = read_test_map_records([self.records_folder])
+        records[0] = dict(records[0], kind="smoke", key="smoke:examples/x/omnetpp.ini:C0:#0:1s")
+        records[1] = dict(records[1], kind="unit", key="unit:tests/unit/A.test", ini_file=None, includes=["src/a/A.h", "tests/unit/Support.h"])
+        records[2] = dict(records[2], kind="chart", key="chart:examples/x/omnetpp.ini:C2:#0:1s")
+        runs = self.assert_same_map_again(records, members={"chart": {"chart:examples/x/r.anf:1": ["chart:examples/x/omnetpp.ini:C2:#0:1s"]}})
+        self.assertEqual(runs[1]["includes"], ["src/a/A.h", "tests/unit/Support.h"])
+
+    def test_the_build_tables_of_another_commit_are_refused(self):
+        build_tables = dict(self.build_tables, functions=[["_Z1fv", "src/a/A.cc", 11, 20]] + self.build_tables["functions"][1:])
+        with self.assertRaises(Exception):
+            read_test_map_runs(self.map_folder, build_tables)
+
     def test_fingerprint_ingredients(self):
         self.assertEqual(get_fingerprint_ingredients(["--fingerprint", "1234-5678/tplx,0000-0000/~tND"]), ["tplx", "~tND"])
         self.assertEqual(get_fingerprint_ingredients(["--fingerprint=1234-5678/tplx"]), ["tplx"])
+
+class UpdateTestCase(unittest.TestCase):
+    """
+    The update of a map (section 15.6 of the plan) with the runs of WriterTestCase: r000000000 and
+    r000000001 ran f, only r000000002 ran g. The selection is a stub that gives the tests of the runs
+    in self.selected.
+    """
+
+    def setUp(self):
+        import json
+        self.writer = WriterTestCase()
+        self.writer.setUp()
+        self.folder = self.writer.folder.name
+        self.build_tables = self.writer.build_tables
+        for args in (["init", "-q"], ["config", "user.email", "test@example.com"], ["config", "user.name", "test"]):
+            subprocess.run(["git", "-C", self.folder, *args], check=True)
+        os.makedirs(os.path.join(self.folder, "examples/x"))
+        open(os.path.join(self.folder, "examples/x/data.xml"), "w").close()
+        subprocess.run(["git", "-C", self.folder, "add", "examples/x/data.xml"], check=True)
+        subprocess.run(["git", "-C", self.folder, "commit", "-q", "-m", "first"], check=True)
+        self.commit = subprocess.run(["git", "-C", self.folder, "rev-parse", "HEAD"], capture_output=True, text=True, check=True).stdout.strip()
+        self.old_map = os.path.join(self.folder, "old-map")
+        self.old_records = read_test_map_records([self.writer.records_folder])
+        write_test_map(self.old_records, self.build_tables, self.folder, self.old_map, header={"version": TEST_MAP_VERSION, "project": "x", "commit": self.commit},
+                       tracked_files={"examples/x/data.xml"})
+        write_test_map_build_tables(dict(self.build_tables, version=TEST_MAP_BUILD_TABLES_VERSION), os.path.join(self.old_map, TEST_MAP_BUILD_TABLES_FILE))
+        with open(os.path.join(self.old_map, "tests.json")) as f:
+            self.tests = json.load(f)["fingerprint"]
+        self.selected = set()
+        self.universe = sorted(self.tests)
+        self.project = types.SimpleNamespace(get_full_path=lambda path: os.path.join(self.folder, path))
+
+    def tearDown(self):
+        self.writer.tearDown()
+
+    def update(self, records, build_tables=None):
+        import unittest.mock
+        from opp_repl.test.test_map.select import KindSelection
+        def select_tests(**kwargs):
+            kind_selection = KindSelection("fingerprint", tests=self.universe)
+            kind_selection.selected = {key: ["stub"] for key, run_ids in self.tests.items() if set(run_ids) & self.selected}
+            return types.SimpleNamespace(kinds={"fingerprint": kind_selection})
+        with unittest.mock.patch("opp_repl.test.test_map.select.select_tests", select_tests):
+            return get_updated_test_map_records(self.project, self.old_map, records, {}, build_tables or self.build_tables, tracked_files={"examples/x/data.xml"})
+
+    def test_a_run_that_the_selection_does_not_give_keeps_its_old_data(self):
+        self.selected = {"r000000001"}
+        records, _, header, differences = self.update([self.old_records[1]])
+        self.assertEqual([(record["id"], "folder" in record) for record in records], [("r000000000", False), ("r000000001", True), ("r000000002", False)])
+        self.assertEqual(records[2]["functions"], ["_Z1gv"])
+        self.assertEqual((header, differences), ({"update_of": self.commit, "full_commit": self.commit, "updates": 1}, {}))
+
+    def test_a_selected_run_without_a_new_record_leaves_the_map(self):
+        self.selected = {"r000000001"}
+        records, _, _, _ = self.update([])
+        self.assertEqual([record["id"] for record in records], ["r000000000", "r000000002"])
+
+    def test_a_run_without_a_test_at_the_new_commit_leaves_the_map(self):
+        self.universe = [key for key in self.tests if "C2" not in key]
+        records, _, _, _ = self.update([])
+        self.assertEqual([record["id"] for record in records], ["r000000000", "r000000001"])
+
+    def test_a_run_whose_function_has_no_name_in_the_new_build_tables_leaves_the_map(self):
+        build_tables = dict(self.build_tables, functions=[function for function in self.build_tables["functions"] if function[0] != "_Z1gv"])
+        records, _, _, _ = self.update([], build_tables=build_tables)
+        self.assertEqual([record["id"] for record in records], ["r000000000", "r000000001"])
+
+    def test_check_V5_compares_the_new_record_of_a_run_that_the_selection_does_not_give(self):
+        import gzip
+        records, _, _, differences = self.update([self.old_records[0]])
+        self.assertEqual(differences, {})
+        with gzip.open(os.path.join(self.old_records[0]["folder"], "functions.txt.gz"), "wt") as f:
+            f.write("_Z1fv\n_Z1gv\n")
+        _, _, _, differences = self.update([self.old_records[0]])
+        self.assertEqual(list(differences), [self.old_records[0]["key"]])
+        self.assertEqual(differences[self.old_records[0]["key"]], ["functions: also 1, for example src/a/A.cc:30:40"])
+
+    def test_an_update_without_old_runs_is_a_full_map(self):
+        self.selected = {"r000000000", "r000000001", "r000000002"}
+        _, _, header, _ = self.update(self.old_records)
+        self.assertEqual(header, {"updates": 0})
+
+    def test_the_header_counts_the_updates_since_the_full_map(self):
+        import json
+        with open(os.path.join(self.old_map, "header.json")) as f:
+            header = json.load(f)
+        with open(os.path.join(self.old_map, "header.json"), "w") as f:
+            json.dump(dict(header, update_of="0" * 40, full_commit="1" * 40, updates=2), f)
+        _, _, header, _ = self.update([])
+        self.assertEqual(header, {"update_of": self.commit, "full_commit": "1" * 40, "updates": 3})
+
+    def test_a_map_without_build_tables_cannot_be_updated(self):
+        os.remove(os.path.join(self.old_map, TEST_MAP_BUILD_TABLES_FILE))
+        with self.assertRaises(Exception):
+            self.update([])
 
 class FileTraceLibraryTestCase(unittest.TestCase):
     def test_library_traces_a_process(self):

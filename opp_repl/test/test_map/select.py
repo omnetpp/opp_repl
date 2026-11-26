@@ -1643,11 +1643,10 @@ def apply_test_map_options(kind, multiple_test_tasks, kwargs, test_map_records=N
     Applies the options of the test map to the tasks of a run command of *kind*, and returns the
     keyword arguments for the run of the tasks. With *changes*, only the selected tests stay (see
     :py:func:`select_tests`). With *test_map_records*, each run writes its record into this folder
-    (see :py:mod:`opp_repl.test.test_map.record`); the records need all tests and the coverage build.
+    (see :py:mod:`opp_repl.test.test_map.record`); the records need the coverage build. Records of a
+    selection are the new records of an update of the map (``opp_update_test_map --update-from``).
     """
     if changes:
-        if test_map_records:
-            raise Exception("The records of the test map need all tests, so they cannot run with a selection of changes")
         test_selection = get_test_selection_for_run(kwargs["simulation_project"], changes, test_map=test_map, ignore_environment=ignore_environment, kinds=[kind])
         select_test_tasks(kind, multiple_test_tasks, test_selection)
     if test_map_records:
