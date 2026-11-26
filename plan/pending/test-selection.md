@@ -1,6 +1,6 @@
 # Change-based test selection
 
-> **Status:** phases 0-4 done; phase 5 next · open: the finding for D12 (phase 4) ·
+> **Status:** phases 0-4 done; phase 5 in progress on local branches (no push) ·
 > **Owner:** opp_repl · **Also changes:** INET (the coverage workflow, the workflows of pull requests,
 > `inet.opp`, `run-the-gates.md` and the test rules), the `inet-framework/coverage` repository,
 > optionally omnetpp (section 11)
@@ -1104,12 +1104,14 @@ and a check on a real INET map with the scenarios of phase 2.
   - A finding for D12: INET `master` gets about 120 commits each week, so a weekly map is mostly
     7 or more commits old, and the statistical and chart tests of a pull request would select all
     tests in most cases. A map of these kinds on each push (coverage mode: 3 and 5 times the time
-    of their release jobs, on push runs that nobody waits for) would give them the age 0. This
-    needs a decision of the user.
+    of their release jobs, on push runs that nobody waits for) would give them the age 0. The user
+    decided so on 2026-11-26 (D13).
 
 ### Phase 5 — CI and the agent documentation
 
-The design is in section 15.
+The design is in section 15. The user decided on 2026-11-26 that phase 5 prepares local branches
+and pushes nothing: the opp_repl parts on `topic/test-selection`, the INET parts on a local INET
+branch. The workflows can only run after a push.
 
 - [ ] The weekly coverage workflow writes the per-run profiles and the map. The report job commits
   `map/` to the `master` branch of `inet-framework/coverage` (8.4).
@@ -1202,7 +1204,11 @@ The design is in section 15.
   come from their push jobs in coverage mode, as for the fingerprint tests (D11): these jobs run in
   debug mode, which is about as fast. The records of the statistical, smoke, sanitizer and chart
   tests come from the weekly map: their jobs run in release mode or not on a push, and coverage
-  mode is 3 to 5 times slower than release.
+  mode is 3 to 5 times slower than release. D13 changes this for the statistical and chart tests.
+- **D13 (decided 2026-11-26)** The statistical and chart tests also take their records from their
+  push jobs in coverage mode. The replay of phase 4 showed that a weekly map gives them almost no
+  benefit (a median of 100% of the statistical tests from 7 commits of age on), and the push jobs
+  cost only runner time. Only the smoke and sanitizer tests take their records from the weekly map.
 
 No decision is open.
 
