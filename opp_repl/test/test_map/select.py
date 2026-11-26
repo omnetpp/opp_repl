@@ -797,7 +797,41 @@ def _select_opp(selection, change, project):
         after_parameters = after.get("test_parameters") or {}
         for kind in sorted(set(before_parameters) | set(after_parameters)):
             if kind not in NON_TEST_KINDS and before_parameters.get(kind) != after_parameters.get(kind):
-                selection.add_kind(kind, "E5", change.path, f"the test parameters of {kind} changed")
+                if not _select_baseline_pin(selection, change, project, kind, before_parameters.get(kind) or {}, after_parameters.get(kind) or {}):
+                    selection.add_kind(kind, "E5", change.path, f"the test parameters of {kind} changed")
+
+# the baseline file of a statistical test: <working directory>/<ini file>-<config>-#<run>.sca
+_STATISTICAL_BASELINE_FILE = re.compile(r"(.*\.ini)-(.*)-#(\d+)\.sca")
+
+def _select_baseline_pin(selection, change, project, kind, before, after):
+    # rule E2: only the pin of the statistical baseline moved; returns False if the rule does not apply
+    old_baseline, new_baseline = before.get("baseline") or {}, after.get("baseline") or {}
+    if kind != "statistical" or not old_baseline.get("ref") or not new_baseline.get("ref"):
+        return False
+    def without(parameters, name):
+        return {key: value for key, value in parameters.items() if key != name}
+    if without(before, "baseline") != without(after, "baseline") or without(old_baseline, "ref") != without(new_baseline, "ref"):
+        return False
+    old_ref, new_ref = old_baseline["ref"], new_baseline["ref"]
+    folder = os.path.join(project.root_folder, new_baseline.get("folder", "."))
+    if not os.path.isdir(folder) or not is_commit(folder, old_ref) or not is_commit(folder, new_ref):
+        selection.add_kind(kind, "E2", change.path, f"the baseline pin moved from {old_ref[:10]} to {new_ref[:10]}, and the checkout {new_baseline.get('folder')} does not have both commits")
+        return True
+    names = _git(folder, "-c", "core.quotePath=false", "diff", "--name-only", "--no-renames", old_ref, new_ref, "--").stdout.splitlines()
+    # the key of a test without its sim time limit -> the changed baseline file
+    changed = {}
+    for name in names:
+        match = _STATISTICAL_BASELINE_FILE.fullmatch(os.path.basename(name))
+        if match:
+            ini_path = os.path.normpath(os.path.join(os.path.dirname(name), match.group(1)))
+            changed[f"{kind}:{ini_path}:{match.group(2)}:#{match.group(3)}:"] = name
+    # the rule shows for the file also when no test of the map has a changed baseline file
+    selection._note("E2")
+    for key in selection.test_map.tests.get(kind, {}):
+        name = changed.get(key[:key.rindex(":") + 1])
+        if name:
+            selection.add_test(kind, key, "E2", change.path, f"the baseline file {name} changed")
+    return True
 
 def select_side(test_map, project, file_changes, side):
     """Applies the rules of section 5 of the plan to the changes of one diff, and returns a :py:class:`SideSelection`."""

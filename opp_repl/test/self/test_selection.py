@@ -267,6 +267,42 @@ class SelectionTestCase(unittest.TestCase):
         _, selection = self.select({"store.json": json.dumps(entries)})
         self.assertEqual(selection.tests, [])
 
+    def make_statistics_pins(self):
+        # a statistics repository with two pins, of which the second changes the result of config One,
+        # and a .opp file in the map commit that pins the first
+        statistics = os.path.join(self.root, "statistics")
+        os.makedirs(statistics)
+        files = {f"examples/omnetpp.ini-{config}-#0.sca": f"scalar x y {value}\n" for config, value in [("One", 1), ("Two", 2)]}
+        old_ref = make_repository(statistics, files)
+        write_files(statistics, {"examples/omnetpp.ini-One-#0.sca": "scalar x y 5\n"})
+        git(statistics, "commit", "-q", "-a", "-m", "second")
+        new_ref = git(statistics, "rev-parse", "HEAD")
+        write_files(self.root, {".gitignore": "/statistics\n", "fake.opp": self.opp_text(old_ref)})
+        git(self.root, "add", ".gitignore", "fake.opp")
+        git(self.root, "commit", "-q", "-m", "pin")
+        self.map_commit = git(self.root, "rev-parse", "HEAD")
+        return old_ref, new_ref
+
+    def opp_text(self, ref, mode="release"):
+        parameters = {"statistical": {"defaults": {"mode": mode}, "baseline": {"repository": "x/statistics", "ref": ref, "folder": "statistics"}}}
+        return f"SimulationProject(name=\"fake\", test_parameters={parameters!r})\n"
+
+    def test_a_moved_statistics_pin_selects_the_tests_of_the_changed_results(self):
+        old_ref, new_ref = self.make_statistics_pins()
+        _, selection = self.select({"fake.opp": self.opp_text(new_ref)})
+        self.assertEqual([(kind, key, reason.rule) for kind, key, reason in selection.tests], [("statistical", "statistical:examples/omnetpp.ini:One:#0:1s", "E2")])
+        self.assertEqual(selection.kinds, {})
+
+    def test_a_pin_that_the_checkout_does_not_have_selects_all_statistical_tests(self):
+        self.make_statistics_pins()
+        _, selection = self.select({"fake.opp": self.opp_text("0" * 40)})
+        self.assertEqual({kind: reason.rule for kind, reason in selection.kinds.items()}, {"statistical": "E2"})
+
+    def test_another_statistical_parameter_selects_all_statistical_tests(self):
+        old_ref, new_ref = self.make_statistics_pins()
+        _, selection = self.select({"fake.opp": self.opp_text(new_ref, mode="debug")})
+        self.assertEqual({kind: reason.rule for kind, reason in selection.kinds.items()}, {"statistical": "E5"})
+
 def make_simulation_test_task(config):
     simulation_config = types.SimpleNamespace(working_directory="examples", ini_file="omnetpp.ini", config=config)
     return types.SimpleNamespace(simulation_task=types.SimpleNamespace(simulation_config=simulation_config, run_number=0, get_sim_time_limit=lambda: "1s"))
