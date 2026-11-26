@@ -1082,7 +1082,10 @@ The design is in section 15.
 - [ ] D5: the report gives the cost of the age of the map, and a map that is older than 2 days
   gives a warning (section 9, step 6).
 - [ ] The pull request job of 15.2 for each kind that passed its replay, first the fingerprint
-  tests.
+  tests. It selects before the build (INET T8).
+- [ ] The tests of each kind at C without a build, for the selection before the build (T8): the
+  `.test` files of the opp tests, the folder of the packet test; the kinds of simulations need
+  their configs at C.
 - [ ] The check of each push (V4, 15.3).
 - [ ] The agent documentation of 15.4: INET `run-the-gates.md` and `testing.md`, opp_repl
   `doc/test_map.md`.
@@ -1223,14 +1226,24 @@ kind gets this job after its replay (phase 4). Until then, the kind runs as now.
    map from `inet-framework/coverage`.
 2. Read the header of the map. Check out omnetpp at its `omnetpp_commit`, and install opp_repl at
    its commit (D9). The pull request thus tests only its own change, in the environment of the map.
-3. Build, as now. The build always runs.
+3. Select before the build (INET rule T8, decided 2026-11-26 in INET
+   `plan/pending/master-guards.md`): `opp_select_tests --kind <kind> --summary`. With
+   `Selected 0 of M`, the job skips the build and the tests, and it is green after a few minutes;
+   else it builds as now. A selection before the build must know the tests of the kind at C,
+   also the new ones, because a test that the map does not know is always selected: the
+   fingerprint tests come from the store at C, the opp tests from their `.test` files at C (not
+   written yet). A kind whose tests at C the selection cannot list without a build keeps the list
+   of paths that the INET jobs use now, until it can.
 4. Run `opp_run_<kind>_tests ... --changes HEAD`. GitHub tests the merge commit of the pull
    request, so B is the newest commit of `master` and C is the merge commit.
 5. With the label `full-tests`, run all tests of the kind, without `--changes`. A change of a CI
    file (H6) and the reasons of 4.3 select all tests with no help from the workflow.
 
 The job always runs and reports `Selected N of M`, also for N = 0, so each required check gets a
-result. After phase 3, the kinds that run only on a push now (unit, module, queueing, protocol,
+result (INET W1: no path filter in the trigger of a required job). The names of the pull request
+jobs stay the same: `fingerprint-tests (debug, N)` and `fingerprint-tests (release, N)` are
+required (INET R6), also when the push jobs run in coverage mode (D11); a change of the name or
+the matrix of a required job lands together with the change of the ruleset (INET W2). After phase 3, the kinds that run only on a push now (unit, module, queueing, protocol,
 packet, validation) also get this job.
 
 ### 15.3 Push to `master`, the week, and each commit
