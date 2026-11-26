@@ -623,6 +623,214 @@ def _describe_note(note):
         parts.append("the runs of the changed headers")
     return ", ".join(parts) or "no tests"
 
+# the tokens after the parameter list of a function definition before its body
+_FUNCTION_QUALIFIERS = {"const", "volatile", "noexcept", "override", "final", "&", "&&", "throw", "mutable"}
+
+def _skip_braces(tokens, index):
+    # returns the index of the "}" that closes the "{" at index, or None
+    depth = 0
+    for position in range(index, len(tokens)):
+        if tokens[position][1] == "{":
+            depth += 1
+        elif tokens[position][1] == "}":
+            depth -= 1
+            if depth == 0:
+                return position
+    return None
+
+def _is_function_body_start(item):
+    # True if a "{" after the tokens of item starts the body of a function definition
+    if not item or item[0] in ("class", "struct", "union", "enum", "typedef", "using", "namespace"):
+        return False
+    depth = 0
+    open_index = close_index = None
+    # the tokens of an operator name (operator=, operator==, operator(), operator new) are no
+    # initializer and no parameter list
+    operator_end = None
+    if "operator" in item:
+        operator_index = item.index("operator")
+        operator_end = operator_index + 3 if item[operator_index + 1:operator_index + 3] == ["(", ")"] else operator_index + 1
+        while operator_end < len(item) and item[operator_end] != "(":
+            operator_end += 1
+    for position, token in enumerate(item):
+        if operator_end is not None and item.index("operator") <= position < operator_end:
+            continue
+        if token in ("(", "["):
+            if token == "(" and depth == 0 and open_index is None:
+                open_index = position
+            depth += 1
+        elif token in (")", "]"):
+            depth -= 1
+            if depth == 0 and token == ")" and close_index is None and open_index is not None:
+                close_index = position
+        elif depth == 0 and open_index is None and token in ("=", "class", "struct", "union", "enum"):
+            return False
+    if open_index is None or close_index is None or depth != 0:
+        return False
+    tail = item[close_index + 1:]
+    if all(token in _FUNCTION_QUALIFIERS or token in ("(", ")") for token in tail):
+        return True
+    if tail[:2] == ["-", ">"]:
+        return "=" not in tail
+    if tail and tail[0] == ":" and tail[1:2] != [":"]:
+        # a constructor initializer list: the body follows a ")" or the "}" of a brace initializer
+        return item[-1] in (")", "}")
+    return False
+
+_IDENTIFIER_TOKEN = re.compile(r"[A-Za-z_]\w*")
+
+def _is_macro_call(item):
+    # an identifier and one balanced argument list, for example Register_Class ( X )
+    if not _IDENTIFIER_TOKEN.fullmatch(item[0]) or item[1] != "(":
+        return False
+    depth = 0
+    for position, token in enumerate(item[1:], 1):
+        if token == "(":
+            depth += 1
+        elif token == ")":
+            depth -= 1
+            if depth == 0:
+                return position == len(item) - 1
+    return False
+
+def get_top_level_items(lines_tokens):
+    """
+    Returns the top-level items of a C++ source file as ``(kind, first line, last line, tokens)``:
+    ``function`` for a function definition with a body, ``directive`` for a preprocessor line, and
+    ``other`` for another declaration. A namespace and an ``extern "C"`` block are no items, but
+    their contents are. Returns None if the structure is not clear (unbalanced braces).
+    """
+    tokens = [(line, token) for line, line_tokens in enumerate(lines_tokens, 1) for token in line_tokens if token != " "]
+    items = []
+    item = []
+    first_line = None
+    scope_depth = 0
+    paren_depth = 0
+    index = 0
+    while index < len(tokens):
+        line, token = tokens[index]
+        if token == "#" and not item:
+            end = index
+            while end < len(tokens) and tokens[end][1] != "<eod>":
+                end += 1
+            items.append(("directive", line, tokens[min(end, len(tokens) - 1)][0], [token for _, token in tokens[index:end]]))
+            index = end + 1
+            continue
+        if token == "}" and item and paren_depth == 0:
+            # the end of a namespace after an item without ";", for example a macro
+            items.append(("other", first_line, tokens[index - 1][0], item))
+            item = []
+        if not item:
+            if token == "}":
+                if scope_depth == 0:
+                    return None
+                scope_depth -= 1
+                index += 1
+                continue
+            first_line = line
+        if paren_depth == 0 and len(item) >= 3 and item[-1] == ")" and _IDENTIFIER_TOKEN.fullmatch(token) and token not in _FUNCTION_QUALIFIERS and _is_macro_call(item):
+            # a macro call without ";", such as Register_Class(X), before the next declaration
+            items.append(("other", first_line, tokens[index - 1][0], item))
+            item = []
+            first_line = line
+        if token == "{" and paren_depth == 0:
+            if item[:1] == ["namespace"] or (item[:1] == ["extern"] and len(item) == 2 and item[1].startswith('"')):
+                scope_depth += 1
+                item = []
+                index += 1
+                continue
+            end = _skip_braces(tokens, index)
+            if end is None:
+                return None
+            if _is_function_body_start(item):
+                items.append(("function", first_line, tokens[end][0], item + [token for _, token in tokens[index:end + 1]]))
+                item = []
+            else:
+                item += [token for _, token in tokens[index:end + 1]]
+            index = end + 1
+            continue
+        if token in ("(", "["):
+            paren_depth += 1
+        elif token in (")", "]"):
+            paren_depth -= 1
+        if token == ";" and paren_depth == 0:
+            items.append(("other", first_line, line, item + [token]))
+            item = []
+        else:
+            item.append(token)
+        index += 1
+    if item:
+        items.append(("other", first_line, tokens[-1][0], item))
+    return items if scope_depth == 0 else None
+
+def _get_item_function_name(tokens):
+    # the name before the parameter list of a function definition
+    if "operator" in tokens:
+        return "operator"
+    index = tokens.index("(")
+    while index > 0 and tokens[index - 1] == ">":
+        # the template arguments of a specialization: back to their "<"
+        depth = 0
+        for position in range(index - 1, -1, -1):
+            if tokens[position] == ">":
+                depth += 1
+            elif tokens[position] == "<":
+                depth -= 1
+                if depth == 0:
+                    index = position
+                    break
+        else:
+            break
+    return tokens[index - 1] if index > 0 else None
+
+def _runs_without_caller(tokens):
+    # a function that runs although no changed caller calls it, so that its change can change each run
+    return (tokens[:3] == ["template", "<", ">"] or "operator" in tokens and any(word in tokens for word in ("new", "delete"))
+            or "__attribute__" in tokens and any(word in tokens for word in ("constructor", "destructor"))
+            or _get_item_function_name(tokens) == "main")
+
+def _select_function_definitions(selection, change, path, start, count, new_start, new_count, functions, old_tokens, new_tokens):
+    """
+    Rule R6 v2: a hunk of a source file outside the function bodies whose items are, at both sides,
+    only complete function definitions cannot change the static initialization. It selects the tests
+    that ran the functions of side A in these items (R2). A new function name can change the calls
+    of the file (an overload), so it also selects the tests of the functions of side A that use the
+    name. Returns False if the rule does not apply, and then R6 applies.
+    """
+    old_items = get_top_level_items(old_tokens)
+    new_items = get_top_level_items(new_tokens)
+    if old_items is None or new_items is None:
+        return False
+    def overlapping(items, first, last):
+        return [item for item in items if item[1] <= last and first <= item[2]]
+    # a pure insertion comes after the line start
+    old_overlap = overlapping(old_items, start, start + count - 1) if count else [item for item in old_items if item[1] <= start < item[2]]
+    new_overlap = overlapping(new_items, new_start, new_start + new_count - 1) if new_count else [item for item in new_items if item[1] <= new_start < item[2]]
+    if not old_overlap and not new_overlap:
+        return False
+    if any(kind != "function" or _runs_without_caller(tokens) for kind, _, _, tokens in old_overlap + new_overlap):
+        return False
+    test_map = selection.test_map
+    bits = 0
+    names = []
+    for function in functions:
+        if "runs" in function and any(first <= function["lines"][0] and function["lines"][1] <= last for _, first, last, _ in old_overlap):
+            bits |= test_map.bits(function["runs"])
+            names.append(function["name"])
+    selection.add(bits, "R2", path, f"line {start}: function definitions outside the bodies: {', '.join(names) or 'no function that ran'}")
+    old_names = {_get_item_function_name(tokens) for _, _, _, tokens in old_overlap}
+    for name in {_get_item_function_name(tokens) for _, _, _, tokens in new_overlap} - old_names:
+        # a declaration outside the functions that uses the new name, for example in an initializer
+        if any(kind != "function" and name in tokens for kind, _, _, tokens in new_items):
+            return False
+        users = 0
+        for function in functions:
+            first, last = function["lines"]
+            if "runs" in function and any(name in line_tokens for line_tokens in old_tokens[first - 1:last]):
+                users |= test_map.bits(function["runs"])
+        selection.add(users, "R2", path, f"line {new_start}: the new function {name} can change the calls of the functions that use its name")
+    return True
+
 def _select_cpp(selection, change, project, changed_headers):
     test_map = selection.test_map
     path = change.path
@@ -669,6 +877,8 @@ def _select_cpp(selection, change, project, changed_headers):
                 selection.add(test_map.bits(function["runs"]), "R2", path, f"line {start}: {function['name']}")
                 _select_release_only_names(selection, path, start, function)
         if not containing or compile_time:
+            if is_source and not containing and _select_function_definitions(selection, change, path, start, count, new_start, new_count, functions, old_tokens, new_tokens):
+                continue
             if is_source:
                 detail = "a constexpr function or a deduced return type" if containing else "outside the function bodies"
                 selection.add_all("R5" if containing else "R6", path, f"line {start}: {detail}; the static initialization of each process can change")

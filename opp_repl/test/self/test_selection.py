@@ -248,6 +248,20 @@ class SelectionTestCase(unittest.TestCase):
         self.assertEqual(runs, {"r1", "r2", "r3"})
         self.assertIn("R4", [reason.rule for _, reason in selection.entries])
 
+    def test_a_renamed_function_selects_the_runs_of_the_old_function(self):
+        # rule R6 v2: the hunk is the signature line, outside the bodies, but holds only a function definition
+        runs, selection = self.select({"src/a.cc": SOURCES["src/a.cc"].replace("int f()", "int f2()")})
+        self.assertEqual((runs, selection.everything), ({"r1"}, []))
+
+    def test_a_new_function_selects_nothing_by_itself(self):
+        runs, selection = self.select({"src/a.cc": SOURCES["src/a.cc"].replace("\nint g()", "\nint k()\n{\n    return 3;\n}\n\nint g()")})
+        # the new lines move g, which only the tests of a text output see (R3)
+        self.assertEqual(({reason.rule for _, reason in selection.entries}, selection.everything), ({"R3"}, []))
+
+    def test_a_new_global_variable_selects_all(self):
+        runs, selection = self.select({"src/a.cc": SOURCES["src/a.cc"].replace("\nint g()", "\nint counter = 0;\n\nint g()")})
+        self.assertEqual([reason.rule for reason in selection.everything], ["R6"])
+
     def test_a_new_source_selects_all(self):
         runs, selection = self.select({"src/c.cc": "int k() { return 0; }\n"})
         self.assertEqual([reason.rule for reason in selection.everything], ["R7"])
@@ -382,6 +396,19 @@ class SmokeTestTimeLimitsTestCase(unittest.TestCase):
         # a config without a value keeps the CPU-time limit
         self.assertEqual((sim_time_limit(config("Other"), 0), cpu_time_limit(config("Other"), 0)), (None, "1s"))
         self.assertEqual(get_smoke_test_time_limits(types.SimpleNamespace(test_parameters={}), cpu_time_limit="1s"), (None, "1s"))
+
+class TopLevelItemsTestCase(unittest.TestCase):
+    def items(self, text):
+        return [(kind, first, last) for kind, first, last, _ in get_top_level_items(tokenize_cpp_lines(text))]
+
+    def test_functions_declarations_and_directives(self):
+        text = ('#include "a.h"\nnamespace inet {\nRegister_Class(X)\nstatic int count = 0;\nX::X(int a) : b(a), c{a}\n{\n    f([] { return 1; });\n}\n'
+                'X& X::operator=(const X& o) { return *this; }\nauto h() -> int { return 2; }\nauto l = [](int x) { return x; };\nclass L { int x; };\n} // namespace inet\n')
+        self.assertEqual(self.items(text), [("directive", 1, 1), ("other", 3, 3), ("other", 4, 4), ("function", 5, 8), ("function", 9, 9),
+                                            ("function", 10, 10), ("other", 11, 11), ("other", 12, 12)])
+
+    def test_unbalanced_braces_give_no_structure(self):
+        self.assertIsNone(get_top_level_items(tokenize_cpp_lines("namespace inet {\nvoid f() {\n")))
 
 class ReleaseOnlyTestCase(unittest.TestCase):
     """The release-only blocks of rule R-NDEBUG."""
