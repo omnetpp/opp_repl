@@ -4,8 +4,8 @@ The test map tells, for each test, which C++ functions, NED types, ini sections
 and other files its runs used at one commit of the project (the map commit).
 The change-based test selection (`opp_select_tests`, and the `--changes` option
 of the test commands) reads the map and a diff, and selects only the tests whose
-outcome the change can change. Now the map holds only the fingerprint tests; the
-tests of the other kinds all run.
+outcome the change can change. Now the map holds the fingerprint and the
+statistical tests; the tests of the other kinds all run.
 
 The map comes from a run of the tests with the coverage build (see the
 [Coverage](coverage.md) guide). The same runs also give the coverage report.
@@ -23,12 +23,15 @@ The command does three steps:
 1. It runs the fingerprint tests of the project in coverage mode, and each
    run writes its record into `coverage/test-map/records` in the project
    root. The command removes the old records of that folder first.
+   `--kind statistical` runs the statistical tests instead; give `--kind` more
+   than one time for more kinds, for example `--kind fingerprint --kind
+   statistical`.
 2. It makes the build tables from the coverage build, and writes them to
    `build-tables.json.gz` in the records folder.
 3. It writes the map into `coverage/test-map/map` in the project root.
 
 `update_test_map(simulation_project=..., ...)` does the same in Python. The
-filter options of `opp_run_fingerprint_tests` also apply, for example
+filter options of the run commands also apply, for example
 `-w examples/ethernet`; the map then holds only these tests.
 
 Make the map from a tree without changes: the header of the map records the
@@ -50,7 +53,8 @@ Options:
 ### Records in several jobs
 
 A CI workflow can divide the tests over several jobs. Each job runs its part
-with records, and one job then writes the map:
+with records, and one job then writes the map. `opp_run_statistical_tests`
+takes `--test-map-records` too.
 
 ```bash
 # in each job
@@ -63,8 +67,10 @@ opp_update_test_map -p inet --no-run --records records-0 --records records-1 --r
 
 A run with `--test-map-records FOLDER` writes the folder `FOLDER/<run id>/`.
 The run id is the first 10 hex digits of the SHA-1 of the run key, for example
-`fingerprint:examples/adhoc/hostautoconf/omnetpp.ini:General:#0:100s`. The
-tests of one fingerprint group share one run, so the key has no ingredients.
+`fingerprint:examples/adhoc/hostautoconf/omnetpp.ini:General:#0:100s`. The key
+starts with the kind of the test, so a statistical test of the same config has
+another run. The tests of one fingerprint group share one run, so the key has no
+ingredients. The key of a statistical test is the key of its run.
 Records need the coverage build (`-m coverage`).
 
 - Each run writes its own profile. After the run, opp_repl merges it into
@@ -116,13 +122,21 @@ file tells which runs used which part of the source file of the same name:
 | `runs.json` | for each run: its key, exit code, end, section chain, and `normal_end` |
 | `tests.json` | for each test kind and test key: its runs |
 | `emitter-sets.json` | the sets of more than 20 translation units that emit a function, by id |
+| `release-only.json` | the blocks that only a release build compiles, with their names, the project files that they include, and their runs (see below) |
 | `header.json` | the project, the map commit, the omnetpp commit, the opp_repl commit, the compiler, the enabled features, the date |
 
 A set of runs is `"all"`, `{"except": [run ids]}` if it holds more than half
 of the runs, or a list of run ids. Each map file has one JSON value on each
 line, so that a git diff of two maps shows one function or one key on each
-line. This is version 2 of the map; version 1 had only the number of more than
-20 translation units.
+line. This is version 3 of the map; version 2 had no `release-only.json`, and
+version 1 had only the number of more than 20 translation units.
+
+The release-only blocks are the branches of the preprocessor conditionals that
+a release build compiles and a debug or coverage build does not, for example
+the branch of `#ifdef NDEBUG`. The writer evaluates each conditional in both
+configurations, also through the macros whose definition depends on `NDEBUG`.
+The runs of a block are the runs of the function that holds it, or of the
+translation units that include its file.
 
 ## Query a map
 
@@ -198,9 +212,14 @@ selection, but not a wrong one.
 | NED file that omnetpp cannot load: a syntax error, a type that another file declares too, a package that does not agree with the folder | all tests |
 | ini file | the tests whose section chain has a changed section; for a change of iteration variables, `repeat` or `constraint`, all tests of the ini file; the tests whose ini file includes the file |
 | fingerprint store | the tests whose entry changed, without the timestamp |
-| `.opp` file | for changed test parameters of a kind, all tests of that kind; for other changed fields, all tests |
+| `.opp` file, only the pin of the statistical baseline moved | the tests whose `.sca` file differs between the two pins in the `statistics` checkout; all statistical tests if the checkout does not have both commits |
+| `.opp` file | for other changed test parameters of a kind, all tests of that kind; for other changed fields, all tests |
 | build file: `Makefile` and `makefrag` in the root or in a C++ folder, `.oppbuildspec`, `.oppfeatures`, `.oppfeaturestate`, `.nedfolders`, `.nedexclusions` | all tests |
 | other file | the tests that read, examined or looked up the file; for a new or removed file, also the tests that listed its folder |
+
+Some tests run in release mode, which compiles code that the coverage build of
+the map does not. A changed function whose name is in a release-only block, or
+a changed file that such a block includes, also selects the runs of the block.
 
 A C++ change that moves lines changes `__LINE__` below it. `__LINE__` goes only
 into log lines, error messages and the names of static objects. So a moved line
@@ -219,7 +238,10 @@ These tests are always selected:
 
 ## Limits
 
-- Only the fingerprint tests write records now.
+- Only the fingerprint and the statistical tests write records now.
+- The check whether a config is interactive also starts the simulation, so an
+  interactive config, which the test skips, has a record that did not end
+  normally. The selection always selects it, and the run skips it.
 - The selection is correct if the assumptions of section 4.4 of the plan
   (`plan/pending/test-selection.md`) are true: the tests are deterministic, the
   build mode does not change the path of the code (no undefined behavior), and

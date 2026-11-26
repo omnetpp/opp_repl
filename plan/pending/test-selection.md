@@ -175,7 +175,7 @@ selects). A file belongs to the first class whose rule applies.
 | R9 | A removed `.h` file | as R4 |
 | R10 | A `.msg` file | v1: as R4 for the generated `_m.h`. The `_m.cc` includes it, and each process runs the constructors of its class descriptors, so v1 selects all tests. v2: generate the `_m` files at both sides and apply R1–R9 to their diff. |
 | R11 | Build files: `Makefile`, `makefrag`, `.oppbuildspec`, `.oppfeatures`, `.oppfeaturestate`, the build fields of `inet.opp` | all tests |
-| R-NDEBUG | A function g has a release-only block (`#ifdef NDEBUG`, or the `#else` of `#ifndef NDEBUG`) that calls project functions | the map adds these callees to each run in release mode that ran g. A scan of the 15 files makes the list. For 28f1dc534c the list is empty (phase 0). |
+| R-NDEBUG | A release-only block (`#ifdef NDEBUG`, the `#else` of `#ifndef NDEBUG`, and the branches of conditionals on macros whose definition depends on `NDEBUG`) names a changed function, or includes a changed file | the runs of the block: the runs of the function that holds it, or of the translation units that include its file (phase 3, `ndebug.py`). For 28f1dc534c no block calls a project function (phase 0), but `INETDefs.h:12` includes `precompiled_release.h`, which the coverage build does not compile |
 
 A hunk that is not fully inside a known function body is "outside all function bodies". This
 includes the signature line and the member initializer list of a constructor. This default is
@@ -892,17 +892,38 @@ at a time. Each kind gets: records from its run command (`--test-map-records`), 
 `tests.json`, the filter of its tasks for `--changes`, its rules for expected results, self tests,
 and a check on a real INET map with the scenarios of phase 2.
 
-- [ ] The kinds in general: one function applies `--test-map-records` and `--changes` to the
+- [x] The kinds in general: one function applies `--test-map-records` and `--changes` to the
   tasks of any simulation test kind, `run_fingerprint_tests` uses it too, and
   `opp_update_test_map --kind` makes the map of more than one kind.
-- [ ] Statistical (with R-NDEBUG), speed (speed only after omnetpp has `--measure-cpu-usage`,
-  section 6).
-  - E2: a move of the `statistics` pin selects the tests whose `.sca` file differs between the
-    two pins. Without the two commits in the `statistics` checkout, it selects all statistical
+  - opp_repl 40eaa3d: `apply_test_map_options()`, `get_test_key()`, `select_test_tasks()` for
+    any task list, `TEST_MAP_RUN_FUNCTIONS`. `run_all_tests` used the name of a task list
+    (`statistical test`) as the kind, so it never found these tests in the map; `get_test_kind()`
+    repairs it.
+- [x] Statistical (with R-NDEBUG). Speed is still not possible (section 6).
+  - The records: the 945 statistical tests of INET 0af9da9b1e in coverage mode on 32 cores in
+    12 minutes: 933 PASS, 11 SKIP (interactive configs), 1 FAIL (`tutorials/protocol` `Network7`,
+    the Reordering defect that INET c5d48a5cb4 repairs on another branch). The map of the
+    fingerprint records of phase 1 and these records: 2791 runs, 85 MB of text, 21 s to write.
+  - The keys: the 945 statistical tasks and the 944 statistical tests of the map agree; the one
+    task without a record (`showcases/ethernet/tenbaset1s` `General`, no sim time limit) did not
+    run, and the selection always selects it.
+  - The check whether a config is interactive starts the simulation, so the 11 interactive configs
+    have records that did not end normally (10 in the map). The selection always selects them, and
+    the run skips them.
+  - Scenarios on this map: the string literal of phase 2 selects 105 fingerprint and 41
+    statistical tests (the dry run of `opp_run_statistical_tests`: 42 of 945, with the task
+    without a record); the new member of `Ipv4.h` selects 3003 fingerprint and 730 statistical
     tests.
-  - R-NDEBUG: the build tables list the release-only blocks and the names in them. A changed
-    function whose name is in such a block also selects the tests of the function that holds the
-    block, or of the translation units that include the file for a block outside a function.
+  - E2 (opp_repl 4cdfa34): a move of the `statistics` pin selects the tests whose `.sca` file
+    differs between the two pins. Without the two commits in the `statistics` checkout, it selects
+    all statistical tests. Checked: the move between the pins e4517d35 and 323dd063 (INET
+    617ce3bad0) changes 2 result files, and E2 selects exactly their 2 tests.
+  - R-NDEBUG (opp_repl a39dc37): the map writer scans the C++ files (`ndebug.py`), and the map
+    (version 3) holds `release-only.json`. The scan evaluates each conditional for release and
+    debug, also through macros that depend on `NDEBUG`, and takes an `#ifndef X` whose branch
+    defines X as a guard. For INET it finds the 5 blocks and the 2 `#else` branches of macros of
+    phase 0. No INET function has a name of a block (the parameters of a macro are left out). A
+    new `#include` in `precompiled_release.h` now selects all 1847 runs; before, it selected none.
 - [ ] Smoke and sanitizer, with the bound of D2c (section 7): the store of the simulation-time
   limits, the calibration run, and the command that writes the store. The `#expected-result`
   comments of the ini files are expected results of the smoke tests. The ini rule ignores comments,
