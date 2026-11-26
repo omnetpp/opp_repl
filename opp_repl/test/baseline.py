@@ -400,9 +400,7 @@ def checkout_test_baseline(kind, simulation_project=None, target=None, project_c
 
     With the ``ref`` form, the baseline is the ref. With the ``trailer`` form, :py:func:`resolve_test_baseline`
     finds it. When the declaration has neither of them, a new clone is at the head of the default branch, and
-    a clone that exists does not change. With a ``branch`` and neither of them (for example the map repository
-    of the test selection, ``test_parameters["coverage"]["baseline"]``), the checkout follows the head of the
-    branch: the function gets it each time and moves the checkout there.
+    a clone that exists does not change.
 
     Parameters:
         kind (str):
@@ -433,17 +431,35 @@ def checkout_test_baseline(kind, simulation_project=None, target=None, project_c
         os.makedirs(parent_folder, exist_ok=True)
         _logger.info(f"Cloning the {kind} baseline repository {baseline['repository']} into {folder}")
         _git(parent_folder, "clone", "--quiet", *(["--no-checkout"] if declared else []), get_test_baseline_url(baseline["repository"]), folder)
-    if not declared and baseline.get("branch"):
-        _git(folder, "fetch", "--quiet", "origin", baseline["branch"])
-        commit = _find_commit(folder, "FETCH_HEAD")
-        if _find_commit(folder, "HEAD") != commit:
-            _git(folder, "checkout", "--quiet", "--detach", commit)
     if declared:
         test_baseline = resolve_test_baseline(kind, simulation_project=simulation_project, target=target, project_commit=project_commit)
         for line in test_baseline.get_description():
             _logger.info(f"The {kind} baseline: {line}")
         if is_new or _find_commit(folder, "HEAD") != test_baseline.commit:
             _git(folder, "checkout", "--quiet", "--detach", test_baseline.commit)
+    return _find_commit(folder, "HEAD")
+
+def checkout_test_map_repository(simulation_project=None):
+    """
+    Checks out the map repository of the change-based test selection (the ``test_map_repository`` of the
+    project) at the head of its branch: a clone when the folder does not exist, else a fetch of the
+    branch. Returns the full hash of the commit, or None if the project has no map repository.
+    """
+    simulation_project = _get_simulation_project(simulation_project)
+    repository = getattr(simulation_project, "test_map_repository", None)
+    if not repository:
+        return None
+    folder = simulation_project.get_full_path(repository.get("folder") or "coverage-map")
+    branch = repository.get("branch") or "master"
+    if not _is_git_checkout(folder):
+        if os.path.isdir(folder) and os.listdir(folder):
+            raise RuntimeError(f"The map repository folder {folder} exists and is not a git checkout")
+        os.makedirs(os.path.dirname(folder), exist_ok=True)
+        _logger.info(f"Cloning the map repository {repository['repository']} into {folder}")
+        _git(os.path.dirname(folder), "clone", "--quiet", "--branch", branch, get_test_baseline_url(repository["repository"]), folder)
+    else:
+        _git(folder, "fetch", "--quiet", "origin", branch)
+        _git(folder, "checkout", "--quiet", "--detach", "FETCH_HEAD")
     return _find_commit(folder, "HEAD")
 
 def checkout_test_baselines(kinds=None, simulation_project=None, target=None, project_commit="HEAD"):
@@ -467,7 +483,11 @@ def checkout_test_baselines(kinds=None, simulation_project=None, target=None, pr
         the full hash of the commit of each checkout, by test kind.
     """
     simulation_project = _get_simulation_project(simulation_project)
-    return {kind: checkout_test_baseline(kind, simulation_project=simulation_project, target=target, project_commit=project_commit) for kind in kinds or get_test_baseline_kinds(simulation_project)}
+    commits = {kind: checkout_test_baseline(kind, simulation_project=simulation_project, target=target, project_commit=project_commit) for kind in kinds or get_test_baseline_kinds(simulation_project)}
+    if not kinds and getattr(simulation_project, "test_map_repository", None):
+        # without kinds, also the map repository of the test selection
+        commits["test map"] = checkout_test_map_repository(simulation_project=simulation_project)
+    return commits
 
 def check_test_baseline(kind, simulation_project=None, baseline_simulation_project=None, **kwargs):
     """

@@ -315,7 +315,7 @@ class SimulationProject:
                  used_projects=[], external_bin_folders=[], external_library_folders=[], external_libraries=[], external_include_folders=[],
                  dll_symbol=None, feature_libraries=None, pkg_config_libraries=None, opp_defines_file=None, precompiled_header=None, extra_cflags=[], extra_ldflags=[],
                  simulation_configs=None, overlay_name=None, overlay_build_root=None, opp_env_workspace=None, opp_env_project=None,
-                 github_owner=None, github_repository=None, github_workflows=None, ci_files=None, workspace=None, **kwargs):
+                 github_owner=None, github_repository=None, github_workflows=None, ci_files=None, test_map_repository=None, workspace=None, **kwargs):
         """
         Initializes a new simulation project.
 
@@ -507,6 +507,12 @@ class SimulationProject:
                 root, besides ``.github/workflows/`` (e.g. ``["^_scripts/github/"]``). The change-based
                 test selection selects all tests for a change of such a file (rule H6).
 
+            test_map_repository (dict or None):
+                The repository whose folder ``map/`` holds the test map of each weekly run, for
+                example ``{"repository": "inet-framework/coverage", "branch": "master", "folder":
+                "coverage-map"}``. ``opp_checkout_test_baselines`` checks it out at the head of the
+                branch, and the change-based test selection takes the best map of its history.
+
             workspace (:py:class:`SimulationWorkspace` or None):
                 The workspace this project belongs to.  Used for resolving
                 ``used_projects`` references and the associated OMNeT++
@@ -594,6 +600,7 @@ class SimulationProject:
         self.github_repository = github_repository
         self.github_workflows = github_workflows
         self.ci_files = ci_files or []
+        self.test_map_repository = test_map_repository
         self._simulation_configs_freshness_key = None
         self.binary_simulation_distribution_file_paths = None
         self._overlay = None

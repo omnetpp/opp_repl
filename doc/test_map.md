@@ -231,9 +231,7 @@ for example the weekly map of the coverage workflow. The project names it in its
 `.opp` file:
 
 ```python
-test_parameters={
-    "coverage": {"baseline": {"repository": "inet-framework/coverage", "branch": "master", "folder": "coverage-map"}},
-}
+test_map_repository={"repository": "inet-framework/coverage", "branch": "master", "folder": "coverage-map"},
 ```
 
 `opp_checkout_test_baselines` clones it and gets the head of the branch. Of the

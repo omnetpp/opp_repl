@@ -4,9 +4,8 @@ Finds the test map for a change (see the test selection plan of opp_repl,
 selection is correct with any A, but a map whose commit is near the base B selects fewer tests.
 
 The candidates are the map of a folder (``--map``), the local map of the project
-(``coverage/test-map/map``), and the maps in the history of a map repository: the checkout of
-``test_parameters["coverage"]["baseline"]`` of the project, whose ``map/`` folder holds the map of
-each weekly run. Of the candidates whose map commit is an ancestor of B, the one with the fewest
+(``coverage/test-map/map``), and the maps in the history of a map repository: the checkout of the
+``test_map_repository`` of the project, whose ``map/`` folder holds the map of each weekly run. Of the candidates whose map commit is an ancestor of B, the one with the fewest
 commits from A to B wins.
 """
 
@@ -28,11 +27,11 @@ _logger = logging.getLogger(__name__)
 MAP_REPOSITORY_FOLDER = "map"
 
 def get_map_repository_folder(simulation_project):
-    """Returns the checkout of the map repository of the project (``test_parameters["coverage"]["baseline"]``), or None."""
-    baseline = (simulation_project.test_parameters.get("coverage") or {}).get("baseline")
-    if not baseline:
+    """Returns the checkout of the map repository of the project (its ``test_map_repository``), or None."""
+    repository = getattr(simulation_project, "test_map_repository", None)
+    if not repository:
         return None
-    folder = simulation_project.get_full_path(baseline.get("folder") or "coverage-map")
+    folder = simulation_project.get_full_path(repository.get("folder") or "coverage-map")
     return folder if os.path.isdir(os.path.join(folder, ".git")) or os.path.isfile(os.path.join(folder, ".git")) else None
 
 def _get_distance(root_folder, map_commit, base):

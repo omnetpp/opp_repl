@@ -428,7 +428,7 @@ class FindTestMapTestCase(unittest.TestCase):
         for commit in (self.commits[2], "f" * 40):
             write_files(self.repository, {"map/header.json": json.dumps({"commit": commit})})
             git(self.repository, "commit", "-q", "-a", "-m", "map")
-        self.project = types.SimpleNamespace(test_parameters={"coverage": {"baseline": {"repository": "x/coverage", "folder": "../coverage"}}},
+        self.project = types.SimpleNamespace(test_map_repository={"repository": "x/coverage", "folder": "../coverage"},
                                              get_full_path=lambda path: os.path.normpath(os.path.join(self.root, path)))
 
     def tearDown(self):
