@@ -53,6 +53,10 @@ Options:
 - `--build-tables FILE` — read the build tables from a file instead of the
   coverage build. Without this option, the build tables need a profile in the
   profile pool, also with `--no-run`.
+- `--update-from FOLDER` — update an old map instead of a run of all tests (see
+  below).
+- `--sample FRACTION` — with `--update-from`: also run this part of the runs
+  that the selection does not give, chosen at random.
 
 ### Records in several jobs
 
@@ -66,6 +70,41 @@ opp_run_fingerprint_tests -p inet -m coverage --split-count 4 --split-index 0 --
 # in one job with the coverage build and the records of all jobs
 opp_update_test_map -p inet --no-run --records records-0 --records records-1 --records records-2 --records records-3
 ```
+
+### Update a map
+
+A map can come from an old map and the runs that the change since the old map
+can change:
+
+```bash
+opp_update_test_map -p inet --no-build --update-from coverage/test-map/map --sample 0.05
+```
+
+The command runs the tests that the selection of the changes from the old map
+commit to `HEAD` gives, with records, and a random sample of the other runs.
+The new map holds:
+
+- each run of a new record, from the new record;
+- each other run of the old map that the selection does not give and whose test
+  is a test at `HEAD`, with the data of the old map: the functions (the old
+  build tables give the names of each line range), the files, the listed
+  folders, the NED types, the section chain and the includes;
+- no other run, so the selection always gives the tests of a selected run
+  without a new record.
+
+The selection gives each test whose inputs the change changes, so a test that it
+does not give runs the same code and reads the same files, and its record does
+not change. The update needs the build tables of the old map, which each map
+holds. If a function body of an old run has no name in the new function table,
+the map leaves the run out. Check V5: if the new record of a run of the sample
+differs from the old map, the command writes the map, and then it fails and
+names each difference. A difference shows a defect of the selection. The map of
+an update also keeps the defects of the selection of the old map, so make a full
+map at a fixed interval.
+
+The header of a map gives `updates`, the number of updates since the last full
+map, and `full_commit`, the commit of that map; an update also gives
+`update_of`, the commit of the old map. A map without old runs is a full map.
 
 ## Records
 
@@ -149,11 +188,12 @@ file tells which runs used which part of the source file of the same name:
 | `examples/.../omnetpp.ini.json` | `sections`: for each section, the runs whose section chain has it |
 | `<path>.json` of another file | `data`: the runs that read or examined the file (only files that git tracks), or that looked it up and did not find it |
 | `<folder>/index.json` | the number of runs that used something below the folder, for each kind; `listed`: the runs that listed the folder |
-| `runs.json` | for each run: its key, exit code, end, section chain, and `normal_end` |
+| `runs.json` | for each run: its key, exit code, end, section chain, `normal_end`, and `commit`, the commit of its record |
 | `tests.json` | for each test kind and test key: its runs |
 | `emitter-sets.json` | the sets of more than 20 translation units that emit a function, by id |
 | `release-only.json` | the blocks that only a release build compiles, with their names, the project files that they include, and their runs (see below) |
-| `header.json` | the project, the map commit, the omnetpp commit, the opp_repl version and commit (also of an installed package, from `opp_repl/_version.py`), the compiler, the enabled features, the versions of the Python packages of the charts, the date |
+| `header.json` | the project, the map commit, the omnetpp commit, the opp_repl version and commit (also of an installed package, from `opp_repl/_version.py`), the compiler, the enabled features, the versions of the Python packages of the charts, the date; `updates`, `full_commit` and for an update `update_of` |
+| `build-tables.json.gz` | the build tables of the map commit, for the next update |
 
 A set of runs is `"all"`, `{"except": [run ids]}` if it holds more than half
 of the runs, or a list of run ids. Each map file has one JSON value on each
@@ -259,14 +299,20 @@ assumes that the environment does not change which code the tests run.
 
 The INET workflow `fingerprint-tests.yml` is the model for a kind of test.
 
-A push to `master` runs all tests. Its debug jobs run in coverage mode, which
-has all flags of the debug mode, with `--test-map-records`. After its tests,
-split 0 runs `opp_update_test_map --no-run`, which adds the build tables of its
-build to its records. One more job writes the map from the records of all
-splits with `--no-run --records ... --build-tables ...`, and saves it as the
-artifact `test-map-<kind>`. The map is good also when a test fails, because the
-records give what the runs used, not the verdicts. The same job runs
-`opp_check_test_selection` against the previous push run (check V4).
+A push to `master` updates the map of an earlier run. Its debug jobs run in
+coverage mode, which has all flags of the debug mode, with `--test-map-records`,
+`--changes <map commit>..HEAD` and `--sample 0.05`, in the environment of the
+map. After its tests, split 0 runs `opp_update_test_map --no-run`, which adds
+the build tables of its build to its records. One more job writes the map from
+the records of the splits with `--no-run --records ... --build-tables ...
+--update-from <old map>`, and saves it as the artifact `test-map-<kind>`. The
+map is good also when a test fails, because the records give what the runs
+used, not the verdicts.
+
+A run without a map that has build tables, and a scheduled run each night when
+`master`, omnetpp or opp_repl changed since the last full map, run all tests
+with the newest omnetpp and opp_repl, and write a full map. A full run also runs
+`opp_check_test_selection` against the previous full run (check V4).
 
 A pull request job selects its tests before it builds (INET rule T8):
 
@@ -356,6 +402,11 @@ These tests are always selected:
 - all chart tests, if the versions of matplotlib, numpy, pandas or scipy differ
   from the map: another version can draw another image.
   `--ignore-environment` gives a warning instead.
+
+`--sample FRACTION` also selects this part of the runs of each kind whose tests
+the selection does not give, chosen at random, and all tests of these runs, with
+the rule V5. The seed is the target commit, so all splits of a run get the same
+sample. The update of a map uses the sample for check V5.
 
 ## Limits
 

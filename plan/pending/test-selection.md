@@ -1216,7 +1216,7 @@ of the new commands.
   - [x] U3: `--sample FRACTION` of the run commands and of `opp_select_tests`. The sample takes
     runs, and all tests of each run, so check V5 compares whole runs. On the fingerprint map of
     1847 runs, `--sample 0.05` adds 93 runs (239 tests), and two selections give the same runs.
-  - [ ] U4: `doc/test_map.md`.
+  - [x] U4: `doc/test_map.md`: "Update a map", the layout, "In CI" and the sample.
   - [ ] U5: INET `get-test-map.sh` (`FULL_ONLY`, `NEED_BUILD_TABLES`, the scheduled runs,
     `run_id`) and `fingerprint-tests.yml` (the update on a push, the full run each night, V4 only
     in a full run), and the INET documentation.
