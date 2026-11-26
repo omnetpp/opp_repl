@@ -1,7 +1,6 @@
 # Change-based test selection
 
-> **Status:** phases 0-2 done; phase 3 done except the decision where the records of each kind come
-> from; then phases 4 and 5 ·
+> **Status:** phases 0-3 done; phase 4 in progress, then phase 5 ·
 > **Owner:** opp_repl · **Also changes:** INET (the coverage workflow, the workflows of pull requests,
 > `inet.opp`, `run-the-gates.md` and the test rules), the `inet-framework/coverage` repository,
 > optionally omnetpp (section 11)
@@ -1005,14 +1004,15 @@ and a check on a real INET map with the scenarios of phase 2.
     file, or a file that a run used, selects all feature tests if a rule of the file other than R3
     applies; the key is `feature:<type>:<feature>`. Checked: of the 253 INET feature tests, the
     string literal selects all and a comment none.
-- [ ] For each kind, decide where its records come from: from its push job in coverage mode
+- [x] For each kind, decide where its records come from: from its push job in coverage mode
   (D11), or from the weekly map. With the weekly map, the A..B side of the kind is wider.
+  - Decided by the user on 2026-11-26 (D12).
   - Facts: the push jobs of the unit, module, queueing, protocol and packet tests run in debug mode,
     which is about as fast as coverage mode, as the fingerprint debug jobs (D11). The statistical
     and chart jobs run in release mode, and coverage mode is 3 and 5 times slower for them (phase
     0). The smoke and sanitizer tests have no push job. Recommendation: the opp kinds and packet
     from their push jobs, as the fingerprint tests; statistical, smoke, sanitizer and chart from
-    the weekly map. This waits for a decision of the user.
+    the weekly map.
 
 ### Phase 4 — validation
 
@@ -1108,6 +1108,11 @@ The design is in section 15.
   opp_repl in `inet.opp`, as for the baselines.
 - **D10 (decided 2026-11-26)** R6 v2 (5.1) comes before the pull request jobs of phase 5, not in
   phase 6. Without it, a hunk that only renames or removes functions selects all tests (15.1).
+- **D12 (decided 2026-11-26)** The records of the unit, module, queueing, protocol and packet tests
+  come from their push jobs in coverage mode, as for the fingerprint tests (D11): these jobs run in
+  debug mode, which is about as fast. The records of the statistical, smoke, sanitizer and chart
+  tests come from the weekly map: their jobs run in release mode or not on a push, and coverage
+  mode is 3 to 5 times slower than release.
 - **D11 (decided 2026-11-26)** Each push to `master` makes a map of the fingerprint tests: its debug
   fingerprint jobs become coverage jobs (about 7% slower), and the map is an artifact of the run
   (8.4). A pull request job uses the map of the newest finished push run, so the map is minutes or
