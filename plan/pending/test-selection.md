@@ -1,6 +1,7 @@
 # Change-based test selection
 
-> **Status:** phase 2 done; phase 3 in progress (D8 changed), then phases 4 and 5 ·
+> **Status:** phases 0-2 done; phase 3 done except the decision where the records of each kind come
+> from; then phases 4 and 5 ·
 > **Owner:** opp_repl · **Also changes:** INET (the coverage workflow, the workflows of pull requests,
 > `inet.opp`, `run-the-gates.md` and the test rules), the `inet-framework/coverage` repository,
 > optionally omnetpp (section 11)
@@ -952,8 +953,53 @@ and a check on a real INET map with the scenarios of phase 2.
     limit. The keys of the 945 smoke and the 945 sanitizer tasks agree with the map. On the map of
     3736 runs: the string literal of phase 2 selects 43 smoke and 43 sanitizer tests, the new member
     of `Ipv4.h` 731 of each, a comment 14 (the tests that are always selected).
-- [ ] The opp tests: per-test profiles and the `.d` files of the test builds; packet as one run.
-- [ ] Chart and validation, with the traced process tree.
+- [x] The opp tests: per-test profiles and the `.d` files of the test builds; packet as one run.
+  - opp_repl f143e9d: `TestMapRecorder` writes the record of one run of any test. An opp test and
+    the packet test give the processes of their run its environment; the record has `includes`,
+    the project files that the own code of the test includes (from the `.d` files). Keys:
+    `<kind>:<path of the .test file>`, `packet:tests/packet`. The map gives each such file
+    `test_runs`, so R4 selects these tests, also for a header outside the C++ folders (any change).
+    E6: a changed `.test` file selects its test. H4 (v1): a change below the support library of a
+    kind (`lib_folder`, else `<test_folder>/lib`) or the folder of a binary test selects all tests
+    of the kind.
+  - opp_repl 999ffd9: `--print-instantiated-ned-types` writes into the standard output, which the
+    opp tests compare, and 10 TCP module tests failed with records. A wrapper of the test program
+    moves these lines into `ned-types.txt`. A `%testprog` program can be another program, so its
+    record has no NED types and no normal end: the 306 packetdrill tests of `tests/protocol`
+    (`inet_run_packetdrill`, skipped without packetdrill) are always selected.
+  - Checked on INET 0af9da9b1e in coverage mode, with records: unit 154 tests in 3:05, all pass;
+    module 846 in 2:13, all pass; queueing 77 in 0:13; protocol 1198 in 2:24 (847 pass, 306
+    skipped and 45 expected failures, as without records); packet 1. A new declaration in
+    `CanvasProjection.h` selects 7 unit tests.
+- [x] Chart and validation, with the traced process tree.
+  - opp_repl eb50c0e: the simulations of the chart tests write records (kind `chart`), and the run
+    writes `chart-tests.json`, the run keys of the simulations of each chart test; the key is
+    `chart:<.anf file>:<chart id>`. With `--changes`, only the simulations of the selected chart
+    tests run. The chart code runs in the opp_repl process, so no trace: H3 (a changed `.anf`
+    file selects its chart tests), H2 (a change in the Python folders of the project selects all
+    chart and validation tests), E3 (a moved `media` pin selects the chart tests of each folder
+    with a changed image), and the map header records the versions of matplotlib, numpy, pandas
+    and scipy (another version selects all chart tests). The validation tests are a kind without
+    records, as the feature tests; `run_validation_tests` runs all or none.
+  - Checked with the 10 chart tests of `showcases/wireless/coexistence` and `qos` (all pass in
+    coverage mode): the `media` pin move of 42dbb75bfb selects the 8 QoS chart tests, a change of
+    `Coexistence.anf` its 2 tests and only their 24 simulations, a change of
+    `python/inet/scave/plot.py` all chart and validation tests.
+  - The map of all kinds (6038 runs, 167 MB of text, 19 s to write), for each scenario the
+    selected tests (fingerprint of 4726; the other kinds, and the opp tests include the 351 protocol
+    tests that are always selected):
+
+    | Change | fingerprint | statistical | smoke, sanitizer | unit | module | protocol | chart | feature, validation |
+    | --- | --- | --- | --- | --- | --- | --- | --- | --- |
+    | string literal in `Ipv4.cc` | 105 | 41 | 43 | 0 | 5 | 368 | 0 | all |
+    | new member in `Ipv4.h` | 3003 | 730 | 731 | 8 | 675 | 1005 | 10 | all |
+    | a comment in line 1 of `Ipv4.cc` | 3 | 10 | 14 | 0 | 296 | 1005 | 0 | none |
+    | INET 0af9da9b1e (`#expected-result` comments) | 23 | 18 | 22 | 0 | 2 | 351 | 0 | all |
+
+    The comment moves all lines of `Ipv4.cc`, so R3 selects the opp tests that ran a function of
+    the file (296 module, 654 protocol tests). A refinement for phase 6: a line number reaches a
+    text output only with the name of the file, so R3 needs to select only the opp tests whose
+    `.test` file names the changed file.
 - [x] Feature tests (v1 rule). Their smoke runs use the store of D2c.
   - opp_repl 01a7d84: a kind without records (`KIND_LEVEL_KINDS`). A C++, msg, NED, ini or build
     file, or a file that a run used, selects all feature tests if a rule of the file other than R3
@@ -961,6 +1007,12 @@ and a check on a real INET map with the scenarios of phase 2.
     string literal selects all and a comment none.
 - [ ] For each kind, decide where its records come from: from its push job in coverage mode
   (D11), or from the weekly map. With the weekly map, the A..B side of the kind is wider.
+  - Facts: the push jobs of the unit, module, queueing, protocol and packet tests run in debug mode,
+    which is about as fast as coverage mode, as the fingerprint debug jobs (D11). The statistical
+    and chart jobs run in release mode, and coverage mode is 3 and 5 times slower for them (phase
+    0). The smoke and sanitizer tests have no push job. Recommendation: the opp kinds and packet
+    from their push jobs, as the fingerprint tests; statistical, smoke, sanitizer and chart from
+    the weekly map. This waits for a decision of the user.
 
 ### Phase 4 — validation
 
@@ -1016,6 +1068,13 @@ The design is in section 15.
   name of their class and of its base class, which their own `.msg` file declares. If R4 leaves
   them out, 361 instead of 620 INET headers select all runs (phase 2). This is an assumption
   about the generated code, so it needs a decision.
+- [ ] R3 for the opp tests: select only the tests whose `.test` file names the changed file (a
+  line number reaches a text output only with the name of the file). Phase 3 measured 296
+  module and 654 protocol tests for a comment in line 1 of `Ipv4.cc`.
+- [ ] H4 v2: the build tables also read the objects of the support libraries of the opp tests,
+  so that a change in a support library selects only the tests that ran the changed code.
+- [ ] E3 v2: a moved `media` pin selects only the chart of each changed image, not all charts of
+  its folder.
 - [ ] R2: the column of the braces, so that a change on the line of a one-line function body
   (`int get() const { return x; }`) is inside the body.
 

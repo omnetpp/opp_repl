@@ -5,8 +5,9 @@ and other files its runs used at one commit of the project (the map commit).
 The change-based test selection (`opp_select_tests`, and the `--changes` option
 of the test commands) reads the map and a diff, and selects only the tests whose
 outcome the change can change. Now the map holds the fingerprint, statistical,
-smoke and sanitizer tests, and the selection selects the feature tests all
-together or not at all; the tests of the other kinds all run.
+smoke, sanitizer, unit, module, queueing, protocol, packet and chart tests, and
+the selection selects the feature and validation tests all together or not at
+all; the speed tests all run.
 
 The map comes from a run of the tests with the coverage build (see the
 [Coverage](coverage.md) guide). The same runs also give the coverage report.
@@ -27,7 +28,8 @@ The command does three steps:
    `--kind statistical` runs the statistical tests instead; give `--kind` more
    than one time for more kinds, for example `--kind fingerprint --kind
    statistical --kind smoke`. The records of the smoke tests also serve the
-   sanitizer tests.
+   sanitizer tests. The kinds are `fingerprint`, `statistical`, `smoke`,
+   `unit`, `module`, `queueing`, `protocol`, `packet` and `chart`.
 2. It makes the build tables from the coverage build, and writes them to
    `build-tables.json.gz` in the records folder.
 3. It writes the map into `coverage/test-map/map` in the project root.
@@ -55,8 +57,8 @@ Options:
 ### Records in several jobs
 
 A CI workflow can divide the tests over several jobs. Each job runs its part
-with records, and one job then writes the map. `opp_run_statistical_tests` and
-`opp_run_smoke_tests` take `--test-map-records` too.
+with records, and one job then writes the map. The run commands of the other
+kinds of the map take `--test-map-records` too.
 
 ```bash
 # in each job
@@ -76,6 +78,22 @@ ingredients. The key of a statistical or smoke test is the key of its run. A
 sanitizer test stops where the smoke test of its config stops, and the sanitizer
 only examines the code that runs, so the run of the smoke test is also its run:
 its key is the key of that run with the kind `sanitizer`.
+
+An opp test (unit, module, queueing, protocol) runs `opp_test run` with the
+test program that opp_test made from its `.test` file. The record holds the
+profile and the file trace of all processes of the run, and `includes`: the
+project files that the own code of the test includes, from the `.d` files of the
+test program. Its key is the kind and the path of the `.test` file, for example
+`unit:tests/unit/Checksum_1.test`. The packet test is one program of its own,
+with the key `packet:tests/packet`. A `%testprog` test can start another
+program, so its record has no NED types, and it does not count as a normal end.
+
+A chart test draws a chart of an `.anf` file from the results of the
+simulations of the folder of the file. Its simulations write the records, with
+the kind `chart`, and the run writes `chart-tests.json` into the records folder:
+the run keys of the simulations of each chart test. The key of a chart test is
+`chart:<.anf file>:<chart id>`. The chart code runs in the opp_repl process,
+which the file trace does not see; rules H2 and H3 cover it.
 
 A smoke test that stops after a CPU-time limit stops at a different event on
 each machine, so its record does not show what a test run uses. With the store
@@ -126,6 +144,7 @@ file tells which runs used which part of the source file of the same name:
 | --- | --- |
 | `src/.../Ipv4.cc.json` | `functions`: for each function body, its line range, its name, the runs that ran it and the translation units that emit it (more than 20 as the id of a set); `tu_runs`: the runs that ran a function that the translation unit emits |
 | `src/.../Ipv4.h.json` | the functions of the header, and `included_by`: the translation units that include it |
+| `<path>.json` of a file that the own code of a test includes | `test_runs`: the runs of the opp tests and binary tests whose code includes it |
 | `src/.../Ipv4.ned.json` | `types`: for each declared type, the runs that used it (the instantiated types and the types that they refer to) |
 | `examples/.../omnetpp.ini.json` | `sections`: for each section, the runs whose section chain has it |
 | `<path>.json` of another file | `data`: the runs that read or examined the file (only files that git tracks), or that looked it up and did not find it |
@@ -216,7 +235,13 @@ selection, but not a wrong one.
 | C++ file, only comments or white space | none |
 | C++ file, inside a function body | the tests that ran the function |
 | C++ source, outside the function bodies; a new or removed source | all tests, because the static initialization of each process can change |
-| C++ header, outside the function bodies; a removed header | the tests that ran a function whose emitting translation units all include a changed header |
+| C++ header, outside the function bodies; a removed header | the tests that ran a function whose emitting translation units all include a changed header, and the tests whose own code includes it |
+| a file outside the C++ folders that the own code of a test includes | the tests whose own code includes it |
+| `.test` file | its opp test |
+| `.anf` file | its chart tests |
+| file of a Python folder of the project (INET `python/`) | all chart and validation tests |
+| `.opp` file, only the pin of the chart baseline moved | the chart tests of each folder with a changed image in the `media` checkout; all chart tests if the checkout does not have both commits |
+| file of the support library of a kind (`lib_folder`, else `<test_folder>/lib`) or of the folder of a binary test | all tests of that kind |
 | C++ file, the body of a `constexpr` function or of a function with a deduced return type | as outside the function bodies |
 | `.msg` file | as its generated `_m.h` header; a new or removed `.msg` file selects all tests |
 | NED file | the tests that used a type of the file; for a new type, also the tests that used a type with the same simple name; for `package.ned`, all types of the package |
@@ -228,10 +253,11 @@ selection, but not a wrong one.
 | build file: `Makefile` and `makefrag` in the root or in a C++ folder, `.oppbuildspec`, `.oppfeatures`, `.oppfeaturestate`, `.nedfolders`, `.nedexclusions` | all tests |
 | other file | the tests that read, examined or looked up the file; for a new or removed file, also the tests that listed its folder |
 
-The feature tests have no records. A change of a C++, msg, NED, ini or build file,
-or of a file that a run of the map used, selects all of them, if a rule of the
-file other than the line shift applies. Other changes, for example of comments,
-select none.
+The feature and validation tests have no records. A change of a C++, msg, NED,
+ini or build file, or of a file that a run of the map used, selects all of them,
+if a rule of the file other than the line shift applies. Other changes, for
+example of comments, select none. A validation run with `--changes` runs all
+validation tests or none.
 
 Some tests run in release mode, which compiles code that the coverage build of
 the map does not. A changed function whose name is in a release-only block, or
@@ -250,12 +276,18 @@ These tests are always selected:
   `test_parameters[kind]["test_selection"]["always"]` of the `.opp` file;
 - all tests, if the environment differs from the map: the map comes from a tree
   with changes, the opp_repl or omnetpp commit differs in a file other than
-  documentation, or the compiler or the enabled features differ.
+  documentation, or the compiler or the enabled features differ;
+- all chart tests, if the versions of matplotlib, numpy, pandas or scipy differ
+  from the map: another version can draw another image.
   `--ignore-environment` gives a warning instead.
 
 ## Limits
 
-- Only the fingerprint, statistical and smoke tests write records now.
+- The speed tests write no records yet, so they all run.
+- A moved `media` pin selects all chart tests of a folder with a changed image,
+  not only the chart of that image.
+- The support library of the opp tests selects all tests of its kind (rule H4,
+  v1): its code is not in the build tables.
 - The check whether a config is interactive also starts the simulation, so an
   interactive config, which the test skips, has a record that did not end
   normally. The selection always selects it, and the run skips it.
