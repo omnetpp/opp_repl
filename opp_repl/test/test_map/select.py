@@ -23,6 +23,7 @@ import xml.etree.ElementTree
 
 from opp_repl.test.test_map.build import read_ned_type_table
 from opp_repl.test.test_map.changes import WORKTREE, Changes, Side, get_file_changes, is_commit, _git
+from opp_repl.test.test_map.ndebug import get_simple_function_name
 from opp_repl.test.test_map.writer import TEST_MAP_VERSION, get_default_test_map_folder
 
 __sphinx_mock__ = True # ignore this module in documentation
@@ -370,6 +371,7 @@ class TestMap:
                     self.run_tests[self.run_index[run_id]].append((kind, key))
         self._files = {}
         self._emitter_sets = None
+        self._release_only = None
         self._all_files = None
         self._ned_types = None
 
@@ -404,6 +406,25 @@ class TestMap:
         for run_id in run_set:
             bits |= 1 << self.run_index[run_id]
         return bits
+
+    def get_release_only_blocks(self):
+        """
+        Returns the release-only blocks of the map (rule R-NDEBUG) as ``(blocks by name, blocks by
+        included file)``, or None for a map of version 2, which does not list them.
+        """
+        if self._release_only is None:
+            if not os.path.exists(os.path.join(self.folder, "release-only.json")):
+                self._release_only = False
+            else:
+                by_name = collections.defaultdict(list)
+                by_include = collections.defaultdict(list)
+                for block in self._read_json("release-only.json")["blocks"]:
+                    for name in block["names"]:
+                        by_name[name].append(block)
+                    for include in block["includes"]:
+                        by_include[include].append(block)
+                self._release_only = (by_name, by_include)
+        return self._release_only or None
 
     def get_emitter_set(self, set_id):
         if self._emitter_sets is None:
@@ -603,12 +624,31 @@ def _select_cpp(selection, change, project, changed_headers):
                 compile_time = True
             elif "runs" in function:
                 selection.add(test_map.bits(function["runs"]), "R2", path, f"line {start}: {function['name']}")
+                _select_release_only_names(selection, path, start, function)
         if not containing or compile_time:
             if is_source:
                 detail = "a constexpr function or a deduced return type" if containing else "outside the function bodies"
                 selection.add_all("R5" if containing else "R6", path, f"line {start}: {detail}; the static initialization of each process can change")
             else:
                 changed_headers.setdefault(path, "R5" if containing else "R4")
+
+def _describe_block(block):
+    return f"the release-only block {block['path']}:{block['lines'][0]}"
+
+def _select_release_only_names(selection, path, start, function):
+    # rule R-NDEBUG: a release-only block names the changed function, so a release build can run it
+    # also where the map does not record it
+    release_only = selection.test_map.get_release_only_blocks()
+    if release_only:
+        for block in release_only[0].get(get_simple_function_name(function["name"]), []):
+            selection.add(selection.test_map.bits(block["runs"]), "R-NDEBUG", path, f"line {start}: {function['name']} is named in {_describe_block(block)}")
+
+def _select_release_only_includes(selection, change):
+    # rule R-NDEBUG: a release-only block includes the changed file, which the coverage build does not compile
+    release_only = selection.test_map.get_release_only_blocks()
+    if release_only:
+        for block in release_only[1].get(change.path, []):
+            selection.add(selection.test_map.bits(block["runs"]), "R-NDEBUG", change.path, f"{_describe_block(block)} includes the file")
 
 def _select_changed_headers(selection, changed_headers):
     """
@@ -844,6 +884,7 @@ def select_side(test_map, project, file_changes, side):
             ned_changes.append(change)
             continue
         selection.begin_file(change, input_class)
+        _select_release_only_includes(selection, change)
         if input_class == "build":
             selection.add_all("R11", change.path, "a build file")
         elif input_class == "opp":
@@ -1036,6 +1077,8 @@ def select_tests(simulation_project=None, changes=WORKTREE, map_folder=None, kin
         sides.append(select_side(test_map, project, get_file_changes(root_folder, map_commit, changes.base), "A..B"))
     if changes.target != changes.base:
         sides.append(select_side(test_map, project, get_file_changes(root_folder, map_commit, changes.target), "A..C"))
+    if test_map.get_release_only_blocks() is None:
+        _logger.warning(f"The test map has version {test_map.header.get('version')} and does not list the release-only blocks, so rule R-NDEBUG does not apply")
     environment = get_environment_differences(test_map, simulation_project)
     if ignore_environment:
         for reason in environment:

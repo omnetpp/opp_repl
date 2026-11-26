@@ -13,6 +13,7 @@ import types
 import unittest
 
 from opp_repl.test.test_map.changes import *
+from opp_repl.test.test_map.ndebug import *
 from opp_repl.test.test_map.select import *
 from opp_repl.test.test_map.select import _is_inside
 
@@ -302,6 +303,61 @@ class SelectionTestCase(unittest.TestCase):
         old_ref, new_ref = self.make_statistics_pins()
         _, selection = self.select({"fake.opp": self.opp_text(new_ref, mode="debug")})
         self.assertEqual({kind: reason.rule for kind, reason in selection.kinds.items()}, {"statistical": "E5"})
+
+    def add_release_only_block(self, names=[], includes=[]):
+        with open(os.path.join(self.map_folder, "release-only.json"), "w") as f:
+            json.dump({"blocks": [{"path": "src/a.h", "lines": [2, 4], "names": names, "includes": includes, "inside_function": False, "runs": ["r1"]}]}, f)
+        self.test_map = TestMap(self.map_folder)
+
+    def test_a_function_that_a_release_only_block_names_also_selects_the_runs_of_the_block(self):
+        self.add_release_only_block(names=["h"])
+        runs, selection = self.select({"src/b.cc": SOURCES["src/b.cc"].replace("return 3;", "return 4;")})
+        self.assertEqual(runs, {"r1", "r2"})
+        self.assertEqual([reason.rule for _, reason in selection.entries], ["R2", "R-NDEBUG"])
+
+    def test_a_file_that_a_release_only_block_includes_selects_the_runs_of_the_block(self):
+        self.add_release_only_block(includes=["examples/data.xml"])
+        runs, selection = self.select({"examples/data.xml": "<y/>\n"})
+        self.assertEqual(runs, {"r1", "r2"})
+        self.assertIn("R-NDEBUG", [reason.rule for _, reason in selection.entries])
+
+class ReleaseOnlyTestCase(unittest.TestCase):
+    """The release-only blocks of rule R-NDEBUG."""
+    def blocks(self, text, texts=None):
+        macros = find_release_dependent_macros(texts or [text])
+        return sorted(find_release_only_blocks(text, macros))
+
+    def test_the_branches_that_only_a_release_build_compiles(self):
+        text = "#ifdef NDEBUG\na();\n#else\nb();\n#endif\n#ifndef NDEBUG\nc();\n#else\nd();\n#endif\n#if !defined(NDEBUG)\ne();\n#endif\n"
+        self.assertEqual(self.blocks(text), [(1, 3), (8, 10)])
+
+    def test_a_macro_that_depends_on_NDEBUG(self):
+        # a guard around the definition, and a conditional on the macro in another file
+        header = "#ifndef CHECK\n#ifdef NDEBUG\n#define CHECK 0\n#else\n#define CHECK 1\n#endif\n#endif\n"
+        user = "#if CHECK\nf();\n#else\ng();\n#endif\n"
+        self.assertEqual(find_release_dependent_macros([header, user])["CHECK"], {"release": ("defined", "0"), "debug": ("defined", "1")})
+        self.assertEqual(self.blocks(user, [header, user]), [(3, 5)])
+        self.assertEqual(self.blocks(header, [header, user]), [(2, 4)])
+
+    def test_conditions_without_NDEBUG_give_no_block(self):
+        text = "#if defined(A)\na();\n#elif defined(B)\nb();\n#else\nc();\n#endif\n#ifdef NDEBUG\n#if defined(A)\nd();\n#endif\n#endif\n"
+        self.assertEqual(self.blocks(text), [(8, 12), (9, 11)])
+
+    def test_a_definition_that_a_release_build_makes_and_a_debug_build_tests(self):
+        # not a guard: the #ifndef comes after the definition
+        text = "#ifdef NDEBUG\n#define QUIET\n#endif\n#ifndef QUIET\nlog();\n#else\nskip();\n#endif\n"
+        self.assertEqual(self.blocks(text), [(1, 3), (6, 8)])
+
+    def test_the_names_and_includes_of_a_block(self):
+        with tempfile.TemporaryDirectory() as folder:
+            write_files(folder, {"src/a.h": "#ifdef NDEBUG\n#include \"b.h\"\nint x = compute(1); // check()\n#endif\n", "src/b.h": "#include \"c.h\"\n", "src/c.h": "\n"})
+            self.assertEqual(scan_release_only_blocks(folder, ["src/a.h", "src/b.h", "src/c.h"], ["src"]),
+                             [{"path": "src/a.h", "lines": [1, 4], "names": ["compute", "x"], "includes": ["src/b.h", "src/c.h"]}])
+
+    def test_simple_function_names(self):
+        for name, simple in [("inet::Foo<int>::bar(int) const", "bar"), ("inet::Ipv4::~Ipv4()", "Ipv4"), ("f()", "f"),
+                             ("inet::X::get<inet::Y>(std::function<void (int)>) const", "get")]:
+            self.assertEqual(get_simple_function_name(name), simple)
 
 def make_simulation_test_task(config):
     simulation_config = types.SimpleNamespace(working_directory="examples", ini_file="omnetpp.ini", config=config)

@@ -18,6 +18,8 @@ runs used which part of the source file of the same name (see the test selection
   and ``listed``, the runs that listed the folder.
 - ``runs.json`` (the run table), ``tests.json`` (the test table), ``emitter-sets.json`` (the sets of
   more than 20 translation units that emit a function) and ``header.json``.
+- ``release-only.json``: the blocks that only a release build compiles (see
+  :py:mod:`opp_repl.test.test_map.ndebug`), with their names, includes and runs (map version 3).
 
 A set of runs is ``"all"``, ``{"except": [run ids]}`` if it holds more than half of the runs, or a
 list of run ids. Each map file has one JSON value on each line, so that a git diff shows one function
@@ -44,7 +46,7 @@ __sphinx_mock__ = True # ignore this module in documentation
 
 _logger = logging.getLogger(__name__)
 
-TEST_MAP_VERSION = 2
+TEST_MAP_VERSION = 3
 
 def read_test_map_records(records_folders):
     """Returns the complete records (the ``run.json`` of each run) of the records folders, sorted by run id. A later folder wins for the same run id."""
@@ -156,13 +158,15 @@ def get_test_map_header(simulation_project, mode="coverage"):
             "enabled_features": features,
             "date": datetime.datetime.now(datetime.timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")}
 
-def write_test_map(records, build_tables, root_folder, output_folder, header=None, tracked_files=None):
+def write_test_map(records, build_tables, root_folder, output_folder, header=None, tracked_files=None, release_only_blocks=None):
     """
     Writes the test map of *records* (see :py:func:`read_test_map_records`) and *build_tables* (see
     :py:func:`opp_repl.test.test_map.build.make_test_map_build_tables`) into *output_folder*.
     *root_folder* is the project root of the map commit; *tracked_files* is the set of files that git
     tracks there (from ``git ls-files`` if not given). A file that a run read or examined goes into
     the map only if git tracks it; a failed lookup goes into the map for any path.
+    *release_only_blocks* are the blocks of
+    :py:func:`opp_repl.test.test_map.ndebug.scan_release_only_blocks`; the map gives each its runs.
 
     Returns (dict):
         some numbers of the map, for the log.
@@ -225,6 +229,19 @@ def write_test_map(records, build_tables, root_folder, output_folder, header=Non
             included_by[header_file].append(unit)
     for header_file, units in included_by.items():
         files[header_file]["included_by"] = sorted(units)
+    # the release-only blocks: the runs of the functions that hold a block, or of the translation
+    # units that include the file of a block outside the functions
+    release_only = []
+    for block in release_only_blocks or []:
+        first, last = block["lines"]
+        containing = [entry for (first_line, last_line), entry in entries.get(block["path"], {}).items() if first_line <= first and last <= last_line]
+        bits = 0
+        for entry in containing:
+            bits |= entry["bits"]
+        if not containing:
+            for unit in [block["path"]] if os.path.splitext(block["path"])[1] in (".cc", ".cpp", ".cxx", ".c") else included_by.get(block["path"], []):
+                bits |= tu_bits.get(unit, 0)
+        release_only.append(dict(block, inside_function=bool(containing), runs=run_sets.to_json(bits)))
     _logger.info(f"Made the function map ({time.time() - start_time:.1f} s)")
     # the NED types
     ned_types = build_tables["ned_types"]
@@ -308,6 +325,7 @@ def write_test_map(records, build_tables, root_folder, output_folder, header=Non
         else:
             tests[record["kind"]][record["key"]] = [record["id"]]
     write("emitter-sets.json", {"sets": emitter_sets}, True)
+    write("release-only.json", {"blocks": release_only}, True)
     write("runs.json", runs, True)
     write("tests.json", dict(tests), False)
     header = dict(header or {}, runs=len(records), unresolved_ned_types=sorted(unresolved_types), ned_errors=build_tables.get("ned_errors", []))
@@ -318,6 +336,16 @@ def write_test_map(records, build_tables, root_folder, output_folder, header=Non
                "time": round(time.time() - start_time, 1)}
     _logger.info(f"Wrote the test map into {output_folder}: {numbers}")
     return numbers
+
+def get_release_only_blocks(simulation_project):
+    """Returns the release-only blocks of the C++ files that git tracks in the C++ folders of the project (rule R-NDEBUG)."""
+    from opp_repl.test.test_map.ndebug import scan_release_only_blocks
+    root_folder = simulation_project.get_full_path(".")
+    result = subprocess.run(["git", "-C", root_folder, "ls-files", "-z", "--", *simulation_project.cpp_folders], capture_output=True, text=True, check=True)
+    cpp_files = [path for path in result.stdout.split("\0") if os.path.splitext(path)[1] in (".h", ".hpp", ".hxx", ".cc", ".cpp", ".cxx", ".c")]
+    blocks = scan_release_only_blocks(root_folder, cpp_files, simulation_project.include_folders)
+    _logger.info(f"Found {len(blocks)} release-only blocks in {len(cpp_files)} C++ files")
+    return blocks
 
 def get_default_test_map_folder(simulation_project, name):
     """Returns the default folder of the test map (*name* ``map``) or of its records (*name* ``records``): ``coverage/test-map/<name>`` in the project root."""
@@ -412,5 +440,6 @@ def update_test_map(simulation_project=None, records_folders=None, output_folder
     records = read_test_map_records(records_folders)
     if not records:
         raise Exception(f"No records of the test map in {', '.join(records_folders)}")
-    write_test_map(records, build_tables, simulation_project.get_full_path("."), output_folder, header=get_test_map_header(simulation_project, mode=mode))
+    write_test_map(records, build_tables, simulation_project.get_full_path("."), output_folder, header=get_test_map_header(simulation_project, mode=mode),
+                   release_only_blocks=get_release_only_blocks(simulation_project))
     return result
