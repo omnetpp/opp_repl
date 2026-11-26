@@ -44,10 +44,9 @@ def run_all_tests(changes=None, test_map=None, ignore_environment=False, **kwarg
     multiple_test_tasks = get_all_test_tasks(**kwargs)
     if changes:
         # lazy: the test map imports the coverage module, which imports the simulation modules
-        from opp_repl.test.test_map.select import get_test_selection_for_run, select_test_tasks
+        from opp_repl.test.test_map.select import get_test_kind, get_test_selection_for_run, select_test_tasks
         test_selection = get_test_selection_for_run(kwargs.get("simulation_project"), changes, test_map=test_map, ignore_environment=ignore_environment)
         for kind_test_tasks in multiple_test_tasks.tasks:
-            kind = "fingerprint" if isinstance(kind_test_tasks, MultipleFingerprintTestTasks) else kind_test_tasks.name
-            select_test_tasks(kind, kind_test_tasks, test_selection)
+            select_test_tasks(get_test_kind(kind_test_tasks), kind_test_tasks, test_selection)
     return multiple_test_tasks.run(**kwargs)
 run_all_tests.__signature__ = combine_signatures(run_all_tests, get_all_test_tasks)

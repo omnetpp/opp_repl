@@ -141,22 +141,26 @@ def _fingerprint_extra_args(parser):
     parser.add_argument("--no-stored-only", dest="stored_only", action="store_false", help="use every selected run; an update inserts the fingerprints that the store does not hold")
     parser.add_argument("--append-args", nargs=argparse.REMAINDER, default=None, metavar="ARGS", help="pass all following arguments to opp_run, for example --append-args --fingerprint-modules='**.host[0].**'; must be the last option")
 
+def _test_map_records_extra_args(parser):
+    parser.add_argument("--test-map-records", default=None, metavar="FOLDER", help="write the record of each run for the test map into this folder (one folder for each run), and the profile of each run into the profile pool; needs -m coverage")
+
 def _run_fingerprint_tests_extra_args(parser):
     _fingerprint_extra_args(parser)
-    parser.add_argument("--test-map-records", default=None, metavar="FOLDER", help="write the record of each run for the test map into this folder (one folder for each run), and the profile of each run into the profile pool; needs -m coverage")
+    _test_map_records_extra_args(parser)
 
 def run_fingerprint_tests_main():
     run_tasks_main(run_fingerprint_tests, "fingerprint tests", extra_args_fn=_run_fingerprint_tests_extra_args)
 
 def _update_test_map_extra_args(parser):
     _fingerprint_extra_args(parser)
+    parser.add_argument("--kind", action="append", dest="kinds", default=None, choices=list(TEST_MAP_RUN_FUNCTIONS), help="a kind of test that runs with records; can be specified multiple times (default: fingerprint)")
     parser.add_argument("--records", action="append", dest="records_folders", default=None, metavar="FOLDER", help="a folder of the records of the runs; the run writes into the first one after it removes its records; can be specified multiple times, for example for the records of several CI jobs (default: coverage/test-map/records in the project root)")
     parser.add_argument("-o", "--output-folder", default=None, help="the folder of the test map (default: coverage/test-map/map in the project root)")
     parser.add_argument("--build-tables", dest="build_tables_file", default=None, metavar="FILE", help="read the build tables from this file instead of making them from the coverage build")
     parser.add_argument("--no-run", dest="run", action="store_false", default=True, help="do not run the tests; write the map from the records that the folders hold")
 
 def update_test_map_main():
-    run_tasks_main(update_test_map, "fingerprint tests in coverage mode with records, and writes the test map of the change-based test selection;", extra_args_fn=_update_test_map_extra_args)
+    run_tasks_main(update_test_map, "tests in coverage mode with records (the fingerprint tests, or the kinds of --kind), and writes the test map of the change-based test selection;", extra_args_fn=_update_test_map_extra_args)
 
 def show_test_map_main():
     parser = argparse.ArgumentParser(description="Shows from a test map which tests used a file or the function at a line, the runs below a folder, or which files the tests that match a filter used.")
@@ -215,7 +219,7 @@ def run_speed_tests_main():
     run_tasks_main(run_speed_tests, "speed tests")
 
 def run_statistical_tests_main():
-    run_tasks_main(run_statistical_tests, "statistical tests")
+    run_tasks_main(run_statistical_tests, "statistical tests", extra_args_fn=_test_map_records_extra_args)
 
 def run_opp_tests_main():
     run_tasks_main(lambda **kwargs: run_opp_tests(test_folder=os.getcwd(), **kwargs), "opp tests")

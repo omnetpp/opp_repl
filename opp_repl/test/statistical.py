@@ -282,11 +282,27 @@ def get_statistical_test_tasks(sim_time_limit=get_statistical_test_sim_time_limi
     return get_simulation_tasks(name="statistical test", run_number=run_number, sim_time_limit=sim_time_limit, simulation_task_class=StatisticalTestTask, multiple_simulation_tasks_class=MultipleSimulationTestTasks, multiple_task_results_class=MultipleStatisticalTestTaskResults, **kwargs)
 get_statistical_test_tasks.__signature__ = combine_signatures(get_statistical_test_tasks, get_simulation_tasks)
 
-def run_statistical_tests(append_args=[], **kwargs):
+def run_statistical_tests(append_args=[], test_map_records=None, changes=None, test_map=None, ignore_environment=False, **kwargs):
     """
     Runs one or more statistical tests that match the provided filter criteria.
 
     Parameters:
+        test_map_records (string or None):
+            A folder for the records of the test map, as for
+            :py:func:`opp_repl.test.fingerprint.task.run_fingerprint_tests`. Needs the coverage build
+            (``mode="coverage"``).
+
+        changes (string or None):
+            Run only the tests whose outcome this change can change, from the test map, as for
+            :py:func:`opp_repl.test.fingerprint.task.run_fingerprint_tests`.
+
+        test_map (string or None):
+            The folder of the test map for *changes*.
+
+        ignore_environment (bool):
+            With *changes*: a difference between the environment of the map and this one gives a
+            warning instead of selecting all tests.
+
         kwargs (dict):
             The filter criteria parameters are inherited from the :py:func:`get_statistical_test_tasks` function.
 
@@ -296,6 +312,10 @@ def run_statistical_tests(append_args=[], **kwargs):
     kwargs = apply_project_test_defaults("statistical", kwargs)
     check_test_baseline("statistical", **kwargs)
     multiple_statistical_test_tasks = get_statistical_test_tasks(**kwargs)
+    if changes or test_map_records:
+        # lazy: the test map imports the coverage module, which imports the simulation modules
+        from opp_repl.test.test_map.select import apply_test_map_options
+        kwargs = apply_test_map_options("statistical", multiple_statistical_test_tasks, kwargs, test_map_records=test_map_records, changes=changes, test_map=test_map, ignore_environment=ignore_environment)
     return multiple_statistical_test_tasks.run(append_args=append_args + _append_args, **kwargs)
 run_statistical_tests.__signature__ = combine_signatures(run_statistical_tests, get_statistical_test_tasks)
 

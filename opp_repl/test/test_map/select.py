@@ -1084,10 +1084,23 @@ def print_test_selection(test_selection, explain=False, list_tests=True, output_
 # the test tasks
 #
 
+def get_test_kind(multiple_test_tasks):
+    """Returns the kind of the tests of a task list of a run command, for example ``statistical`` for the list ``statistical test``."""
+    from opp_repl.test.fingerprint.task import MultipleFingerprintTestTasks
+    if isinstance(multiple_test_tasks, MultipleFingerprintTestTasks):
+        return "fingerprint"
+    name = multiple_test_tasks.name
+    return name[:-len(" test")] if name.endswith(" test") else name
+
+def get_test_key(kind, test_task):
+    """Returns the key of a test task of *kind* in ``tests.json`` of the map: the key of its run, and for a fingerprint test also its ingredients."""
+    from opp_repl.test.test_map.record import get_test_map_run_key
+    run_key = get_test_map_run_key(kind, test_task.simulation_task)
+    return run_key + ":" + test_task.ingredients if kind == "fingerprint" else run_key
+
 def get_fingerprint_test_key(fingerprint_test_task):
     """Returns the key of a fingerprint test task in ``tests.json`` of the map."""
-    from opp_repl.test.test_map.record import get_test_map_run_key
-    return get_test_map_run_key("fingerprint", fingerprint_test_task.simulation_task) + ":" + fingerprint_test_task.ingredients
+    return get_test_key("fingerprint", fingerprint_test_task)
 
 def select_fingerprint_test_tasks(multiple_fingerprint_test_tasks, test_selection):
     """
@@ -1126,8 +1139,29 @@ def select_test_tasks(kind, multiple_test_tasks, test_selection):
     """
     if kind == "fingerprint":
         selected, total = select_fingerprint_test_tasks(multiple_test_tasks, test_selection)
-        everything = test_selection.get_kind(kind).everything
-        _logger.info(f"Selected {selected} of {total} fingerprint tests for the changes {test_selection.changes.describe()}" + (f": {everything}" if everything else ""))
     else:
-        _logger.info(f"The test map has no {kind} tests, so all of them run")
+        tasks = [task for task in multiple_test_tasks.tasks if test_selection.is_selected(kind, get_test_key(kind, task))]
+        selected, total = len(tasks), len(multiple_test_tasks.tasks)
+        multiple_test_tasks.tasks = tasks
+    everything = test_selection.get_kind(kind).everything
+    _logger.info(f"Selected {selected} of {total} {kind} tests for the changes {test_selection.changes.describe()}" + (f": {everything}" if everything else ""))
     return multiple_test_tasks
+
+def apply_test_map_options(kind, multiple_test_tasks, kwargs, test_map_records=None, changes=None, test_map=None, ignore_environment=False):
+    """
+    Applies the options of the test map to the tasks of a run command of *kind*, and returns the
+    keyword arguments for the run of the tasks. With *changes*, only the selected tests stay (see
+    :py:func:`select_tests`). With *test_map_records*, each run writes its record into this folder
+    (see :py:mod:`opp_repl.test.test_map.record`); the records need all tests and the coverage build.
+    """
+    if changes:
+        if test_map_records:
+            raise Exception("The records of the test map need all tests, so they cannot run with a selection of changes")
+        test_selection = get_test_selection_for_run(kwargs["simulation_project"], changes, test_map=test_map, ignore_environment=ignore_environment, kinds=[kind])
+        select_test_tasks(kind, multiple_test_tasks, test_selection)
+    if test_map_records:
+        if kwargs.get("mode") != "coverage":
+            raise Exception("The records of the test map need the coverage build (mode coverage)")
+        from opp_repl.test.test_map.record import get_test_map_simulation_runner_class
+        kwargs = dict(kwargs, simulation_runner_class=get_test_map_simulation_runner_class(test_map_records, kind))
+    return kwargs

@@ -172,7 +172,9 @@ def run_entry(run_id, config, normal_end=True):
 MAP_FILES = {
     "header.json": {"version": 2, "project": "fake"},
     "runs.json": {"r1": run_entry("r1", "One"), "r2": run_entry("r2", "Two"), "r3": run_entry("r3", "Three", normal_end=False)},
-    "tests.json": {"fingerprint": {f"fingerprint:examples/omnetpp.ini:{config}:#0:1s:tplx": [run_id] for run_id, config in [("r1", "One"), ("r2", "Two"), ("r3", "Three")]}},
+    "tests.json": {"fingerprint": {f"fingerprint:examples/omnetpp.ini:{config}:#0:1s:tplx": [run_id] for run_id, config in [("r1", "One"), ("r2", "Two"), ("r3", "Three")]},
+                   # the statistical tests share the runs here, which keeps the run sets of the other tests
+                   "statistical": {f"statistical:examples/omnetpp.ini:{config}:#0:1s": [run_id] for run_id, config in [("r1", "One"), ("r2", "Two")]}},
     "src/a.h.json": {"functions": [{"lines": [4, 6], "name": "A::get()", "runs": ["r2"], "tus": ["src/b.cc"]}], "included_by": ["src/a.cc", "src/b.cc"]},
     "src/a.cc.json": {"functions": [{"lines": [4, 6], "name": "f()", "runs": ["r1"]}, {"lines": [9, 11], "name": "g()", "runs": "all"}], "tu_runs": "all"},
     "src/b.cc.json": {"functions": [{"lines": [4, 6], "name": "h()", "runs": ["r2"]}], "tu_runs": ["r2"]},
@@ -265,7 +267,30 @@ class SelectionTestCase(unittest.TestCase):
         _, selection = self.select({"store.json": json.dumps(entries)})
         self.assertEqual(selection.tests, [])
 
+def make_simulation_test_task(config):
+    simulation_config = types.SimpleNamespace(working_directory="examples", ini_file="omnetpp.ini", config=config)
+    return types.SimpleNamespace(simulation_task=types.SimpleNamespace(simulation_config=simulation_config, run_number=0, get_sim_time_limit=lambda: "1s"))
+
 class TestSelectionTestCase(unittest.TestCase):
+    def test_the_tasks_of_a_simulation_test_kind(self):
+        with tempfile.TemporaryDirectory() as folder:
+            for path, content in MAP_FILES.items():
+                full_path = os.path.join(folder, path)
+                os.makedirs(os.path.dirname(full_path), exist_ok=True)
+                with open(full_path, "w") as f:
+                    json.dump(content, f)
+            test_map = TestMap(folder)
+            kind = KindSelection("statistical", tests=None)
+            kind.selected["statistical:examples/omnetpp.ini:Two:#0:1s"] = [Reason("R2", "src/b.cc", "", "A..C")]
+            changes = types.SimpleNamespace(describe=lambda: "worktree")
+            selection = TestSelection(test_map, changes, folder, [], [], {"statistical": kind})
+            tasks = types.SimpleNamespace(name="statistical test", tasks=[make_simulation_test_task(config) for config in ["One", "Two", "New"]])
+            self.assertEqual(get_test_kind(tasks), "statistical")
+            self.assertEqual(get_test_key("statistical", tasks.tasks[0]), "statistical:examples/omnetpp.ini:One:#0:1s")
+            select_test_tasks("statistical", tasks, selection)
+            # Two is selected, New is not in the map, and One is not selected
+            self.assertEqual([task.simulation_task.simulation_config.config for task in tasks.tasks], ["Two", "New"])
+
     def test_tests_outside_the_map_and_line_shifts(self):
         with tempfile.TemporaryDirectory() as folder:
             for path, content in MAP_FILES.items():

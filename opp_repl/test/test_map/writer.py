@@ -29,6 +29,7 @@ import datetime
 import glob
 import gzip
 import hashlib
+import importlib
 import json
 import logging
 import os
@@ -340,11 +341,24 @@ def clear_test_map_records(records_folder):
         else:
             os.remove(path)
 
-def update_test_map(simulation_project=None, records_folders=None, output_folder=None, build_tables_file=None, run=True, **kwargs):
+# the run command of each kind of test that the map can hold: (module, function)
+TEST_MAP_RUN_FUNCTIONS = {
+    "fingerprint": ("opp_repl.test.fingerprint.task", "run_fingerprint_tests"),
+    "statistical": ("opp_repl.test.statistical", "run_statistical_tests"),
+}
+
+def get_test_map_run_function(kind):
+    """Returns the run command of the tests of *kind*, which takes the option ``test_map_records``."""
+    if kind not in TEST_MAP_RUN_FUNCTIONS:
+        raise Exception(f"The test map does not hold the {kind} tests; it holds {', '.join(TEST_MAP_RUN_FUNCTIONS)}")
+    module_name, function_name = TEST_MAP_RUN_FUNCTIONS[kind]
+    return getattr(importlib.import_module(module_name), function_name)
+
+def update_test_map(simulation_project=None, records_folders=None, output_folder=None, build_tables_file=None, run=True, kinds=None, **kwargs):
     """
-    Makes the test map of the fingerprint tests: runs the tests in coverage mode with records (unless
-    *run* is false), makes the build tables of the coverage build (unless *build_tables_file* gives
-    them), and writes the map.
+    Makes the test map: runs the tests of each kind in coverage mode with records (unless *run* is
+    false), makes the build tables of the coverage build (unless *build_tables_file* gives them),
+    and writes the map.
 
     Parameters:
         records_folders (list of strings or None):
@@ -362,26 +376,34 @@ def update_test_map(simulation_project=None, records_folders=None, output_folder
         run (bool):
             If false, the map comes from the records that the folders already hold.
 
+        kinds (list of strings or None):
+            The kinds of test that run, one after the other, for example ``["fingerprint",
+            "statistical"]`` (see :py:data:`TEST_MAP_RUN_FUNCTIONS`). Default: ``["fingerprint"]``.
+
         kwargs (dict):
-            The parameters of :py:func:`opp_repl.test.fingerprint.task.run_fingerprint_tests`, for
-            example filters.
+            The parameters of the run command of each kind, for example
+            :py:func:`opp_repl.test.fingerprint.task.run_fingerprint_tests`, and its filters.
 
     Returns (:py:class:`MultipleTestTaskResults <opp_repl.test.task.MultipleTestTaskResults>` or None):
-        the results of the tests, or None if *run* is false.
+        the results of the tests (for more than one kind, a list of the results of each kind), or
+        None if *run* is false.
     """
     from opp_repl.simulation.project import get_default_simulation_project
     from opp_repl.test.coverage import merge_coverage_profiles
-    from opp_repl.test.fingerprint.task import run_fingerprint_tests
+    from opp_repl.test.task import MultipleTestTaskResults
     from opp_repl.test.test_map.build import make_test_map_build_tables, read_test_map_build_tables, write_test_map_build_tables
     if simulation_project is None:
         simulation_project = get_default_simulation_project()
     records_folders = [os.path.abspath(folder) for folder in (records_folders or [get_default_test_map_folder(simulation_project, "records")])]
     output_folder = os.path.abspath(output_folder or get_default_test_map_folder(simulation_project, "map"))
     mode = "coverage"
+    kinds = kinds or ["fingerprint"]
+    run_functions = [get_test_map_run_function(kind) for kind in kinds]
     result = None
     if run:
         clear_test_map_records(records_folders[0])
-        result = run_fingerprint_tests(simulation_project=simulation_project, test_map_records=records_folders[0], **dict(kwargs, mode=mode))
+        results = [run_function(simulation_project=simulation_project, test_map_records=records_folders[0], **dict(kwargs, mode=mode)) for run_function in run_functions]
+        result = results[0] if len(results) == 1 else MultipleTestTaskResults(results=results)
     if build_tables_file:
         build_tables = read_test_map_build_tables(build_tables_file)
     else:
