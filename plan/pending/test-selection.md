@@ -1029,6 +1029,25 @@ and a check on a real INET map with the scenarios of phase 2.
     must select each test whose stored fingerprint changed by a rule other than E1, the store rule
     itself; a test that is not in the map is selected anyway. The selection is correct with any
     map (diff(A,B) ∪ diff(A,C)), so a test that it misses is a defect of a rule or an assumption.
+  - The fingerprint result (2026-11-26, opp_repl 2f36b13, the 14 maps built in 2:36): of the 854
+    changed values of 29 commits, a rule other than E1 selects 848. The other 6 are of two commits
+    that change no code: bee6f62eea records the mipv6 Handover fingerprints again (only the
+    store), and b436a63418 records the baselines again for the Ubuntu 26.04 runners (the store and
+    the pins). So the replay finds no defect of a rule. 13 of the 29 commits select all tests, so
+    their check proves less; at the age 0, the own change selects all tests through R4 for a
+    header that most translation units include (`Ipv6InterfaceData.h`, `BlockAckRecord.h`).
+  - The ratio of the fingerprint tests by the age of the map (the commits between the map and the
+    parent of the commit), over the 193 commits with a map:
+
+    | Age | Commits | Median of the selected tests | All tests | Below 5% |
+    | --- | --- | --- | --- | --- |
+    | 0 | 14 | 1.9% | 21% | 64% |
+    | 1 to 2 | 28 | 2.5% | 36% | 57% |
+    | 3 to 6 | 45 | 100% | 51% | 40% |
+    | 7 to 15 | 36 | 100% | 67% | 25% |
+
+    A map at the parent (D11) selects a median of 1.9% of the tests; from 3 commits of age on, more
+    than half of the commits select all tests. A selection needs a median of 0.7 s, at most 7.2 s.
   - The replay uses a map whose commit is near the replayed commits. diff(A,B) grows with the
     distance, and a big diff gives a correct but wide selection, which makes the ratio useless.
 - [x] The mutation sample (V3), once for the fingerprint tests.
