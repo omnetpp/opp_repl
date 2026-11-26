@@ -152,9 +152,13 @@ def get_test_map_header(simulation_project, mode="coverage"):
     # the commit of the opp_repl code that runs, if it is a git checkout, else the version of the package
     opp_repl_folder = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
     opp_repl_version = git(opp_repl_folder, "rev-parse", "HEAD")
+    opp_repl_commit = opp_repl_version
     if opp_repl_version is None:
         try:
             from opp_repl._version import version as opp_repl_version
+            # an installed package has no git checkout; setuptools_scm writes its commit as "g<hash>"
+            from opp_repl._version import commit_id
+            opp_repl_commit = commit_id[1:] if commit_id and commit_id.startswith("g") else commit_id
         except ImportError:
             pass
     compiler = None
@@ -174,6 +178,8 @@ def get_test_map_header(simulation_project, mode="coverage"):
             "changed_files": bool(git(root_folder, "status", "--porcelain", "--untracked-files=no")),
             "omnetpp_commit": git(omnetpp_project.get_root_path(), "rev-parse", "HEAD") if omnetpp_project.has_root_path() else None,
             "opp_repl_version": opp_repl_version,
+            # the commit that a pull request job installs to test in the environment of the map (D9)
+            "opp_repl_commit": opp_repl_commit,
             "opp_repl_changed_files": bool(git(opp_repl_folder, "status", "--porcelain", "--untracked-files=no")),
             "compiler": compiler,
             "enabled_features": features,

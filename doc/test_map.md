@@ -153,7 +153,7 @@ file tells which runs used which part of the source file of the same name:
 | `tests.json` | for each test kind and test key: its runs |
 | `emitter-sets.json` | the sets of more than 20 translation units that emit a function, by id |
 | `release-only.json` | the blocks that only a release build compiles, with their names, the project files that they include, and their runs (see below) |
-| `header.json` | the project, the map commit, the omnetpp commit, the opp_repl commit, the compiler, the enabled features, the date |
+| `header.json` | the project, the map commit, the omnetpp commit, the opp_repl version and commit (also of an installed package, from `opp_repl/_version.py`), the compiler, the enabled features, the versions of the Python packages of the charts, the date |
 
 A set of runs is `"all"`, `{"except": [run ids]}` if it holds more than half
 of the runs, or a list of run ids. Each map file has one JSON value on each
