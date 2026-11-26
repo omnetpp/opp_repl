@@ -185,8 +185,11 @@ class OppTestTask(TestTask):
         simulation_args = ["--check-signals=false", f"-l{library_name}", "-n", ":".join(ned_folders)]
         recorder = test_map_recorder(f"{test_map_recorder.kind}:{self.get_test_map_name()}", self.simulation_project, self.mode) if test_map_recorder and not self.debug else None
         if recorder and not self.has_testprog():
-            # the NED types of the run, for the test map; a %testprog program can be another program
+            # the NED types of the run, for the test map; a %testprog program can be another program.
+            # omnetpp prints them into the standard output, which the test compares, so a wrapper of
+            # the test program moves these lines into a file of their own.
             simulation_args.append("--print-instantiated-ned-types=true")
+            test_program = write_ned_types_wrapper(test_directory, os.path.basename(test_program))
         if not self.debug:
             args = ["opp_test", "run", "-v", "-w", work_directory, "-p", test_program, self.test_file_name, "-a", *simulation_args]
             # a test script that starts bin/inet without --debug or --release picks its binary from MODE
@@ -236,8 +239,33 @@ class OppTestTask(TestTask):
                        fields={"working_directory": os.path.relpath(self.working_directory, root_folder),
                                "end": read_end_of_run(output),
                                # the NED types of a %testprog program are not known
-                               "ned_types": None if self.has_testprog() else read_instantiated_ned_types(output),
+                               "ned_types": None if self.has_testprog() else read_ned_types_file(test_directory),
                                "includes": get_build_includes(test_directory, root_folder)})
+
+# the wrapper of a test program for the test map: it moves the lines of the instantiated NED types
+# from the standard output into ned-types.txt, and keeps the exit status of the program
+_NED_TYPES_WRAPPER = """#!/bin/bash
+set -o pipefail
+folder="$(dirname "$0")"
+"$folder/{program}" "$@" | awk -v out="$folder/ned-types.txt" '/^instantiated NED type: / {{ print > out; next }} {{ print; fflush() }}'
+"""
+
+def write_ned_types_wrapper(test_directory, program):
+    """Writes the wrapper of the test program *program* into *test_directory*, and returns its path for ``opp_test run -p``, relative to the work directory."""
+    file_name = os.path.join(test_directory, "opp_repl_ned_types.sh")
+    with open(file_name, "w") as f:
+        f.write(_NED_TYPES_WRAPPER.format(program=program))
+    os.chmod(file_name, 0o755)
+    return f"{os.path.basename(test_directory)}/opp_repl_ned_types.sh"
+
+def read_ned_types_file(test_directory):
+    """Returns the NED types of ``ned-types.txt`` that the wrapper of the test program wrote."""
+    from opp_repl.test.test_map.record import read_instantiated_ned_types
+    file_name = os.path.join(test_directory, "ned-types.txt")
+    if not os.path.isfile(file_name):
+        return []
+    with open(file_name, errors="replace") as f:
+        return read_instantiated_ned_types(f.read())
 
 def get_build_includes(folder, root_folder, dependency_folders=None):
     """

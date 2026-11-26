@@ -357,6 +357,19 @@ class WriterTestCase(unittest.TestCase):
         open(os.path.join(folder, "test.h"), "w").close()
         self.assertEqual(get_build_includes(folder, self.folder.name), ["src/a/A.h", "src/a/B.h"])
 
+    def test_the_wrapper_moves_the_ned_types_out_of_the_output(self):
+        import subprocess
+        from opp_repl.test.opp import read_ned_types_file, write_ned_types_wrapper
+        folder = os.path.join(self.folder.name, "work", "T")
+        os.makedirs(folder)
+        with open(os.path.join(folder, "program"), "w") as f:
+            f.write("#!/bin/sh\necho before\necho 'instantiated NED type: x.Net'\necho after \"$1\"\nexit 3\n")
+        os.chmod(os.path.join(folder, "program"), 0o755)
+        self.assertEqual(write_ned_types_wrapper(folder, "program"), "T/opp_repl_ned_types.sh")
+        result = subprocess.run([os.path.join(folder, "opp_repl_ned_types.sh"), "arg"], capture_output=True, text=True)
+        self.assertEqual((result.stdout, result.returncode), ("before\nafter arg\n", 3))
+        self.assertEqual(read_ned_types_file(folder), ["x.Net"])
+
     def test_fingerprint_ingredients(self):
         self.assertEqual(get_fingerprint_ingredients(["--fingerprint", "1234-5678/tplx,0000-0000/~tND"]), ["tplx", "~tND"])
         self.assertEqual(get_fingerprint_ingredients(["--fingerprint=1234-5678/tplx"]), ["tplx"])
