@@ -1032,6 +1032,11 @@ and a check on a real INET map with the scenarios of phase 2.
   - The replay uses a map whose commit is near the replayed commits. diff(A,B) grows with the
     distance, and a big diff gives a correct but wide selection, which makes the ratio useless.
 - [ ] The mutation sample (V3), once for the fingerprint tests.
+  - The method (`p4/v3/v3.py`): in the scratch tree at INET 0af9da9b1e with a release build and the
+    fingerprint map of the same commit, 12 mutations, one in each of 12 folders below `src/inet`: an
+    integer literal in an arithmetic or a comparison of a function that ran in 5 to 600 runs gets
+    1 more. After each build, all 4726 fingerprint tests run; each test whose result differs from
+    the run without a change must be in the selection of the change (`--changes worktree`).
 - [ ] Write the selection ratio for each suite into this plan.
 
 ### Phase 5 — CI and the agent documentation
