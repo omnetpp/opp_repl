@@ -188,11 +188,14 @@ class TestMapRecorder:
         env["OPP_REPL_FILE_TRACE"] = os.path.join(self.folder, "trace")
         return env
 
-    def write(self, exit_code, args, output_folders=[], fields={}):
+    def write(self, exit_code, args, output_folders=[], fields={}, harness_folders=[]):
         """
         Writes the record of the run: the profile into the pool, the functions that ran, the files
         that the run used except *output_folders* (relative to the project root), and ``run.json``
-        with *fields* (for example the config of a simulation).
+        with *fields* (for example the config of a simulation). The entries of the folders of
+        *harness_folders* themselves (listed, examined, a failed lookup) come from the harness, for
+        example the Python of ``opp_test``, which examines its folder for its imports; the entries
+        of the files in them stay.
         """
         from opp_repl.test.coverage import get_coverage_tool
         simulation_project = self.simulation_project
@@ -220,6 +223,8 @@ class TestMapRecorder:
                 trace_lines += f.readlines()
             os.remove(trace_file)
         files = reduce_file_trace(trace_lines, os.path.realpath(simulation_project.get_full_path(".")), output_folders=output_folders)
+        harness = {os.path.normpath(folder) for folder in harness_folders}
+        files = [(kind, path) for kind, path in files if path not in harness]
         with open(os.path.join(self.folder, "files.txt"), "w", errors="surrogateescape") as f:
             f.write("".join(f"{kind} {path}\n" for kind, path in files))
         record = {"version": TEST_MAP_RECORD_VERSION,

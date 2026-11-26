@@ -58,6 +58,14 @@ class Side:
         result = _git(self.root_folder, "show", f"{self.rev}:./{path}", text=False, check=False)
         return result.stdout.decode("utf-8", errors="surrogateescape") if result.returncode == 0 else None
 
+    def list_files(self, folder):
+        """Returns the files below *folder* (relative to the project root) at this side: for the working tree also the untracked files that git does not ignore."""
+        if self.is_worktree():
+            tracked = _git(self.root_folder, "ls-files", "-z", "--", folder).stdout.split("\0")
+            untracked = _git(self.root_folder, "ls-files", "--others", "--exclude-standard", "-z", "--", folder).stdout.split("\0")
+            return sorted(path for path in tracked + untracked if path and os.path.exists(os.path.join(self.root_folder, path)))
+        return sorted(path for path in _git(self.root_folder, "ls-tree", "-r", "-z", "--name-only", self.rev, "--", folder).stdout.split("\0") if path)
+
     def grep(self, regex, paths):
         """Returns the files below *paths* (relative to the project root) whose text matches the extended regular expression *regex*."""
         args = ["grep", "-l", "-I", "-E", "-e", regex]

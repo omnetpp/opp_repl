@@ -235,7 +235,10 @@ class OppTestTask(TestTask):
             if os.path.isfile(os.path.join(test_directory, name)):
                 with open(os.path.join(test_directory, name), errors="replace") as f:
                     output += f.read()
-        recorder.write(subprocess_result.returncode, args, output_folders=[os.path.relpath(test_directory, root_folder)],
+        # the Python of opp_test examines the working directory for its imports, and a new .test file
+        # of the folder is a new test, not an input of this one (a changed .test file: rule E6)
+        harness_folders = {os.path.relpath(self.working_directory, root_folder), os.path.dirname(self.get_test_map_name())}
+        recorder.write(subprocess_result.returncode, args, output_folders=[os.path.relpath(test_directory, root_folder)], harness_folders=harness_folders,
                        fields={"working_directory": os.path.relpath(self.working_directory, root_folder),
                                "end": read_end_of_run(output),
                                # the NED types of a %testprog program are not known

@@ -1333,7 +1333,9 @@ class TestSelection:
         return result
 
 def _get_test_universe(kind, project, target_side):
-    # the tests of a kind at C
+    # the tests of a kind at C, also the new ones, without a build (rule T8 of INET): the fingerprint
+    # tests from the store, the opp tests from their .test files, a binary test from its folder;
+    # None for a kind whose tests need the build (the configs of the simulations)
     if kind == "fingerprint":
         parameters = project.test_parameters.get("fingerprint", {})
         store = parameters.get("store")
@@ -1347,6 +1349,16 @@ def _get_test_universe(kind, project, target_side):
         except ValueError:
             return None
         return list(get_fingerprint_store_test_keys(entries, parameters.get("defaults", {}).get("ingredients_list")))
+    defaults = project.test_parameters.get(kind, {}).get("defaults", {})
+    test_folder = defaults.get("test_folder")
+    if test_folder:
+        test_folder = os.path.normpath(test_folder)
+        if defaults.get("executable"):
+            # a binary test is one test, if its folder exists at C
+            return [f"{kind}:{test_folder}"] if target_side.list_files(test_folder) else []
+        # the .test files below the test folder, not in a work folder below it (get_opp_test_tasks)
+        return [f"{kind}:{path}" for path in target_side.list_files(test_folder)
+                if path.endswith(".test") and "work" not in os.path.relpath(os.path.dirname(path), test_folder).split("/")]
     return None
 
 def select_tests(simulation_project=None, changes=WORKTREE, map_folder=None, kinds=None, ignore_environment=False):

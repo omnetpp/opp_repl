@@ -368,6 +368,12 @@ class SelectionTestCase(unittest.TestCase):
         _, selection = self.select({"python/x/plot.py": "x = 2\n"})
         self.assertEqual({kind: reason.rule for kind, reason in selection.kinds.items()}, {"chart": "H2", "validation": "H2"})
 
+    def test_the_opp_tests_at_the_target_also_hold_a_new_test(self):
+        write_files(self.root, {"tests/unit/B.test": "%description: new\n", "tests/unit/work/C.test": "%description: scratch\n"})
+        from opp_repl.test.test_map.select import _get_test_universe
+        tests = _get_test_universe("unit", self.project, Side(self.root, WORKTREE))
+        self.assertEqual(tests, ["unit:tests/unit/A.test", "unit:tests/unit/B.test"])
+
     def test_the_support_library_selects_all_tests_of_its_kind(self):
         _, selection = self.select({"tests/unit/lib/L.cc": "int l() { return 1; }\n"})
         self.assertEqual({kind: reason.rule for kind, reason in selection.kinds.items()}, {"unit": "H4"})
