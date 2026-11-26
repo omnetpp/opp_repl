@@ -1,6 +1,6 @@
 # Change-based test selection
 
-> **Status:** phase 2 done; next: phases 4 and 5 for the fingerprint tests, then phase 3 (D8) ·
+> **Status:** phase 2 done; phase 3 in progress (D8 changed), then phases 4 and 5 ·
 > **Owner:** opp_repl · **Also changes:** INET (the coverage workflow, the workflows of pull requests,
 > `inet.opp`, `run-the-gates.md` and the test rules), the `inet-framework/coverage` repository,
 > optionally omnetpp (section 11)
@@ -865,8 +865,8 @@ from main f6d900a). The checks use the map of version 2 that the phase 1 records
   INET `tests/dependency.json`. Before the removal, show the evidence of section 2 that nothing
   uses them.
   - Done 2026-11-26, after the user agreed: opp_repl 5d46ac3 removes the code, the parameters and
-    the line of `doc/opp_files.md`. INET de20ccae69 removes `tests/dependency.json`, on the local
-    branch `topic/remove-dependency-json` from `master` 85ccac161e. The 165 tests of
+    the line of `doc/opp_files.md`. INET de20ccae69 removed `tests/dependency.json` on a local
+    branch; on 2026-11-26 it was rebased and put on the local `master` as b79190d7e5. The 165 tests of
     `opp_run_self_test` pass, and the dry run of the fingerprint tests with `--changes` again
     selects 105 of 4726 tests.
   - One more user came up before the removal: the workspace file
@@ -963,6 +963,8 @@ The design is in section 15.
 - **D2 (decided 2026-11-26)** The CPU-time limits (section 7): D2c, a fixed `sim-time-limit` for
   each config in a store of its own. The user chose it over D2b, because D2b has no record of the
   code at the stop point, and over D2a, because D2c needs no omnetpp change.
+- **D3 (decided 2026-11-26)** The NED closure stays in opp_repl for now. The omnetpp change O1 comes
+  only when the failed lookups cost too much (4.3).
 - **D4 (decided by the phase 0 measurement)** File trace: `LD_PRELOAD` (about 1% against 33% for
   `strace`, the same project files).
 - **D5 (decided 2026-11-26)** No age limit for the map. Each report gives the cost of the age, and
@@ -975,7 +977,8 @@ The design is in section 15.
   (8.4).
 - **D8 (decided 2026-11-26)** The fingerprint tests go through all the steps first: the replay
   (phase 4), the map and the jobs of phase 5, and the agent documentation. Then phase 3 adds one
-  kind at a time on the same path.
+  kind at a time on the same path. Changed by the user on the same day: phase 3 comes now, before
+  phases 4 and 5. Each kind of phase 3 still goes through the replay of phase 4 before CI uses it.
 - **D9 (decided 2026-11-26)** A pull request job uses the omnetpp commit and the opp_repl commit of
   the map, not the newest commits of `omnetpp-6.x` and `github_ci`. Without this, H1 or H5 would
   select all tests on 49 of 84 days (15.1). The other option was not chosen: pins of omnetpp and
@@ -987,10 +990,7 @@ The design is in section 15.
   (8.4). A pull request job uses the map of the newest finished push run, so the map is minutes or
   hours old, and the environment of D9 is that of the last push run.
 
-Open:
-
-- **D3** NED closure: in opp_repl first, or omnetpp change O1 first. Recommended: opp_repl first; O1
-  when the failed lookups cost too much (4.3).
+No decision is open.
 
 ## 14. Risks
 
