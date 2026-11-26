@@ -240,18 +240,29 @@ def _strip_ini_comment(line):
             return line[:index]
     return line
 
+# a key of opp_repl in a comment line of an ini file, as opp_repl reads it: "#expected-result = ..."
+_INI_COMMENT_DIRECTIVE = re.compile(r"#\s*(abstract|emulation|expected-result|bounded)\s*=(.*)$")
+
 def read_ini_sections(text):
     """
     Returns the entries of each section of an ini file, ``({section: [(key, value)]}, error)``. The
     section names are as in ``-q sectioninheritance``: ``General`` or ``Config <name>``. The entries
     before the first section belong to ``General``; an ``include`` line is an entry. *error* is the
-    first line that is not a section, an entry, or an include, or None.
+    first line that is not a section, an entry, or an include, or None. A comment line with a key
+    that opp_repl reads (``#expected-result``, ``#abstract``, ``#emulation``, ``#bounded``) is an
+    entry with the key ``#<key>`` (rule I4).
     """
     sections = {}
     current = "General"
     error = None
     logical_line = ""
     for number, line in enumerate(text.split("\n"), 1):
+        # rule I4: opp_repl reads these keys also from a comment (simulation/project.py), and they
+        # decide if a config is a test and its expected result, so they are entries of the section
+        directive = None if logical_line else _INI_COMMENT_DIRECTIVE.match(line)
+        if directive:
+            sections.setdefault(current, []).append(("#" + directive.group(1), directive.group(2).strip()))
+            continue
         line = _strip_ini_comment(logical_line + line) if not logical_line else logical_line + _strip_ini_comment(line)
         if line.rstrip().endswith("\\"):
             logical_line = line.rstrip()[:-1]

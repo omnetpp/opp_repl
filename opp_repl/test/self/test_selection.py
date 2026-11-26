@@ -102,6 +102,11 @@ class IniTestCase(unittest.TestCase):
     def test_a_line_that_is_not_an_entry_is_an_error(self):
         self.assertIsNotNone(read_ini_sections("[General]\nnot an entry\n")[1])
 
+    def test_the_keys_of_opp_repl_in_comments_are_entries(self):
+        sections, error = read_ini_sections('[Config A]\n#expected-result = "ERROR"\n# a comment\n#abstract = true\nx = 1\n')
+        self.assertIsNone(error)
+        self.assertEqual(sections["Config A"], [("#expected-result", '"ERROR"'), ("#abstract", "true"), ("x", "1")])
+
 class DiffTestCase(unittest.TestCase):
     def test_parse_diff(self):
         text = "\n".join(["diff --git a/x.cc b/x.cc", "index 1..2 100644", "--- a/x.cc", "+++ b/x.cc", "@@ -3,2 +3 @@",
@@ -240,6 +245,10 @@ class SelectionTestCase(unittest.TestCase):
 
     def test_an_ini_section_selects_its_runs(self):
         runs, selection = self.select({"examples/omnetpp.ini": SOURCES["examples/omnetpp.ini"].replace("b = 2", "b = 3")})
+        self.assertEqual(runs, {"r2"})
+
+    def test_an_expected_result_comment_selects_the_runs_of_its_section(self):
+        runs, selection = self.select({"examples/omnetpp.ini": SOURCES["examples/omnetpp.ini"].replace("b = 2", 'b = 2\n#expected-result = "ERROR"')})
         self.assertEqual(runs, {"r2"})
 
     def test_an_iteration_variable_selects_the_runs_of_the_file(self):
