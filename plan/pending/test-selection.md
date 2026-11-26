@@ -1135,7 +1135,18 @@ branch. The workflows can only run after a push.
 - [ ] D5: the report gives the cost of the age of the map, and a map that is older than 2 days
   gives a warning (section 9, step 6).
 - [ ] The pull request job of 15.2 for each kind that passed its replay, first the fingerprint
-  tests. It selects before the build (INET T8).
+  tests. It selects before the build (INET T8). It skips its steps with a step-level `if:`, not
+  with a job-level `if:`: GitHub gives a matrix job that its job-level `if:` skips the name without
+  its matrix value, so its required context never reports (INET `plan/pending/required-checks.md`
+  F4, repaired for the statistical and chart jobs in INET 0572d1152e). Until the selection
+  replaces it, INET step G2a gives the fingerprint workflow the job `Paths that can change a
+  result`, as the statistical and chart workflows have.
+- [ ] G11 (moved here from INET `plan/pending/required-checks.md` on 2026-11-26): after a new pull
+  request job of a kind reports on pull requests, an admin adds its context to the ruleset of
+  `master` (INET R7, W3). A change that renames a required job or changes its matrix lands together
+  with the change of the ruleset (W2). Only an admin changes the ruleset. Since 2026-11-26 it
+  requires 14 contexts, among them the 8 `fingerprint-tests (debug|release, 0..3)`,
+  `statistical-tests (release)`, `chart-tests (release)` and `Enforcement checker tests`.
 - [ ] The tests of each kind at C without a build, for the selection before the build (T8): the
   `.test` files of the opp tests, the folder of the packet test; the kinds of simulations need
   their configs at C.
