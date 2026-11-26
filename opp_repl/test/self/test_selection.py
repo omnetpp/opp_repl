@@ -410,6 +410,44 @@ class SmokeTestTimeLimitsTestCase(unittest.TestCase):
         self.assertEqual((sim_time_limit(config("Other"), 0), cpu_time_limit(config("Other"), 0)), (None, "1s"))
         self.assertEqual(get_smoke_test_time_limits(types.SimpleNamespace(test_parameters={}), cpu_time_limit="1s"), (None, "1s"))
 
+class FindTestMapTestCase(unittest.TestCase):
+    """The map for a base: the newest version of a map repository whose commit is an ancestor of the base, or the nearer local map."""
+    def setUp(self):
+        self.folder = tempfile.TemporaryDirectory()
+        self.root = os.path.join(self.folder.name, "project")
+        os.makedirs(self.root)
+        self.commits = [make_repository(self.root, {"a.txt": "0\n"})]
+        for index in range(1, 4):
+            write_files(self.root, {"a.txt": f"{index}\n"})
+            git(self.root, "commit", "-q", "-a", "-m", str(index))
+            self.commits.append(git(self.root, "rev-parse", "HEAD"))
+        # the map repository has the maps of the commits 0 and 2, and later one of a commit of another branch
+        self.repository = os.path.join(self.folder.name, "coverage")
+        os.makedirs(self.repository)
+        make_repository(self.repository, {"map/header.json": json.dumps({"commit": self.commits[0]})})
+        for commit in (self.commits[2], "f" * 40):
+            write_files(self.repository, {"map/header.json": json.dumps({"commit": commit})})
+            git(self.repository, "commit", "-q", "-a", "-m", "map")
+        self.project = types.SimpleNamespace(test_parameters={"coverage": {"baseline": {"repository": "x/coverage", "folder": "../coverage"}}},
+                                             get_full_path=lambda path: os.path.normpath(os.path.join(self.root, path)))
+
+    def tearDown(self):
+        self.folder.cleanup()
+
+    def header_commit(self, folder):
+        with open(os.path.join(folder, "header.json")) as f:
+            return json.load(f)["commit"]
+
+    def test_the_newest_ancestor_of_the_repository(self):
+        from opp_repl.test.test_map.find import find_test_map
+        self.assertEqual(self.header_commit(find_test_map(self.project, self.commits[3])), self.commits[2])
+        self.assertEqual(self.header_commit(find_test_map(self.project, self.commits[1])), self.commits[0])
+
+    def test_the_nearer_local_map_wins(self):
+        from opp_repl.test.test_map.find import find_test_map
+        write_files(self.root, {"coverage/test-map/map/header.json": json.dumps({"commit": self.commits[3]})})
+        self.assertEqual(self.header_commit(find_test_map(self.project, self.commits[3])), self.commits[3])
+
 class TopLevelItemsTestCase(unittest.TestCase):
     def items(self, text):
         return [(kind, first, last) for kind, first, last, _ in get_top_level_items(tokenize_cpp_lines(text))]

@@ -1297,6 +1297,8 @@ class TestSelection:
         self.sides = sides
         self.environment = environment
         self.kinds = kinds
+        # the number of commits from the map commit to the base, or None if the map commit is not an ancestor
+        self.age = None
 
     def get_kind(self, kind):
         return self.kinds.get(kind) or KindSelection(kind, everything=Reason("4.3", None, f"the map has no {kind} tests", None))
@@ -1315,6 +1317,16 @@ class TestSelection:
     def is_selected(self, kind, key):
         return bool(self.get_reasons(kind, key))
 
+    def get_age_cost(self, kind):
+        """
+        Returns the number of selected tests that only the changes from the map commit to the base
+        select (the side A..B): the cost of the age of the map (decision D5).
+        """
+        tests = self.get_selected_tests(kind)
+        if tests is None:
+            tests = list(self.get_kind(kind).selected)
+        return sum(1 for key in tests if all(reason.side == "A..B" for reason in self.get_reasons(kind, key)))
+
     def get_selected_tests(self, kind):
         """Returns the selected test keys at C, or None if the tests at C are not known."""
         kind_selection = self.get_kind(kind)
@@ -1323,7 +1335,7 @@ class TestSelection:
         return [key for key in kind_selection.tests if self.is_selected(kind, key)]
 
     def to_dict(self):
-        result = {"map": self.map_folder, "map_commit": self.test_map.header.get("commit"), "changes": self.changes.describe(),
+        result = {"map": self.map_folder, "map_commit": self.test_map.header.get("commit"), "map_age": self.age, "changes": self.changes.describe(),
                   "environment": [str(reason) for reason in self.environment], "kinds": {}}
         for kind, kind_selection in self.kinds.items():
             selected = self.get_selected_tests(kind)
@@ -1361,6 +1373,17 @@ def _get_test_universe(kind, project, target_side):
                 if path.endswith(".test") and "work" not in os.path.relpath(os.path.dirname(path), test_folder).split("/")]
     return None
 
+# a map that is older gives a warning (decision D5): each push run makes a map (D11)
+MAX_TEST_MAP_AGE_DAYS = 2
+
+def _warn_about_an_old_map(test_map):
+    date = test_map.header.get("date")
+    if date:
+        import datetime
+        age = datetime.datetime.now(datetime.timezone.utc) - datetime.datetime.strptime(date, "%Y-%m-%dT%H:%M:%SZ").replace(tzinfo=datetime.timezone.utc)
+        if age > datetime.timedelta(days=MAX_TEST_MAP_AGE_DAYS):
+            _logger.warning(f"The test map is {age.days} days old; each push run makes a map, so a newer map can exist, and an old map selects more tests")
+
 def select_tests(simulation_project=None, changes=WORKTREE, map_folder=None, kinds=None, ignore_environment=False):
     """
     Selects the tests whose outcome a change can change.
@@ -1374,7 +1397,9 @@ def select_tests(simulation_project=None, changes=WORKTREE, map_folder=None, kin
             the working tree against ``HEAD``.
 
         map_folder (string or None):
-            The folder of the test map. Default: ``coverage/test-map/map`` in the project root.
+            The folder of a test map, or the checkout of a map repository. Default: the best of the
+            local map ``coverage/test-map/map`` and the maps of the map repository of the project
+            (see :py:mod:`opp_repl.test.test_map.find`).
 
         kinds (list of strings or None):
             The kinds of test. Default: the kinds of the map.
@@ -1390,16 +1415,20 @@ def select_tests(simulation_project=None, changes=WORKTREE, map_folder=None, kin
     if simulation_project is None:
         simulation_project = get_default_simulation_project()
     project = ProjectInfo(simulation_project)
-    map_folder = os.path.abspath(map_folder or get_default_test_map_folder(simulation_project, "map"))
-    test_map = TestMap(map_folder)
     root_folder = project.root_folder
     if not isinstance(changes, Changes):
         changes = Changes(root_folder, changes)
+    # the map whose commit is nearest to the base: the given folder, the local map, or a version in a map repository
+    from opp_repl.test.test_map.find import find_test_map
+    map_folder = find_test_map(simulation_project, changes.base, map_folder)
+    test_map = TestMap(map_folder)
     map_commit = test_map.header.get("commit")
     if not map_commit or not is_commit(root_folder, map_commit):
         raise Exception(f"The map commit {map_commit} is not in the repository of {root_folder}; fetch it first")
-    if _git(root_folder, "merge-base", "--is-ancestor", map_commit, changes.base, check=False).returncode != 0:
+    is_ancestor = _git(root_folder, "merge-base", "--is-ancestor", map_commit, changes.base, check=False).returncode == 0
+    if not is_ancestor:
         _logger.warning(f"The map commit {map_commit[:10]} is not an ancestor of the base {changes.base[:10]}, so the selection can be wide")
+    _warn_about_an_old_map(test_map)
     sides = []
     if changes.base != map_commit:
         sides.append(select_side(test_map, project, get_file_changes(root_folder, map_commit, changes.base), "A..B"))
@@ -1463,13 +1492,19 @@ def select_tests(simulation_project=None, changes=WORKTREE, map_folder=None, kin
                         kind_selection.selected.setdefault(key, []).append(Reason("4.3", None, "the project selects this test always", None))
                         break
         result[kind] = kind_selection
-    return TestSelection(test_map, changes, map_folder, sides, environment, result)
+    test_selection = TestSelection(test_map, changes, map_folder, sides, environment, result)
+    if is_ancestor:
+        test_selection.age = int(_git(root_folder, "rev-list", "--count", f"{map_commit}..{changes.base}").stdout.strip())
+    return test_selection
 
 def print_test_selection(test_selection, explain=False, list_tests=True, output_stream=sys.stdout):
     """Prints the changed files and their rules, and the selected tests of each kind; with *explain*, also the reasons of each test."""
     test_map = test_selection.test_map
     print(f"Map: {test_selection.map_folder} ({test_map.header.get('project')} {str(test_map.header.get('commit'))[:10]}, {test_map.header.get('date')})", file=output_stream)
     print(f"Changes: {test_selection.changes.describe()}", file=output_stream)
+    if test_selection.age is not None:
+        costs = ", ".join(f"{kind} {test_selection.get_age_cost(kind)}" for kind in test_selection.kinds)
+        print(f"Age of the map: {test_selection.age} commits before the base; the tests that only the age selects: {costs}", file=output_stream)
     for reason in test_selection.environment:
         print(f"Environment: {reason.rule} {reason.detail}", file=output_stream)
     for side in test_selection.sides:

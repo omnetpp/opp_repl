@@ -222,6 +222,59 @@ Options:
 
 `select_tests(simulation_project=..., changes=...)` does the same in Python.
 
+### Which map
+
+Without `--map`, the selection takes the best of these maps: the local map
+`coverage/test-map/map`, and each version of the map in the history of the map
+repository of the project. A map repository holds a map in its folder `map/`,
+for example the weekly map of the coverage workflow. The project names it in its
+`.opp` file:
+
+```python
+test_parameters={
+    "coverage": {"baseline": {"repository": "inet-framework/coverage", "branch": "master", "folder": "coverage-map"}},
+}
+```
+
+`opp_checkout_test_baselines` clones it and gets the head of the branch. Of the
+maps whose commit is an ancestor of the base B, the map with the fewest commits
+to B wins, because an older map selects more tests. `--map` also takes the
+checkout of a map repository. The report gives the age of the map in commits,
+and the number of tests that only the age selects; a map that is older than 2
+days gives a warning.
+
+### In development
+
+Before a push, run the tests that the change of the branch can change:
+
+```bash
+opp_select_tests -p inet --changes origin/master...worktree --explain
+opp_run_all_tests -p inet --changes origin/master...HEAD
+```
+
+The environment of a developer is usually not the environment of the map: other
+commits of omnetpp and opp_repl, or another compiler. Then the selection selects
+all tests; `--ignore-environment` gives a warning instead. The selection then
+assumes that the environment does not change which code the tests run.
+
+### In CI
+
+A pull request job selects its tests before it builds (INET rule T8):
+
+1. Get the map of the newest finished push run whose commit is an ancestor of
+   the merge base, else the weekly map.
+2. Install the commits of omnetpp and opp_repl that the header of the map
+   names (`omnetpp_commit`, `opp_repl_commit`).
+3. Run `opp_select_tests --kind <kind> --summary`. With `Selected 0 of M`, skip
+   the build and the tests; else build, and run the test command with
+   `--changes HEAD` (the merge commit of the pull request).
+
+The selection before the build needs the tests of the kind at the merge commit,
+also the new ones: the fingerprint tests come from the store, the opp tests from
+their `.test` files, and the packet test from its folder. A kind of simulations
+whose configs need the build (statistical, smoke, chart) cannot skip its build
+this way yet.
+
 ### How the selection works
 
 The map describes the map commit A. A change goes from the base B to the target

@@ -6,6 +6,7 @@ that the records give.
 
 from opp_repl.test.test_map.build import *
 from opp_repl.test.test_map.changes import *
+from opp_repl.test.test_map.find import *
 from opp_repl.test.test_map.ndebug import *
 from opp_repl.test.test_map.record import *
 from opp_repl.test.test_map.select import *

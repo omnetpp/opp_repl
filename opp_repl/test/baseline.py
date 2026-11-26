@@ -400,7 +400,9 @@ def checkout_test_baseline(kind, simulation_project=None, target=None, project_c
 
     With the ``ref`` form, the baseline is the ref. With the ``trailer`` form, :py:func:`resolve_test_baseline`
     finds it. When the declaration has neither of them, a new clone is at the head of the default branch, and
-    a clone that exists does not change.
+    a clone that exists does not change. With a ``branch`` and neither of them (for example the map repository
+    of the test selection, ``test_parameters["coverage"]["baseline"]``), the checkout follows the head of the
+    branch: the function gets it each time and moves the checkout there.
 
     Parameters:
         kind (str):
@@ -431,6 +433,11 @@ def checkout_test_baseline(kind, simulation_project=None, target=None, project_c
         os.makedirs(parent_folder, exist_ok=True)
         _logger.info(f"Cloning the {kind} baseline repository {baseline['repository']} into {folder}")
         _git(parent_folder, "clone", "--quiet", *(["--no-checkout"] if declared else []), get_test_baseline_url(baseline["repository"]), folder)
+    if not declared and baseline.get("branch"):
+        _git(folder, "fetch", "--quiet", "origin", baseline["branch"])
+        commit = _find_commit(folder, "FETCH_HEAD")
+        if _find_commit(folder, "HEAD") != commit:
+            _git(folder, "checkout", "--quiet", "--detach", commit)
     if declared:
         test_baseline = resolve_test_baseline(kind, simulation_project=simulation_project, target=target, project_commit=project_commit)
         for line in test_baseline.get_description():
