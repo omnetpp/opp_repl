@@ -41,6 +41,7 @@ import subprocess
 import time
 
 from opp_repl.test.test_map.build import get_ned_type_closure
+from opp_repl.test.test_map.record import get_test_map_run_id
 
 __sphinx_mock__ = True # ignore this module in documentation
 
@@ -127,6 +128,20 @@ def _demangle(names):
         _logger.warning(f"Demangling the function names failed, the map has the mangled names: {e}")
         return {name: name for name in names}
 
+# the Python packages that draw the charts of the chart tests: another version can draw another image
+CHART_PYTHON_PACKAGES = ["matplotlib", "numpy", "pandas", "scipy"]
+
+def get_chart_python_packages():
+    """Returns the versions of :py:data:`CHART_PYTHON_PACKAGES` that this Python has, None for a package that it does not have."""
+    import importlib.metadata
+    versions = {}
+    for name in CHART_PYTHON_PACKAGES:
+        try:
+            versions[name] = importlib.metadata.version(name)
+        except importlib.metadata.PackageNotFoundError:
+            versions[name] = None
+    return versions
+
 def get_test_map_header(simulation_project, mode="coverage"):
     """Returns the header of a map: the project, the map commit and whether the tree had changes, the omnetpp commit, the opp_repl version, the compiler, the feature state and the date."""
     def git(folder, *args):
@@ -162,9 +177,23 @@ def get_test_map_header(simulation_project, mode="coverage"):
             "opp_repl_changed_files": bool(git(opp_repl_folder, "status", "--porcelain", "--untracked-files=no")),
             "compiler": compiler,
             "enabled_features": features,
+            "python_packages": get_chart_python_packages(),
             "date": datetime.datetime.now(datetime.timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")}
 
-def write_test_map(records, build_tables, root_folder, output_folder, header=None, tracked_files=None, release_only_blocks=None):
+def read_test_map_members(records_folders):
+    """
+    Returns the members of the tests of the kinds whose test is not one run, from the files
+    ``<kind>-tests.json`` of the records folders: ``{kind: {test key: [run keys]}}``. A chart test
+    reads the results of the simulations of the folder of its ``.anf`` file.
+    """
+    members = collections.defaultdict(dict)
+    for records_folder in records_folders:
+        for members_file in glob.glob(os.path.join(records_folder, "*-tests.json")):
+            with open(members_file) as f:
+                members[os.path.basename(members_file)[:-len("-tests.json")]].update(json.load(f))
+    return dict(members)
+
+def write_test_map(records, build_tables, root_folder, output_folder, header=None, tracked_files=None, release_only_blocks=None, members=None):
     """
     Writes the test map of *records* (see :py:func:`read_test_map_records`) and *build_tables* (see
     :py:func:`opp_repl.test.test_map.build.make_test_map_build_tables`) into *output_folder*.
@@ -173,6 +202,8 @@ def write_test_map(records, build_tables, root_folder, output_folder, header=Non
     the map only if git tracks it; a failed lookup goes into the map for any path.
     *release_only_blocks* are the blocks of
     :py:func:`opp_repl.test.test_map.ndebug.scan_release_only_blocks`; the map gives each its runs.
+    *members* are the tests of :py:func:`read_test_map_members`: the runs of such a kind are not
+    tests themselves.
 
     Returns (dict):
         some numbers of the map, for the log.
@@ -338,12 +369,16 @@ def write_test_map(records, build_tables, root_folder, output_folder, header=Non
         if record["kind"] == "fingerprint":
             for ingredients in get_fingerprint_ingredients(record["args"]):
                 tests["fingerprint"][record["key"] + ":" + ingredients] = [record["id"]]
-        else:
+        elif record["kind"] not in (members or {}):
             tests[record["kind"]][record["key"]] = [record["id"]]
         if record["kind"] == "smoke":
             # a sanitizer test stops where the smoke test of its config stops, and the sanitizer
             # only examines the code that runs, so the run of the smoke test is its run too
             tests["sanitizer"]["sanitizer" + record["key"][len("smoke"):]] = [record["id"]]
+    run_id_set = set(run_ids)
+    for kind, kind_members in (members or {}).items():
+        for test_key, run_keys in kind_members.items():
+            tests[kind][test_key] = sorted(run_id for run_id in map(get_test_map_run_id, run_keys) if run_id in run_id_set)
     write("emitter-sets.json", {"sets": emitter_sets}, True)
     write("release-only.json", {"blocks": release_only}, True)
     write("runs.json", runs, True)
@@ -379,7 +414,7 @@ def clear_test_map_records(records_folder):
     for name in names:
         path = os.path.join(records_folder, name)
         is_record = os.path.isdir(path) and re.fullmatch(r"[0-9a-f]{10}", name) and set(os.listdir(path)) <= {"run.json", "functions.txt.gz", "files.txt", "profraw"} | {f for f in os.listdir(path) if f.startswith("trace.")}
-        is_library = name.startswith("libopp_repl_filetrace.so") or name == "build-tables.json.gz"
+        is_library = name.startswith("libopp_repl_filetrace.so") or name == "build-tables.json.gz" or name.endswith("-tests.json")
         if not (is_record or is_library):
             raise Exception(f"{records_folder} holds {name}, which is not a record of the test map, so the folder is not cleared")
     for name in names:
@@ -399,6 +434,7 @@ TEST_MAP_RUN_FUNCTIONS = {
     "queueing": ("opp_repl.test.opp", "run_queueing_tests"),
     "protocol": ("opp_repl.test.opp", "run_protocol_tests"),
     "packet": ("opp_repl.test.opp", "run_packet_tests"),
+    "chart": ("opp_repl.test.chart", "run_chart_tests"),
 }
 
 def get_test_map_run_function(kind):
@@ -467,5 +503,5 @@ def update_test_map(simulation_project=None, records_folders=None, output_folder
     if not records:
         raise Exception(f"No records of the test map in {', '.join(records_folders)}")
     write_test_map(records, build_tables, simulation_project.get_full_path("."), output_folder, header=get_test_map_header(simulation_project, mode=mode),
-                   release_only_blocks=get_release_only_blocks(simulation_project))
+                   release_only_blocks=get_release_only_blocks(simulation_project), members=read_test_map_members(records_folders))
     return result

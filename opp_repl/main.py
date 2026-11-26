@@ -114,11 +114,13 @@ def run_tasks_main(main_function, task_name, extra_args_fn=None):
         result = main_function(**kwargs)
         _logger.debug(f"Main function returned: {result}")
         if args.result_file:
+            # None: the test selection selected no test (a kind that runs all or none)
+            result_dict = result.to_dict() if result is not None else None
             if args.result_file == "-":
-                print(json.dumps(result.to_dict(), default=str))
+                print(json.dumps(result_dict, default=str))
             else:
                 with open(args.result_file, "w") as f:
-                    json.dump(result.to_dict(), f, default=str)
+                    json.dump(result_dict, f, default=str)
         sys.exit(0 if (result is None or result.is_all_results_expected()) else 1)
     except KeyboardInterrupt:
         _logger.warn("Program interrupted by user")
@@ -207,7 +209,7 @@ def select_tests_main():
         sys.exit(1)
 
 def run_chart_tests_main():
-    run_tasks_main(run_chart_tests, "chart tests")
+    run_tasks_main(run_chart_tests, "chart tests", extra_args_fn=_test_map_records_extra_args)
 
 def run_feature_tests_main():
     run_tasks_main(run_feature_tests, "feature tests")
@@ -371,11 +373,13 @@ def _module_image_main(main_function, task_name, output_dir_required):
             raise Exception("--output-dir is required for this command")
         result = main_function(**kwargs)
         if args.result_file:
+            # None: the test selection selected no test (a kind that runs all or none)
+            result_dict = result.to_dict() if result is not None else None
             if args.result_file == "-":
-                print(json.dumps(result.to_dict(), default=str))
+                print(json.dumps(result_dict, default=str))
             else:
                 with open(args.result_file, "w") as f:
-                    json.dump(result.to_dict(), f, default=str)
+                    json.dump(result_dict, f, default=str)
         sys.exit(0 if (result is None or result.is_all_results_expected()) else 1)
     except KeyboardInterrupt:
         _logger.warn("Program interrupted by user")

@@ -8,6 +8,7 @@ baseline charts. The baseline charts can be found in the media folder of the sim
 
 import filecmp
 import io
+import json
 import logging
 import matplotlib
 import matplotlib.image
@@ -143,6 +144,14 @@ class ChartTestTask(TestTask):
     def get_parameters_string(self, **kwargs):
         return self.analysis_file_name + ": " + self.chart_name
 
+    def get_test_map_name(self):
+        """The name of the test in the keys of the test map: its ``.anf`` file and the id of its chart."""
+        return f"{self.analysis_file_name}:{self.id}"
+
+    def get_simulation_folder(self):
+        """The folder of the simulations that the chart reads, relative to the project root."""
+        return os.path.dirname(self.analysis_file_name) or "."
+
     def run_protected(self, keep_charts=True, output_stream=sys.stdout, **kwargs):
         baseline_project = self.baseline_simulation_project or self.simulation_project
         workspace = omnetpp.scave.analysis.Workspace(get_workspace_path("."), [])
@@ -237,11 +246,39 @@ def get_chart_test_tasks(simulation_project=None, baseline_simulation_project=No
     return MultipleChartTestTasks(tasks=test_tasks, multiple_simulation_tasks=MultipleSimulationTasks(tasks=simulation_tasks, simulation_project=simulation_project, **kwargs), **dict(kwargs, scheduler="process"))
 get_chart_test_tasks.__signature__ = combine_signatures(get_chart_test_tasks, get_simulation_tasks)
 
-def run_chart_tests(**kwargs):
+def is_chart_simulation(chart_test_task, simulation_task):
+    """True if the chart test reads the results of the simulation: a simulation in the folder of its ``.anf`` file or below."""
+    folder = chart_test_task.get_simulation_folder()
+    working_directory = simulation_task.simulation_config.working_directory
+    return folder == "." or working_directory == folder or working_directory.startswith(folder + "/")
+
+def select_chart_simulation_tasks(multiple_chart_test_tasks):
+    """Keeps only the simulations that the chart tests of *multiple_chart_test_tasks* read, after a selection of the chart tests."""
+    multiple_simulation_tasks = multiple_chart_test_tasks.multiple_simulation_tasks
+    multiple_simulation_tasks.tasks = [simulation_task for simulation_task in multiple_simulation_tasks.tasks
+                                       if any(is_chart_simulation(chart_test_task, simulation_task) for chart_test_task in multiple_chart_test_tasks.tasks)]
+
+def write_chart_test_members(multiple_chart_test_tasks, records_folder):
+    """Writes ``chart-tests.json`` into the records folder: the run keys of the simulations of each chart test, for the map writer."""
+    from opp_repl.test.test_map.record import get_test_map_run_key
+    members = {}
+    for chart_test_task in multiple_chart_test_tasks.tasks:
+        members[f"chart:{chart_test_task.get_test_map_name()}"] = sorted(get_test_map_run_key("chart", simulation_task) for simulation_task in multiple_chart_test_tasks.multiple_simulation_tasks.tasks
+                                                                          if is_chart_simulation(chart_test_task, simulation_task))
+    with open(os.path.join(records_folder, "chart-tests.json"), "w") as f:
+        json.dump(members, f, indent=1, sort_keys=True)
+
+def run_chart_tests(test_map_records=None, changes=None, test_map=None, ignore_environment=False, **kwargs):
     """
     Runs one or more chart tests that match the provided filter criteria.
 
     Parameters:
+        test_map_records, changes, test_map, ignore_environment:
+            The options of the test map, as for
+            :py:func:`opp_repl.test.fingerprint.task.run_fingerprint_tests`. The simulations of the
+            chart tests write the records, and the records folder gets the simulations of each chart
+            test. With *changes*, only the simulations of the selected chart tests run.
+
         kwargs (dict):
             The filter criteria parameters are inherited from the :py:func:`get_chart_test_tasks` function.
 
@@ -252,6 +289,14 @@ def run_chart_tests(**kwargs):
     kwargs = apply_project_test_defaults("chart", kwargs)
     check_test_baseline("chart", **kwargs)
     multiple_chart_test_tasks = get_chart_test_tasks(**kwargs)
+    if changes or test_map_records:
+        # lazy: the test map imports the coverage module, which imports the simulation modules
+        from opp_repl.test.test_map.select import apply_test_map_options
+        kwargs = apply_test_map_options("chart", multiple_chart_test_tasks, kwargs, test_map_records=test_map_records, changes=changes, test_map=test_map, ignore_environment=ignore_environment)
+        if changes:
+            select_chart_simulation_tasks(multiple_chart_test_tasks)
+        if test_map_records:
+            write_chart_test_members(multiple_chart_test_tasks, os.path.abspath(test_map_records))
     return multiple_chart_test_tasks.run(**kwargs)
 run_chart_tests.__signature__ = combine_signatures(run_chart_tests, get_chart_test_tasks)
 

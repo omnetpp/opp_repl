@@ -50,8 +50,9 @@ LINE_SENSITIVE_KINDS = {"opp", "unit", "module", "packet", "queueing", "protocol
 # The kinds without records, whose tests the selection selects all together or not at all. A feature
 # test builds the project with a combination of features and runs the configs of the folders of the
 # feature (v1 rule of section 6): a change of a C++, msg, NED, ini or build file, or of a file that a
-# run used, selects all of them.
-KIND_LEVEL_KINDS = {"feature"}
+# run used, selects all of them. The validation tests run with the runner of the project, so the
+# same v1 rule applies to them, and rule H2 for the Python code of the project.
+KIND_LEVEL_KINDS = {"feature", "validation"}
 FEATURE_INPUT_CLASSES = {"build", "cpp", "msg", "ned", "ini"}
 
 class Reason(collections.namedtuple("Reason", ["rule", "path", "detail", "side"])):
@@ -495,6 +496,7 @@ class ProjectInfo:
         self.msg_folders = [os.path.normpath(folder) for folder in simulation_project.msg_folders]
         self.ned_folders = [os.path.normpath(folder) for folder in simulation_project.ned_folders]
         self.test_parameters = simulation_project.test_parameters or {}
+        self.python_folders = [os.path.normpath(folder) for folder in simulation_project.python_folders]
         self.stores = {os.path.normpath(parameters["store"]): kind for kind, parameters in self.test_parameters.items() if isinstance(parameters, dict) and parameters.get("store")}
         # the folders of the own compiled code of the tests of a kind (rule H4): the support library
         # of the opp tests (lib_folder, else <test_folder>/lib), and the folder of a binary test
@@ -539,6 +541,8 @@ class ProjectInfo:
             return "ini"
         if extension == ".test":
             return "test"
+        if extension == ".anf":
+            return "anf"
         return "data"
 
 def get_fingerprint_store_test_keys(entries, ingredients_list=None):
@@ -682,6 +686,16 @@ def _select_test_code(selection, change, project, input_class):
             key = f"{test_kind}:{change.path}"
             if key in tests:
                 selection.add_test(test_kind, key, "E6", change.path, "the file of the test changed")
+    # rule H3: an analysis file holds the charts of its chart tests and their scripts
+    if input_class == "anf":
+        prefix = f"chart:{change.path}:"
+        for key in test_map.tests.get("chart", {}):
+            if key.startswith(prefix):
+                selection.add_test("chart", key, "H3", change.path, "the analysis file of the chart changed")
+    # rule H2: the Python code of the project draws the charts and runs the validation tests
+    if project.is_below(change.path, project.python_folders):
+        for kind in ("chart", "validation"):
+            selection.add_kind(kind, "H2", change.path, "the Python code of the project")
     # the own code of a test includes the file; a C++ file of the project gets this from rule R4
     if input_class != "cpp":
         test_runs = (test_map.get(change.path) or {}).get("test_runs")
@@ -906,10 +920,11 @@ def _select_opp(selection, change, project):
 _STATISTICAL_BASELINE_FILE = re.compile(r"(.*\.ini)-(.*)-#(\d+)\.sca")
 
 def _select_baseline_pin(selection, change, project, kind, before, after):
-    # rule E2: only the pin of the statistical baseline moved; returns False if the rule does not apply
+    # rules E2 and E3: only the pin of the statistical or chart baseline moved; returns False if the rule does not apply
     old_baseline, new_baseline = before.get("baseline") or {}, after.get("baseline") or {}
-    if kind != "statistical" or not old_baseline.get("ref") or not new_baseline.get("ref"):
+    if kind not in ("statistical", "chart") or not old_baseline.get("ref") or not new_baseline.get("ref"):
         return False
+    rule = "E2" if kind == "statistical" else "E3"
     def without(parameters, name):
         return {key: value for key, value in parameters.items() if key != name}
     if without(before, "baseline") != without(after, "baseline") or without(old_baseline, "ref") != without(new_baseline, "ref"):
@@ -917,9 +932,22 @@ def _select_baseline_pin(selection, change, project, kind, before, after):
     old_ref, new_ref = old_baseline["ref"], new_baseline["ref"]
     folder = os.path.join(project.root_folder, new_baseline.get("folder", "."))
     if not os.path.isdir(folder) or not is_commit(folder, old_ref) or not is_commit(folder, new_ref):
-        selection.add_kind(kind, "E2", change.path, f"the baseline pin moved from {old_ref[:10]} to {new_ref[:10]}, and the checkout {new_baseline.get('folder')} does not have both commits")
+        selection.add_kind(kind, rule, change.path, f"the baseline pin moved from {old_ref[:10]} to {new_ref[:10]}, and the checkout {new_baseline.get('folder')} does not have both commits")
         return True
     names = _git(folder, "-c", "core.quotePath=false", "diff", "--name-only", "--no-renames", old_ref, new_ref, "--").stdout.splitlines()
+    if kind == "chart":
+        # the chart images of <folder>/doc/media of the project are <folder>/doc/ of the media repository
+        changed_folders = {}
+        for name in names:
+            if "/doc/" in name:
+                changed_folders.setdefault(name[:name.index("/doc/")], name)
+        selection._note(rule)
+        for key in selection.test_map.tests.get(kind, {}):
+            analysis_file = key[len("chart:"):].rsplit(":", 1)[0]
+            name = changed_folders.get(os.path.dirname(analysis_file))
+            if name:
+                selection.add_test(kind, key, rule, change.path, f"the baseline file {name} of its folder changed")
+        return True
     # the key of a test without its sim time limit -> the changed baseline file
     changed = {}
     for name in names:
@@ -1148,6 +1176,13 @@ def select_tests(simulation_project=None, changes=WORKTREE, map_folder=None, kin
         sides.append(select_side(test_map, project, get_file_changes(root_folder, map_commit, changes.base), "A..B"))
     if changes.target != changes.base:
         sides.append(select_side(test_map, project, get_file_changes(root_folder, map_commit, changes.target), "A..C"))
+    # the chart tests draw their images with the Python packages of this process
+    from opp_repl.test.test_map.writer import get_chart_python_packages
+    kind_environment = {}
+    if test_map.header.get("python_packages") is not None and test_map.header["python_packages"] != get_chart_python_packages():
+        kind_environment["chart"] = Reason("4.3", None, f"the Python packages of the charts differ from the map: {get_chart_python_packages()} instead of {test_map.header['python_packages']}", None)
+        if ignore_environment:
+            _logger.warning(f"Ignored: {kind_environment.pop('chart').detail}")
     if test_map.get_release_only_blocks() is None:
         _logger.warning(f"The test map has version {test_map.header.get('version')} and does not list the release-only blocks, so rule R-NDEBUG does not apply")
     environment = get_environment_differences(test_map, simulation_project)
@@ -1179,7 +1214,7 @@ def select_tests(simulation_project=None, changes=WORKTREE, map_folder=None, kin
     for kind in kinds:
         run_reasons = get_run_reasons(kind in LINE_SENSITIVE_KINDS)
         always = [re.compile(pattern) for pattern in project.test_parameters.get(kind, {}).get("test_selection", {}).get("always", [])]
-        kind_reasons = [side.kinds[kind] for side in sides if kind in side.kinds]
+        kind_reasons = [side.kinds[kind] for side in sides if kind in side.kinds] + ([kind_environment[kind]] if kind in kind_environment else [])
         kind_selection = KindSelection(kind, tests=_get_test_universe(kind, project, target_side),
                                        everything=(everything or kind_reasons or [None])[0])
         if kind not in test_map.tests and kind not in KIND_LEVEL_KINDS:

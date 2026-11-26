@@ -46,7 +46,7 @@ def _resolve_validation_test_runner(simulation_project):
     module = importlib.import_module(module_name)
     return getattr(module, function_name)
 
-def run_validation_tests(simulation_project=None, **kwargs):
+def run_validation_tests(simulation_project=None, changes=None, test_map=None, ignore_environment=False, **kwargs):
     """
     Runs the validation tests of the given (or default) simulation project.
 
@@ -60,15 +60,31 @@ def run_validation_tests(simulation_project=None, **kwargs):
             the workspace's default simulation project when not specified
             (mirroring :py:func:`get_simulation_tasks <opp_repl.simulation.task.get_simulation_tasks>`).
 
+        changes, test_map, ignore_environment:
+            The options of the change-based test selection, as for
+            :py:func:`opp_repl.test.fingerprint.task.run_fingerprint_tests`. The validation tests
+            have no records, so they run all or none: a change of a C++, msg, NED, ini or build
+            file, of a file that a run of the map used, or of the Python code of the project
+            selects them.
+
         kwargs (dict):
             The filter criteria parameters are forwarded to the resolved
             project-specific validation-test runner.
 
     Returns (:py:class:`MultipleTestTaskResults <opp_repl.test.task.MultipleTestTaskResults>`):
-        the result of running the matching validation test tasks.
+        the result of running the matching validation test tasks, or None if the selection selects none.
     """
     if simulation_project is None:
         simulation_project = get_default_simulation_project()
+    if changes:
+        # lazy: the test map imports the coverage module, which imports the simulation modules
+        from opp_repl.test.test_map.select import get_test_selection_for_run
+        test_selection = get_test_selection_for_run(simulation_project, changes, test_map=test_map, ignore_environment=ignore_environment, kinds=["validation"])
+        everything = test_selection.get_kind("validation").everything
+        if not everything:
+            _logger.info(f"Selected none of the validation tests for the changes {test_selection.changes.describe()}")
+            return None
+        _logger.info(f"Selected all validation tests for the changes {test_selection.changes.describe()}: {everything}")
     runner = _resolve_validation_test_runner(simulation_project)
     _logger.debug("Resolved validation test runner %r for project %r",
                   simulation_project.validation_test_runner, simulation_project.name)

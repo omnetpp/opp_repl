@@ -152,6 +152,7 @@ class FakeProject:
         self.cpp_folders = ["src"]
         self.msg_folders = ["src"]
         self.ned_folders = ["src"]
+        self.python_folders = ["python"]
         self.test_parameters = {"fingerprint": {"store": "store.json"}, "unit": {"defaults": {"test_folder": "tests/unit"}}}
 
     def get_name(self):
@@ -167,6 +168,8 @@ SOURCES = {
     "examples/omnetpp.ini": "[General]\na = 1\n[Config One]\nb = 1\n[Config Two]\nb = 2\n",
     "examples/data.xml": "<x/>\n",
     "tests/unit/A.test": "%description: a test\n",
+    "examples/results.anf": "<analysis/>\n",
+    "python/x/plot.py": "x = 1\n",
     "tests/unit/Support.h": "#pragma once\n",
     "tests/unit/lib/L.cc": "int l() { return 0; }\n",
     "store.json": json.dumps([{"working_directory": "examples", "ini_file": "omnetpp.ini", "config": "One", "run_number": 0, "sim_time_limit": "1s",
@@ -184,7 +187,8 @@ MAP_FILES = {
     "tests.json": {"fingerprint": {f"fingerprint:examples/omnetpp.ini:{config}:#0:1s:tplx": [run_id] for run_id, config in [("r1", "One"), ("r2", "Two"), ("r3", "Three")]},
                    # the statistical tests share the runs here, which keeps the run sets of the other tests
                    "statistical": {f"statistical:examples/omnetpp.ini:{config}:#0:1s": [run_id] for run_id, config in [("r1", "One"), ("r2", "Two")]},
-                   "unit": {"unit:tests/unit/A.test": ["r1"]}},
+                   "unit": {"unit:tests/unit/A.test": ["r1"]},
+                   "chart": {"chart:examples/results.anf:1": ["r1", "r2"]}},
     "src/a.h.json": {"functions": [{"lines": [4, 6], "name": "A::get()", "runs": ["r2"], "tus": ["src/b.cc"]}], "included_by": ["src/a.cc", "src/b.cc"]},
     "src/a.cc.json": {"functions": [{"lines": [4, 6], "name": "f()", "runs": ["r1"]}, {"lines": [9, 11], "name": "g()", "runs": "all"}], "tu_runs": "all"},
     "src/b.cc.json": {"functions": [{"lines": [4, 6], "name": "h()", "runs": ["r2"]}], "tu_runs": ["r2"]},
@@ -320,9 +324,9 @@ class SelectionTestCase(unittest.TestCase):
 
     def test_the_feature_tests_are_selected_by_the_class_of_the_file(self):
         _, selection = self.select({"src/a.cc": SOURCES["src/a.cc"].replace("return 1;", "return 5;")})
-        self.assertEqual({kind: reason.rule for kind, reason in selection.kinds.items()}, {"feature": "V1"})
+        self.assertEqual({kind: reason.rule for kind, reason in selection.kinds.items()}, {"feature": "V1", "validation": "V1"})
         _, selection = self.select({"src/a.cc": SOURCES["src/a.cc"], "examples/data.xml": "<y/>\n"})
-        self.assertEqual(list(selection.kinds), ["feature"])
+        self.assertEqual(sorted(selection.kinds), ["feature", "validation"])
         # a file that no run used selects no feature test
         _, selection = self.select({"examples/data.xml": SOURCES["examples/data.xml"], "doc/notes.txt": "x\n"})
         self.assertEqual(selection.kinds, {})
@@ -334,6 +338,14 @@ class SelectionTestCase(unittest.TestCase):
     def test_a_file_that_the_own_code_of_a_test_includes_selects_the_test(self):
         runs, selection = self.select({"tests/unit/Support.h": "#pragma once\nint x;\n"})
         self.assertEqual(runs, {"r2"})
+
+    def test_an_analysis_file_selects_its_chart_tests(self):
+        _, selection = self.select({"examples/results.anf": "<analysis version='2'/>\n"})
+        self.assertEqual([(kind, key, reason.rule) for kind, key, reason in selection.tests], [("chart", "chart:examples/results.anf:1", "H3")])
+
+    def test_the_python_code_selects_all_chart_and_validation_tests(self):
+        _, selection = self.select({"python/x/plot.py": "x = 2\n"})
+        self.assertEqual({kind: reason.rule for kind, reason in selection.kinds.items()}, {"chart": "H2", "validation": "H2"})
 
     def test_the_support_library_selects_all_tests_of_its_kind(self):
         _, selection = self.select({"tests/unit/lib/L.cc": "int l() { return 1; }\n"})
