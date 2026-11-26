@@ -4,8 +4,9 @@ The test map tells, for each test, which C++ functions, NED types, ini sections
 and other files its runs used at one commit of the project (the map commit).
 The change-based test selection (`opp_select_tests`, and the `--changes` option
 of the test commands) reads the map and a diff, and selects only the tests whose
-outcome the change can change. Now the map holds the fingerprint and the
-statistical tests; the tests of the other kinds all run.
+outcome the change can change. Now the map holds the fingerprint, statistical,
+smoke and sanitizer tests, and the selection selects the feature tests all
+together or not at all; the tests of the other kinds all run.
 
 The map comes from a run of the tests with the coverage build (see the
 [Coverage](coverage.md) guide). The same runs also give the coverage report.
@@ -25,7 +26,8 @@ The command does three steps:
    root. The command removes the old records of that folder first.
    `--kind statistical` runs the statistical tests instead; give `--kind` more
    than one time for more kinds, for example `--kind fingerprint --kind
-   statistical`.
+   statistical --kind smoke`. The records of the smoke tests also serve the
+   sanitizer tests.
 2. It makes the build tables from the coverage build, and writes them to
    `build-tables.json.gz` in the records folder.
 3. It writes the map into `coverage/test-map/map` in the project root.
@@ -53,8 +55,8 @@ Options:
 ### Records in several jobs
 
 A CI workflow can divide the tests over several jobs. Each job runs its part
-with records, and one job then writes the map. `opp_run_statistical_tests`
-takes `--test-map-records` too.
+with records, and one job then writes the map. `opp_run_statistical_tests` and
+`opp_run_smoke_tests` take `--test-map-records` too.
 
 ```bash
 # in each job
@@ -70,7 +72,16 @@ The run id is the first 10 hex digits of the SHA-1 of the run key, for example
 `fingerprint:examples/adhoc/hostautoconf/omnetpp.ini:General:#0:100s`. The key
 starts with the kind of the test, so a statistical test of the same config has
 another run. The tests of one fingerprint group share one run, so the key has no
-ingredients. The key of a statistical test is the key of its run.
+ingredients. The key of a statistical or smoke test is the key of its run. A
+sanitizer test stops where the smoke test of its config stops, and the sanitizer
+only examines the code that runs, so the run of the smoke test is also its run:
+its key is the key of that run with the kind `sanitizer`.
+
+A smoke test that stops after a CPU-time limit stops at a different event on
+each machine, so its record does not show what a test run uses. With the store
+of simulation-time limits of the project (see [Smoke Tests](smoke_tests.md#the-end-of-a-run)),
+the smoke tests and their records stop at the same event. A run that a CPU-time
+or a real-time limit stopped does not count as a normal end.
 Records need the coverage build (`-m coverage`).
 
 - Each run writes its own profile. After the run, opp_repl merges it into
@@ -210,12 +221,17 @@ selection, but not a wrong one.
 | `.msg` file | as its generated `_m.h` header; a new or removed `.msg` file selects all tests |
 | NED file | the tests that used a type of the file; for a new type, also the tests that used a type with the same simple name; for `package.ned`, all types of the package |
 | NED file that omnetpp cannot load: a syntax error, a type that another file declares too, a package that does not agree with the folder | all tests |
-| ini file | the tests whose section chain has a changed section; for a change of iteration variables, `repeat` or `constraint`, all tests of the ini file; the tests whose ini file includes the file |
+| ini file | the tests whose section chain has a changed section, also for a change of a key that opp_repl reads from a comment (`#expected-result`, `#abstract`, `#emulation`, `#bounded`); for a change of iteration variables, `repeat` or `constraint`, all tests of the ini file; the tests whose ini file includes the file |
 | fingerprint store | the tests whose entry changed, without the timestamp |
 | `.opp` file, only the pin of the statistical baseline moved | the tests whose `.sca` file differs between the two pins in the `statistics` checkout; all statistical tests if the checkout does not have both commits |
 | `.opp` file | for other changed test parameters of a kind, all tests of that kind; for other changed fields, all tests |
 | build file: `Makefile` and `makefrag` in the root or in a C++ folder, `.oppbuildspec`, `.oppfeatures`, `.oppfeaturestate`, `.nedfolders`, `.nedexclusions` | all tests |
 | other file | the tests that read, examined or looked up the file; for a new or removed file, also the tests that listed its folder |
+
+The feature tests have no records. A change of a C++, msg, NED, ini or build file,
+or of a file that a run of the map used, selects all of them, if a rule of the
+file other than the line shift applies. Other changes, for example of comments,
+select none.
 
 Some tests run in release mode, which compiles code that the coverage build of
 the map does not. A changed function whose name is in a release-only block, or
@@ -228,7 +244,8 @@ selects only the tests that compare a text output, the opp tests.
 These tests are always selected:
 
 - a test that is not in the map, for example a new config or a new run number;
-- a test whose run in the map did not end normally;
+- a test whose run in the map did not end normally, also a run that a CPU-time
+  limit stopped;
 - a test that matches a regular expression in the list
   `test_parameters[kind]["test_selection"]["always"]` of the `.opp` file;
 - all tests, if the environment differs from the map: the map comes from a tree
@@ -238,7 +255,7 @@ These tests are always selected:
 
 ## Limits
 
-- Only the fingerprint and the statistical tests write records now.
+- Only the fingerprint, statistical and smoke tests write records now.
 - The check whether a config is interactive also starts the simulation, so an
   interactive config, which the test skips, has a record that did not end
   normally. The selection always selects it, and the run skips it.

@@ -325,7 +325,9 @@ Three options (D2):
   function for the test, so a crash in it at the end of the real test is not selected.
 - **D2c (decided 2026-11-26).** A fixed `sim-time-limit` for each config, in a store of its own. A
   calibration run measures, for each config, the simulation time that 1 s of CPU time reaches in
-  release mode on the CI runner, and a command writes the values into the store. The smoke,
+  the mode of the smoke tests (debug) on the CI runner, and a command writes the values into the
+  store. (Phase 3 changed "release" to the mode of the smoke tests: debug is about 6 times slower
+  than release, so a release value would make each debug smoke test about 6 s long.) The smoke,
   sanitizer and feature tests run the same configs (run 0), so they share the store.
   - The tests stop at this simulation time, and the map run uses the same limit. Both stop at the
     same event, so the record is exact, also for `finish()` and the destructors.
@@ -924,14 +926,39 @@ and a check on a real INET map with the scenarios of phase 2.
     defines X as a guard. For INET it finds the 5 blocks and the 2 `#else` branches of macros of
     phase 0. No INET function has a name of a block (the parameters of a macro are left out). A
     new `#include` in `precompiled_release.h` now selects all 1847 runs; before, it selected none.
-- [ ] Smoke and sanitizer, with the bound of D2c (section 7): the store of the simulation-time
+- [x] Smoke and sanitizer, with the bound of D2c (section 7): the store of the simulation-time
   limits, the calibration run, and the command that writes the store. The `#expected-result`
   comments of the ini files are expected results of the smoke tests. The ini rule ignores comments,
   so they need their own rule, as E1 for the store (phase 2: INET 0af9da9b1e changes only these
   comments).
+  - I4 (opp_repl 8982bce): opp_repl reads `#expected-result`, `#abstract`, `#emulation` and
+    `#bounded` also from comments, so they are entries of their section, for all kinds. INET
+    0af9da9b1e now selects the tests of its 8 configs (20 fingerprint, 8 statistical, 8 smoke and
+    8 sanitizer tests) and the tests that are always selected; before, it selected none.
+  - D2c (opp_repl 5b2ef0d): `test_parameters["smoke"]["sim_time_limits"]` names the store, and
+    `opp_update_smoke_test_sim_time_limits` writes it. A value stops the smoke, sanitizer and
+    feature tests at that simulation time, with a safety CPU-time limit of 30 s; `null` is a run
+    that ends by itself; a config without a value keeps 1 s of CPU time. A run that a CPU-time or
+    real-time limit stopped is no longer a normal end, so the selection always selects it. A smoke
+    record is also the run of the sanitizer test of its config. `test_parameters` accepts only
+    known keys (`RECOGNISED_TEST_ASPECTS`), so `sim_time_limits` is one now, and INET needs this
+    opp_repl.
+  - INET 038e4a5a20 on the local branch `topic/smoke-sim-time-limits` (from `master`
+    b79190d7e5): `tests/smoke/sim-time-limits.json` from a calibration at 0af9da9b1e on 32 cores in
+    coverage mode (about as fast as debug), 931 values: 412 times and 519 null; 3 configs do not get
+    past the initialization in 1 s. A calibration on the CI runner replaces it (phase 5).
+  - Checked: the calibration of the 945 smoke tests needs 1:36; with the store, the 945 tests with
+    records need 2:05, 934 pass, 11 interactive configs are skipped, and each run stops at its
+    limit. The keys of the 945 smoke and the 945 sanitizer tasks agree with the map. On the map of
+    3736 runs: the string literal of phase 2 selects 43 smoke and 43 sanitizer tests, the new member
+    of `Ipv4.h` 731 of each, a comment 14 (the tests that are always selected).
 - [ ] The opp tests: per-test profiles and the `.d` files of the test builds; packet as one run.
 - [ ] Chart and validation, with the traced process tree.
-- [ ] Feature tests (v1 rule). Their smoke runs use the store of D2c.
+- [x] Feature tests (v1 rule). Their smoke runs use the store of D2c.
+  - opp_repl 01a7d84: a kind without records (`KIND_LEVEL_KINDS`). A C++, msg, NED, ini or build
+    file, or a file that a run used, selects all feature tests if a rule of the file other than R3
+    applies; the key is `feature:<type>:<feature>`. Checked: of the 253 INET feature tests, the
+    string literal selects all and a comment none.
 - [ ] For each kind, decide where its records come from: from its push job in coverage mode
   (D11), or from the weekly map. With the weekly map, the A..B side of the kind is wider.
 
@@ -961,6 +988,8 @@ The design is in section 15.
   `media`, so that `opp_select_tests` finds the map without `--map`. If `gh` is available, it also
   downloads the map of the newest finished push run (D11).
 - [ ] Rule H6: a change of a CI file selects all tests (5.6).
+- [ ] Calibrate the store of simulation-time limits of D2c on the CI runner, in the mode of the
+  smoke tests (a manual workflow job), and replace the local values of INET 038e4a5a20.
 - [ ] R6 v2 (D10, 5.1), before the pull request jobs.
 - [ ] The push run of the fingerprint tests runs in coverage mode instead of debug mode and saves
   its map as an artifact (D11, 8.4). Each split saves its records, and one more job writes the map
