@@ -47,6 +47,12 @@ MAX_REASONS = 5
 # only these kinds. A fingerprint, a statistical result, a chart, a speed and the end status of a run
 # do not hold these texts.
 LINE_SENSITIVE_KINDS = {"opp", "unit", "module", "packet", "queueing", "protocol"}
+# The kinds without records, whose tests the selection selects all together or not at all. A feature
+# test builds the project with a combination of features and runs the configs of the folders of the
+# feature (v1 rule of section 6): a change of a C++, msg, NED, ini or build file, or of a file that a
+# run used, selects all of them.
+KIND_LEVEL_KINDS = {"feature"}
+FEATURE_INPUT_CLASSES = {"build", "cpp", "msg", "ned", "ini"}
 
 class Reason(collections.namedtuple("Reason", ["rule", "path", "detail", "side"])):
     """Why a test is selected: the rule of the plan, the changed file, a detail, and the diff (``A..B`` or ``A..C``)."""
@@ -922,6 +928,12 @@ def select_side(test_map, project, file_changes, side):
             rule = changed_headers.get(path) or changed_headers.get(os.path.splitext(path)[0] + "_m.h") if input_class == "msg" else changed_headers.get(path)
             if rule:
                 rules.setdefault(rule, {"runs": 0, "tests": 0, "all": False, "kinds": set()})["headers"] = True
+    # the v1 rule of the kinds without records: a file of these classes, or a file that a run used,
+    # whose own rules select something; a line shift (R3) changes only text outputs
+    for path, status, input_class, rules in selection.files:
+        if set(rules) - {"R3"} and (input_class in FEATURE_INPUT_CLASSES or input_class == "data"):
+            for kind in KIND_LEVEL_KINDS:
+                selection.add_kind(kind, "V1", path, f"a {input_class} file with the rules {', '.join(sorted(set(rules) - {'R3'}))}")
     return selection
 
 #
@@ -1003,6 +1015,8 @@ class TestSelection:
         kind_selection = self.get_kind(kind)
         if kind_selection.everything:
             return [kind_selection.everything]
+        if kind in KIND_LEVEL_KINDS:
+            return []
         if key not in self.test_map.tests.get(kind, {}):
             return [Reason("4.3", None, "the test is not in the map", None)]
         return kind_selection.selected.get(key, [])
@@ -1094,7 +1108,7 @@ def select_tests(simulation_project=None, changes=WORKTREE, map_folder=None, kin
     if ignore_environment:
         for reason in environment:
             _logger.warning(f"Ignored: {reason.detail}")
-    kinds = kinds or sorted(test_map.tests)
+    kinds = kinds or sorted(set(test_map.tests) | KIND_LEVEL_KINDS)
     target_side = Side(root_folder, changes.target)
     abnormal = test_map.get_abnormal_runs()
     entries = [(bits, reason) for side in sides for bits, reason in side.entries]
@@ -1122,7 +1136,7 @@ def select_tests(simulation_project=None, changes=WORKTREE, map_folder=None, kin
         kind_reasons = [side.kinds[kind] for side in sides if kind in side.kinds]
         kind_selection = KindSelection(kind, tests=_get_test_universe(kind, project, target_side),
                                        everything=(everything or kind_reasons or [None])[0])
-        if kind not in test_map.tests:
+        if kind not in test_map.tests and kind not in KIND_LEVEL_KINDS:
             kind_selection.everything = kind_selection.everything or Reason("4.3", None, f"the map has no {kind} tests", None)
         if not kind_selection.everything:
             for index, reasons in run_reasons.items():
@@ -1174,15 +1188,24 @@ def print_test_selection(test_selection, explain=False, list_tests=True, output_
 
 def get_test_kind(multiple_test_tasks):
     """Returns the kind of the tests of a task list of a run command, for example ``statistical`` for the list ``statistical test``."""
+    from opp_repl.test.feature import MultipleFeatureTestTasks
     from opp_repl.test.fingerprint.task import MultipleFingerprintTestTasks
     if isinstance(multiple_test_tasks, MultipleFingerprintTestTasks):
         return "fingerprint"
+    if isinstance(multiple_test_tasks, MultipleFeatureTestTasks):
+        return "feature"
     name = multiple_test_tasks.name
     return name[:-len(" test")] if name.endswith(" test") else name
 
 def get_test_key(kind, test_task):
-    """Returns the key of a test task of *kind* in ``tests.json`` of the map: the key of its run, and for a fingerprint test also its ingredients."""
+    """
+    Returns the key of a test task of *kind* in ``tests.json`` of the map: the key of its run, and for
+    a fingerprint test also its ingredients. A feature test has no run: its key is
+    ``feature:<type>:<feature>``.
+    """
     from opp_repl.test.test_map.record import get_test_map_run_key
+    if kind == "feature":
+        return f"feature:{test_task.type}:{test_task.feature or ''}"
     run_key = get_test_map_run_key(kind, test_task.simulation_task)
     return run_key + ":" + test_task.ingredients if kind == "fingerprint" else run_key
 

@@ -41,6 +41,9 @@ class FeatureTestTask(TestTask):
         self.multiple_simulation_tasks = None
 
     def get_multiple_simulation_tasks(self):
+        # the runs stop where the smoke tests of their configs stop (the store of the simulation-time limits)
+        from opp_repl.test.smoke import get_smoke_test_time_limits
+        sim_time_limit, cpu_time_limit = get_smoke_test_time_limits(self.simulation_project, cpu_time_limit=self.cpu_time_limit)
         if len(self.packages) != 0:
             folders = []
             for package in self.packages:
@@ -48,11 +51,11 @@ class FeatureTestTask(TestTask):
                  folders.append(folder)
                  folders.append(folder + "/.*")
             working_directory_filter = "|".join(folders)
-            multiple_simulation_tasks = get_simulation_tasks(working_directory_filter=working_directory_filter, full_match=True, run_number=0, mode=self.mode, cpu_time_limit=self.cpu_time_limit, build=False)
+            multiple_simulation_tasks = get_simulation_tasks(working_directory_filter=working_directory_filter, full_match=True, run_number=0, mode=self.mode, sim_time_limit=sim_time_limit, cpu_time_limit=cpu_time_limit, build=False)
         else:
             multiple_simulation_tasks = MultipleSimulationTasks(mode=self.mode, build=False)
         if len(multiple_simulation_tasks.tasks) == 0:
-            multiple_simulation_tasks = get_simulation_tasks(working_directory_filter="examples/empty", full_match=True, run_number=0, mode=self.mode, cpu_time_limit=self.cpu_time_limit, build=False)
+            multiple_simulation_tasks = get_simulation_tasks(working_directory_filter="examples/empty", full_match=True, run_number=0, mode=self.mode, sim_time_limit=sim_time_limit, cpu_time_limit=cpu_time_limit, build=False)
         return multiple_simulation_tasks
 
     def get_parameters_string(self, **kwargs):
@@ -142,10 +145,20 @@ def get_feature_test_tasks(simulation_project=None, filter=".*", full_match=Fals
     return MultipleFeatureTestTasks(tasks=test_tasks, simulation_project=simulation_project, multiple_task_results_class=MultipleTestTaskResults, **dict(kwargs, concurrent=False))
 get_feature_test_tasks.__signature__ = combine_signatures(get_feature_test_tasks, get_simulation_tasks)
 
-def run_feature_tests(**kwargs):
+def run_feature_tests(changes=None, test_map=None, ignore_environment=False, **kwargs):
+    """
+    Runs the feature tests. With *changes*, only the selected tests run, as for
+    :py:func:`opp_repl.test.fingerprint.task.run_fingerprint_tests`. The feature tests have no
+    records: a change of a C++, msg, NED, ini or build file, or of a file that a run of the map used,
+    selects all of them (the v1 rule of the test selection plan).
+    """
     from opp_repl.simulation.project import apply_project_test_defaults  # lazy: avoid test/* import cycle
     kwargs = apply_project_test_defaults("feature", kwargs)
     multiple_test_tasks = get_feature_test_tasks(**kwargs)
+    if changes:
+        # lazy: the test map imports the coverage module, which imports the simulation modules
+        from opp_repl.test.test_map.select import apply_test_map_options
+        kwargs = apply_test_map_options("feature", multiple_test_tasks, kwargs, changes=changes, test_map=test_map, ignore_environment=ignore_environment)
     return multiple_test_tasks.run(**kwargs)
 run_feature_tests.__signature__ = combine_signatures(run_feature_tests, get_feature_test_tasks)
 

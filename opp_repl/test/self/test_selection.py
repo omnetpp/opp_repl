@@ -313,6 +313,15 @@ class SelectionTestCase(unittest.TestCase):
         _, selection = self.select({"fake.opp": self.opp_text(new_ref, mode="debug")})
         self.assertEqual({kind: reason.rule for kind, reason in selection.kinds.items()}, {"statistical": "E5"})
 
+    def test_the_feature_tests_are_selected_by_the_class_of_the_file(self):
+        _, selection = self.select({"src/a.cc": SOURCES["src/a.cc"].replace("return 1;", "return 5;")})
+        self.assertEqual({kind: reason.rule for kind, reason in selection.kinds.items()}, {"feature": "V1"})
+        _, selection = self.select({"src/a.cc": SOURCES["src/a.cc"], "examples/data.xml": "<y/>\n"})
+        self.assertEqual(list(selection.kinds), ["feature"])
+        # a file that no run used selects no feature test
+        _, selection = self.select({"examples/data.xml": SOURCES["examples/data.xml"], "doc/notes.txt": "x\n"})
+        self.assertEqual(selection.kinds, {})
+
     def add_release_only_block(self, names=[], includes=[]):
         with open(os.path.join(self.map_folder, "release-only.json"), "w") as f:
             json.dump({"blocks": [{"path": "src/a.h", "lines": [2, 4], "names": names, "includes": includes, "inside_function": False, "runs": ["r1"]}]}, f)
@@ -420,6 +429,9 @@ class TestSelectionTestCase(unittest.TestCase):
             self.assertTrue(selection.is_selected("fingerprint", "fingerprint:examples/new.ini:General:#0:1s:tplx"))
             self.assertFalse(selection.is_selected("fingerprint", "fingerprint:examples/omnetpp.ini:One:#0:1s:tplx"))
             self.assertTrue(selection.is_selected("smoke", "smoke:x"))
+            # a kind without records: selected only if a rule selects all of its tests
+            selection = TestSelection(test_map, None, folder, [], [], {"feature": KindSelection("feature", tests=None)})
+            self.assertFalse(selection.is_selected("feature", "feature:enable:X"))
             self.assertEqual(test_map.get_abnormal_runs(), 1 << 2)
 
 if __name__ == "__main__":
