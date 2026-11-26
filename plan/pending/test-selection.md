@@ -472,10 +472,14 @@ did this test use", and gives the summary for each folder. It reads the same fil
 - **V3 Mutation sample.** Change a constant in a sample of functions that ran, run all tests, and
   compare. The tests whose fingerprint changed must be a subset of the selection. This is expensive,
   so do it once for some functions.
-- **V4 Check of each push.** A push to `master` runs all tests (15.3). Then it computes the
-  selection for `github.event.before..github.sha`. Each test whose outcome differs from the
-  previous push run must be in the selection. If one is not, the job fails and names the test, the
-  commit and the rules.
+- **V4 Check of each full run.** A full run runs all tests (15.3, 15.6). Then it computes the
+  selection from the commit of the previous full run to its own commit. Each test whose outcome
+  differs from the previous full run must be in the selection. If one is not, the job fails and
+  names the test, the commit and the rules.
+- **V5 Check of the sample.** A push run that updates the map also runs a random sample of the
+  tests that the selection does not give (15.6). The new record of each sampled run must be the
+  same as its data in the old map. A difference shows a defect of the selection: the job fails and
+  names the run and the difference.
 
 ## 11. Proposed omnetpp changes
 
@@ -1199,6 +1203,16 @@ of the new commands.
   opp_repl `doc/test_map.md`. TR-SELECTED-PASS applies only to the kinds that the map holds: with
   the fingerprint map of a push run, `opp_run_all_tests --changes` would run all tests of each
   other kind, and that is the unfiltered campaign that `run-the-gates.md` does not ask for.
+- [ ] Updated maps (D14, 15.6), on the local branches:
+  - [ ] U1: the map holds its build tables; the header fields `update_of`, `full_commit`,
+    `updates`; `commit` in `runs.json`; the data of a run from a map, with the self test of 15.6
+    item 6.
+  - [ ] U2: `--update-from` of `opp_update_test_map`, with the check of the join and the check V5.
+  - [ ] U3: `--sample FRACTION` of the run commands and of `opp_select_tests`.
+  - [ ] U4: `doc/test_map.md`.
+  - [ ] U5: INET `get-test-map.sh` (`FULL_ONLY`, `NEED_BUILD_TABLES`, the scheduled runs,
+    `run_id`) and `fingerprint-tests.yml` (the update on a push, the full run each night, V4 only
+    in a full run), and the INET documentation.
 - [ ] opp_ci: a selection option for branch runs.
 - [ ] Later: TR-CI-EVERY-COMMIT, with the selection of each commit of a pull request (15.3).
 
@@ -1266,6 +1280,11 @@ of the new commands.
   push jobs in coverage mode. The replay of phase 4 showed that a weekly map gives them almost no
   benefit (a median of 100% of the statistical tests from 7 commits of age on), and the push jobs
   cost only runner time. Only the smoke and sanitizer tests take their records from the weekly map.
+- **D14 (decided 2026-11-26)** A push run does not run all tests. It updates the map of an earlier
+  run: it runs the selected tests and a random sample of the other tests, and it keeps the data of
+  the old map for each other run (15.6). A scheduled run makes a full map each night when `master`
+  or the environment changed since the last full map. Thus `master` gets all tests only in the
+  full runs, and a defect of the selection stays in the map for at most one day.
 
 No decision is open.
 
@@ -1332,7 +1351,7 @@ The user agreed to this design on 2026-11-26 (D8 to D11). Phase 5 has its steps.
 
 ### 15.2 The job of a pull request
 
-The selection only decides how long a pull request waits. `master` keeps the full run (15.3). Each
+The selection only decides how long a pull request waits. `master` keeps a full run each night (15.6). Each
 kind gets this job after its replay (phase 4). Until then, the kind runs as now.
 
 1. Check out INET with the history back to the map commit (`fetch-depth: 0`). Download the map of
@@ -1365,6 +1384,8 @@ packet, validation) also get this job.
 - A push to `master` runs all tests, as now, with the newest omnetpp and opp_repl. Its fingerprint
   jobs run in coverage mode instead of debug mode, and the run saves the map of its commit (D11,
   8.4). Nobody waits for this run, and it is the input of the check V4 (section 10).
+  D14 changes this: a push run updates the map, and a scheduled run makes a full map each night
+  (15.6).
 - The weekly coverage run makes the new map and does the check V2.
 - Later: each commit of a pull request runs the tests that its own change selects (`--changes
   <commit>`). This enforces TR-CI-EVERY-COMMIT at the cost of one build for each commit.
@@ -1437,3 +1458,91 @@ Facts and limits:
   and one without `opp_repl_commit` are rejected); the `jq` lines of the step `Select the tests`
   on a real selection; H6 for `_scripts/github/`; the shell syntax of each `run` block.
   `actionlint` is not on this computer. The jobs themselves run only after a push.
+
+### 15.6 Updated maps (D14, decided 2026-11-26)
+
+A push run updates the map of an earlier run, and a scheduled run makes a full map each night.
+
+| When | What runs | The map |
+| --- | --- | --- |
+| A push to `master` | the selected tests and a random sample of the other tests | updated from the newest earlier map |
+| A push without a map with build tables | all tests, with the newest omnetpp and opp_repl | full |
+| Each night, if `master` or the environment changed since the last full map | all tests, with the newest omnetpp and opp_repl | full |
+| Each night, if nothing changed | nothing | the newest map stays correct |
+| Each week, the coverage workflow | all kinds of tests | full, into `inet-framework/coverage` |
+
+Facts:
+
+- A record names each function that ran by its name in the profile (`file:mangled name` for a
+  function with internal linkage, for example
+  `AckHandler.cc:_ZN4inet9ieee80211L16__factoryfunc_13Ev`), not by its lines. The writer gets the
+  line ranges from the function table of the build tables.
+- A map holds, for each function body, its line range, its runs and only the demangled name of
+  its first instance (cut at 200 characters). The build tables of the map commit give the mangled
+  names of each line range. They have 3.7 MB as `build-tables.json.gz`.
+- The fingerprint map of 1847 runs has 68 MB. The records of the 4751 chart runs of phase 4 have
+  500 MB, almost all of it `functions.txt.gz` (about 98 KB for each run).
+- The replay of phase 4 (193 commits of `master`, 4726 fingerprint tests): with the map of the
+  parent commit, the selection gives a median of 2% of the tests, and 21% of the commits select
+  more than 90%. With a map 1 to 3 commits old, the median is 3%, and 37% of the commits select
+  more than 90%.
+- If the selection does not give a test, the test runs the same code and reads the same files, so
+  its record does not change. A change that changes the record of each run without a change of a
+  result (a new or removed C++ source, with its static initialization, or a new or removed `.msg`
+  file) already selects all tests.
+
+The update, `opp_update_test_map --update-from OLD_MAP`:
+
+1. The writer computes the selection from the commit A of the old map to the commit C of the new
+   records, with the old map. The new map holds:
+   - each run that has a new record, from the new record;
+   - each other run of the old map that the selection does not give, whose test is a test at C,
+     with the data of the old map;
+   - no run that the selection gives and that has no new record. The selection always gives a
+     test that the map does not have, so such a test runs at the next push.
+2. The data of an old run come from the old map and its build tables: the functions (each line
+   range of a function that the run ran gives the names of the old function table), the files that
+   it read, examined or looked up, the folders that it listed, the NED types (the closure, which
+   does not change at C, because a change of the references of a used type selects the run), the
+   section chain, the headers that the own code of a test includes, and its entry in `runs.json`.
+   The writer then joins these names with the new build tables, as for a new record.
+3. The check of the join: each function name of an old run must be in the new function table. If
+   one is not, the map does not keep the run, and the run is then always selected. Some names have
+   a counter, for example `__onstartup_func_15`.
+4. The check V5 (section 10): the new record of a run that the selection does not give (a run of
+   the sample) must have the same data as the old map. The writer writes the map, and then the
+   command fails and names each difference.
+5. The map holds its build tables (`build-tables.json.gz`), because the next update needs them.
+   The header gets `update_of` (A), `full_commit` (the commit of the last full map) and `updates`
+   (the number of updates since that map). A map without old runs is a full map. Each entry of
+   `runs.json` gets `commit`, the commit of its record.
+6. A self test makes sure that the data of item 2 are exact: the writer, with the data of all runs
+   of a map and the same build tables, must write the same map again.
+
+The sample: `--sample FRACTION` of the run commands and of `opp_select_tests` also selects a
+random part of the tests that the selection does not give, with the reason `sample`. The seed is
+the target commit, so each split and the job `test-map` get the same sample. The push run uses 5%
+(about 90 of the 1847 runs), and the replay of the check V5 decides a better value.
+
+The INET workflow:
+
+- `get-test-map.sh` takes the maps of the push runs and of the scheduled runs. Two optional
+  variables limit the maps: `FULL_ONLY=true` (a map without `update_of`) and
+  `NEED_BUILD_TABLES=true`. It also writes the output `run_id`.
+- A push: the job `environment` finds the newest map with build tables. With one, the run updates
+  that map in the environment of the map: the matrix jobs run `--changes <map commit>..HEAD
+  --sample 0.05`, and the job `test-map` runs `--update-from`. Without one, the run is full, with
+  the newest omnetpp and opp_repl. Thus the environment changes only in a full run.
+- A scheduled run (each night): the job `environment` finds the newest full map. If its commit is
+  the head of `master` and its omnetpp and opp_repl commits are the heads of `omnetpp-6.x` and
+  `github_ci`, the run skips its jobs. Else the run is full.
+- The check V4 runs only in a full run, against the run of the previous full map.
+
+Limits:
+
+- A defect of the selection stays in the map until the next full map, at most one day if `master`
+  changes each day. The sample finds such a defect with a probability of about its size.
+- The map holds only the files that git tracks. If a later commit adds a file to git that an old
+  run read as an untracked file, the map does not give that file to the run, but a full map does.
+- A push that needs a newer omnetpp or opp_repl than the map fails in the environment of the map.
+  The next full run (each night, or a push after a new full map) repairs this.
