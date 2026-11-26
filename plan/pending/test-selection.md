@@ -1048,6 +1048,12 @@ and a check on a real INET map with the scenarios of phase 2.
 
     A map at the parent (D11) selects a median of 1.9% of the tests; from 3 commits of age on, more
     than half of the commits select all tests. A selection needs a median of 0.7 s, at most 7.2 s.
+  - The statistical result (12 statistical maps at the positions that serve the pin moves, about
+    9 minutes each): 27 commits move the `statistics` pin, and 214 `.sca` files change between the
+    pins. A rule other than E2, the pin rule itself, selects 202 of their tests; the other 12 are
+    of b436a63418, the new baselines for the Ubuntu 26.04 runners, which changes no code. Two pin
+    moves (bdbb4baae1, bc39ec7571) name a commit that the `statistics` checkout does not have, so
+    E2 selects all statistical tests there.
   - The replay uses a map whose commit is near the replayed commits. diff(A,B) grows with the
     distance, and a big diff gives a correct but wide selection, which makes the ratio useless.
 - [x] The mutation sample (V3), once for the fingerprint tests.
