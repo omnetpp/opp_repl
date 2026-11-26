@@ -1,6 +1,6 @@
 # Change-based test selection
 
-> **Status:** phases 0-3 done; phase 4 in progress, then phase 5 ·
+> **Status:** phases 0-4 done; phase 5 next · open: the finding for D12 (phase 4) ·
 > **Owner:** opp_repl · **Also changes:** INET (the coverage workflow, the workflows of pull requests,
 > `inet.opp`, `run-the-gates.md` and the test rules), the `inet-framework/coverage` repository,
 > optionally omnetpp (section 11)
@@ -1016,7 +1016,7 @@ and a check on a real INET map with the scenarios of phase 2.
 
 ### Phase 4 — validation
 
-- [ ] Replay (V1) over the last 200 INET master commits, for each kind in the map, first the
+- [x] Replay (V1) over the last 200 INET master commits, for each kind in the map, first the
   fingerprint tests. Repair each rule that misses a test. A kind goes into the CI of phase 5 only
   after its replay finds no missed test.
   - The ground truth of the 200 first-parent commits up to 28f1dc534c (2026-11-13 to 2026-11-25):
@@ -1054,6 +1054,16 @@ and a check on a real INET map with the scenarios of phase 2.
     of b436a63418, the new baselines for the Ubuntu 26.04 runners, which changes no code. Two pin
     moves (bdbb4baae1, bc39ec7571) name a commit that the `statistics` checkout does not have, so
     E2 selects all statistical tests there.
+  - The chart result (4 chart maps of 229 to 236 chart tests, about 18 minutes each): the image of
+    a chart is `<folder of the .anf>/doc/<image_export_filename>.png` in the `media` repository.
+    The commits with a code change change 13 chart images, and each of their tests is selected:
+    H3 for the QoS charts of 42dbb75bfb, R2 and R4 for bdd73c5a60 and dd73c4376b, and the 7 images
+    of the new showcase of bc39ec7571 are new tests. The 24 other images are of bdbb4baae1, a
+    catch-up commit that only moves the pins; there, E3 selects them. Two commits change only
+    videos. `tutorials/rip/Step9.anf` does not load at any commit of the range.
+  - So the replay finds no defect of a rule for the three kinds with ground truth in the history.
+    The other kinds (smoke, sanitizer, the opp tests, packet, feature, validation) have no such
+    ground truth; the checks V2 and V4 of phase 5 cover them.
   - The replay uses a map whose commit is near the replayed commits. diff(A,B) grows with the
     distance, and a big diff gives a correct but wide selection, which makes the ratio useless.
 - [x] The mutation sample (V3), once for the fingerprint tests.
@@ -1079,7 +1089,23 @@ and a check on a real INET map with the scenarios of phase 2.
     The other 5 (in `DhcpClient`, `DriftingOscillatorBase`, `BitVector`,
     `LineSegmentsMobilityBase`, `InterpacketGapInserter`) change no result. The run without a
     change needs 2:36 for the 4726 tests; a mutation needs about 2:30 with its build.
-- [ ] Write the selection ratio for each suite into this plan.
+- [x] Write the selection ratio for each suite into this plan.
+  - Fingerprint: the table above. Statistical (the 12 statistical maps; the denominator is the 944
+    tests of the map):
+
+    | Age | Commits | Median of the selected tests | All tests | Below 5% |
+    | --- | --- | --- | --- | --- |
+    | 0 | 12 | 5.5% | 33% | 50% |
+    | 1 | 12 | 5.5% | 42% | 50% |
+    | 2 to 3 | 24 | 90% | 50% | 33% |
+    | 7 and more | 112 | 100% | 53% | 12% |
+
+  - The other suites: the scenarios of phase 3 (the map of all kinds).
+  - A finding for D12: INET `master` gets about 120 commits each week, so a weekly map is mostly
+    7 or more commits old, and the statistical and chart tests of a pull request would select all
+    tests in most cases. A map of these kinds on each push (coverage mode: 3 and 5 times the time
+    of their release jobs, on push runs that nobody waits for) would give them the age 0. This
+    needs a decision of the user.
 
 ### Phase 5 — CI and the agent documentation
 
