@@ -68,11 +68,57 @@ test_parameters={
 - **`folder`** — the folder of the clone, relative to the project root.
 - **`ref`** — the commit to use: a full commit hash, a branch or a tag.
   Optional.
+- **`trailer`** — the key of a commit trailer that gives the commit to use, for
+  example `Statistical-Baseline`.  Optional.  An entry has `ref` or `trailer`,
+  never the two.  With neither of them, a new clone is at the head of the
+  default branch.
 
 With a full commit hash as `ref`, each commit of the project names the exact
 baseline that it passes with.  A change of the project that moves a result then
 changes the `ref` in the same commit, and a test of an older commit compares
-with the baseline of that commit.
+with the baseline of that commit.  Two changes that move the baseline then
+change the same line of the `.opp` file, so they conflict, also when they
+change different results.
+
+#### The trailer form
+
+With `trailer`, the `.opp` file does not change when a result moves.  The
+commit that moves a result (the cause commit) has the trailer with the full hash
+of a baseline commit, the pin:
+
+```
+Statistical-Baseline: 0123456789abcdef0123456789abcdef01234567
+```
+
+The pin is the last commit of a step on a branch of the baseline repository.
+When the project commit lands on its target branch, a landing job of the
+project puts the steps onto the default branch of the baseline repository, by a
+fast-forward or by a rebase.  After the steps it adds a mark: a commit with no
+change of files whose message names the baseline of each landed cause commit:
+
+```
+Baseline-Of: <full hash of the project commit> <full hash of the baseline commit>
+```
+
+`resolve_test_baseline` finds the baseline of a project commit X:
+
+1. B is the merge base of X and the target branch of the project (`--target`,
+   by default `origin/master` or `origin/main`).
+2. M is the baseline that the newest mark gives for B or for a first-parent
+   ancestor of B.  When no mark names one, M is the `ref` of the newest ancestor
+   whose `.opp` file has one.  A cause commit on the target branch with no mark
+   is an error: its baseline is not on the default branch yet.
+3. S is the pin of the newest commit in `B..X` that has the trailer.  With no
+   pin, the baseline is M.
+4. Else the baseline is the branch up to S, rebased onto M.  The rebased commits
+   keep the author, the committer, the dates and the message of each commit, so
+   their hashes are the same on each machine.  A file that the branch changes
+   and that differs between its base and M is an overlap, and an error.
+
+Thus a test of a pull request (its merge ref) compares with the baseline that
+the landing will make, and a test of a commit of the series compares with the
+baseline of its base.  The trailer form needs the history of the project and of
+the target branch: a shallow clone does not have it.
 
 `opp_checkout_test_baselines` makes the clone, or gets the declared commit into
 a clone that exists, and moves the checkout to that commit:
@@ -87,13 +133,16 @@ checkout_test_baselines(simulation_project=inet_project)
 checkout_test_baseline("statistical", simulation_project=inet_project)
 ```
 
-The command prints the commit of each checkout.  It gets a commit by its hash,
+The command prints the commit of each checkout, and for the trailer form also B,
+M and S.  For the trailer form, `--commit` gives the baseline of another commit
+than `HEAD`, for example for a tree that has the changes of that commit.  It gets a commit by its hash,
 thus the commit can be on no branch, as the head of a pull request is.  A
 checkout that is already at the commit stays on its branch.  The command never
 discards a local change: git stops when the checkout would overwrite one.
 
 A test and an update never move a baseline checkout.  They give a warning when
-the checkout is not at the declared commit, and with the log level `INFO` they
+the checkout is not at the declared commit (for the trailer form: when its
+files differ from the files of the baseline of the project commit), and with the log level `INFO` they
 report the commit and whether the checkout has local changes.
 
 ## Python API

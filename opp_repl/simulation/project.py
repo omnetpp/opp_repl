@@ -270,7 +270,7 @@ class OmnetppProject:
 # heterogeneous: some have a result store, some a baseline repo, some a runner).
 #   defaults  — kwargs merged into run_<kind>_tests as if the caller passed them
 #   store     — expected-values file in the project tree (fingerprint/speed JSON)
-#   baseline  — external repo to check out before the kind runs: {repository, ref, folder}
+#   baseline  — external repo to check out before the kind runs: {repository, ref or trailer, folder}
 #   runner    — dotted "module:function" ref for a project-specific kind (validation)
 #   report    — settings of the kind's report (coverage: exclude, areas; see the Coverage guide)
 RECOGNISED_TEST_ASPECTS = frozenset({"defaults", "store", "baseline", "runner", "report"})
@@ -609,9 +609,11 @@ class SimulationProject:
         return self.name
 
     def get_test_baseline(self, kind):
-        """Return the ``{repository, ref, folder}`` baseline-repo declaration for a
+        """Return the ``{repository, ref or trailer, folder}`` baseline-repo declaration for a
         test kind (chart/statistical compare against an external baseline repo that
-        must be checked out before the run), or ``None`` if the kind declares none."""
+        must be checked out before the run), or ``None`` if the kind declares none.
+        ``ref`` names the baseline commit; ``trailer`` names the key of the commit
+        trailer that gives it (see :py:mod:`opp_repl.test.baseline`)."""
         return self.test_parameters.get(kind, {}).get("baseline")
 
     def get_test_mode(self, kind):

@@ -342,6 +342,8 @@ def parse_checkout_test_baselines_arguments():
     parser = argparse.ArgumentParser(description=description)
     parser.add_argument("kinds", nargs="*", metavar="KIND", help="test kinds whose baseline repository is checked out, for example statistical or chart (default: all kinds that declare a baseline repository)")
     parser.add_argument("-p", "--simulation-project", default=None, help="name of the simulation project to use (auto-detected from the working directory if not specified)")
+    parser.add_argument("--commit", default="HEAD", help="the commit of the project whose baselines a baseline entry with a trailer gives (default: HEAD)")
+    parser.add_argument("--target", default=None, help="the target branch of the project for a baseline entry with a trailer, for example origin/master (default: the first of origin/HEAD, origin/master, origin/main, master and main that the project repository has)")
     parser.add_argument("-l", "--log-level", choices=["ERROR", "WARN", "INFO", "DEBUG"], default="WARN", help="controls the verbosity of log messages (default: WARN)")
     parser.add_argument("-L", "--external-command-log-level", choices=["ERROR", "WARN", "INFO", "DEBUG"], default="WARN", help="controls the verbosity of log messages from external commands (default: WARN)")
     parser.add_argument("--log-file", default=None, help="write all log messages to this file (disabled by default)")
@@ -360,9 +362,13 @@ def checkout_test_baselines_main():
         if not kinds:
             print(f"The project {simulation_project.get_name()} declares no baseline repository")
         for kind in kinds:
-            commit = checkout_test_baseline(kind, simulation_project=simulation_project)
+            commit = checkout_test_baseline(kind, simulation_project=simulation_project, target=args.target, project_commit=args.commit)
             baseline = simulation_project.get_test_baseline(kind)
             print(f"{kind} baseline: {baseline['repository']} at {commit} in {baseline.get('folder') or '.'}")
+            if baseline.get("trailer") and not baseline.get("ref"):
+                # the checkout made the rebased commits already, so this needs no fetch
+                for line in resolve_test_baseline(kind, simulation_project=simulation_project, target=args.target, project_commit=args.commit, fetch=False).get_description():
+                    print(f"  {line}")
     except KeyboardInterrupt:
         _logger.warn("Program interrupted by user")
     except Exception as e:

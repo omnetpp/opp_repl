@@ -358,7 +358,10 @@ def _parse_opp_file(path):
         ValueError: if the file does not match the restricted format.
     """
     with open(path) as f:
-        source = f.read()
+        return _parse_opp_source(f.read(), path)
+
+def _parse_opp_source(source, path):
+    """Parse the text of a ``.opp`` file as :py:func:`_parse_opp_file` does. *path* names the text in the messages, for example ``commit:inet.opp`` for a file that git gives."""
     tree = ast.parse(source, filename=path, mode="eval")
     node = tree.body
     if not isinstance(node, ast.Call):
