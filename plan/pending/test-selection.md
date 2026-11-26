@@ -1019,6 +1019,16 @@ and a check on a real INET map with the scenarios of phase 2.
 - [ ] Replay (V1) over the last 200 INET master commits, for each kind in the map, first the
   fingerprint tests. Repair each rule that misses a test. A kind goes into the CI of phase 5 only
   after its replay finds no missed test.
+  - The ground truth of the 200 first-parent commits up to 28f1dc534c (2026-11-13 to 2026-11-25):
+    29 commits change 854 fingerprint values of the store (1 of them only the store), 27 move the
+    `statistics` pin, 8 the `media` pin.
+  - The method: 14 fingerprint maps at 28f1dc534c~p for p in 5, 14, 46, 56, 64, 99, 107, 112,
+    115, 123, 127, 135, 142 and 193, so that each commit with ground truth has a map at most 6
+    commits older than its parent (`p4/maps.sh`, a scratch worktree with a coverage build, a copy
+    of opp_repl at bcc8437). For each commit, the selection of `--changes <commit>` with that map
+    must select each test whose stored fingerprint changed by a rule other than E1, the store rule
+    itself; a test that is not in the map is selected anyway. The selection is correct with any
+    map (diff(A,B) ∪ diff(A,C)), so a test that it misses is a defect of a rule or an assumption.
   - The replay uses a map whose commit is near the replayed commits. diff(A,B) grows with the
     distance, and a big diff gives a correct but wide selection, which makes the ratio useless.
 - [ ] The mutation sample (V3), once for the fingerprint tests.
@@ -1108,15 +1118,15 @@ The design is in section 15.
   opp_repl in `inet.opp`, as for the baselines.
 - **D10 (decided 2026-11-26)** R6 v2 (5.1) comes before the pull request jobs of phase 5, not in
   phase 6. Without it, a hunk that only renames or removes functions selects all tests (15.1).
+- **D11 (decided 2026-11-26)** Each push to `master` makes a map of the fingerprint tests: its debug
+  fingerprint jobs become coverage jobs (about 7% slower), and the map is an artifact of the run
+  (8.4). A pull request job uses the map of the newest finished push run, so the map is minutes or
+  hours old, and the environment of D9 is that of the last push run.
 - **D12 (decided 2026-11-26)** The records of the unit, module, queueing, protocol and packet tests
   come from their push jobs in coverage mode, as for the fingerprint tests (D11): these jobs run in
   debug mode, which is about as fast. The records of the statistical, smoke, sanitizer and chart
   tests come from the weekly map: their jobs run in release mode or not on a push, and coverage
   mode is 3 to 5 times slower than release.
-- **D11 (decided 2026-11-26)** Each push to `master` makes a map of the fingerprint tests: its debug
-  fingerprint jobs become coverage jobs (about 7% slower), and the map is an artifact of the run
-  (8.4). A pull request job uses the map of the newest finished push run, so the map is minutes or
-  hours old, and the environment of D9 is that of the last push run.
 
 No decision is open.
 
