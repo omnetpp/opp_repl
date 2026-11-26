@@ -289,6 +289,23 @@ class TrailerBaselineTestCase(unittest.TestCase):
         test_baseline = self._resolve("topic/a")
         self.assertEqual((test_baseline.cause, test_baseline.pin, test_baseline.commit, test_baseline.rebased), (cause, pin, pin, False))
 
+    def test_a_series_without_a_pin_gets_the_baseline_of_its_base(self):
+        # the oldest commit of the series has no trailer, as most series have
+        self._setup_marked_master()
+        self._start_series("topic/a")
+        self._project_commit("a: no pin")
+        test_baseline = self._resolve("topic/a")
+        self.assertEqual((test_baseline.cause, test_baseline.commit), (None, self.first))
+
+    def test_a_pin_after_a_commit_without_one_is_the_baseline(self):
+        self._setup_marked_master()
+        pin = self._baseline_commit("a moves", {"a.sca": "2\n"}, start=self.mark0)
+        self._start_series("topic/a")
+        self._project_commit("a1: no pin")
+        cause = self._project_commit("a2: moves a", pin=pin)
+        test_baseline = self._resolve("topic/a")
+        self.assertEqual((test_baseline.cause, test_baseline.pin, test_baseline.commit), (cause, pin, pin))
+
     def _land_first_series_by_fast_forward(self):
         self._setup_marked_master()
         self.pin_a = self._baseline_commit("a moves", {"a.sca": "2\n"}, start=self.mark0)

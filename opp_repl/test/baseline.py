@@ -220,8 +220,12 @@ def _find_old_ref(simulation_project, repository, start, kind):
 def _find_pin(repository, base, commit, trailer):
     """Returns the newest commit in ``base..commit`` that has the pin trailer, and its pin, or None."""
     output = _git(repository, "log", "--topo-order", f"--format=%H%x1f%(trailers:key={trailer},valueonly,separator=%x1d)", f"{base}..{commit}")
-    for line in output.splitlines():
-        cause, values = line.split("\x1f", 1)
+    # _git strips the output, and Python takes \x1f for white space, so the line of the oldest commit loses
+    # its separator when the commit has no trailer; str.splitlines() would also break a line at \x1d
+    for line in output.split("\n"):
+        if not line:
+            continue
+        cause, _, values = line.partition("\x1f")
         pin = _read_pin_values(values, cause, trailer)
         if pin:
             return cause, pin
