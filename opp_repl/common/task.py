@@ -304,6 +304,9 @@ class TaskResult:
         }
         if self.task:
             d["parameters"] = self.task.get_parameters_string()
+            # the key of the test in the test map, for the check of a selection (opp_check_test_selection)
+            if hasattr(self.task, "get_test_map_key"):
+                d["test_map_key"] = self.task.get_test_map_key()
         return d
 
     def recreate(self, **kwargs):

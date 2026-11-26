@@ -90,6 +90,12 @@ class MultipleFingerprintTestTaskResults(MultipleTestTaskResults):
         self.kwargs = kwargs
 
 class FingerprintTestTask(SimulationTestTask):
+    def get_test_map_key(self):
+        """Returns the key of the test in the test map (see :py:mod:`opp_repl.test.test_map`)."""
+        # lazy: the test map imports the coverage module, which imports the simulation modules
+        from opp_repl.test.test_map.select import get_test_key
+        return get_test_key("fingerprint", self)
+
     def __init__(self, sim_time_limit=None, ingredients="tplx", fingerprint=None, test_result=None, name="fingerprint test", action="Checking fingerprint", task_result_class=FingerprintTestTaskResult, **kwargs):
         super().__init__(name=name, action=action, task_result_class=task_result_class, **kwargs)
         self.locals = locals()

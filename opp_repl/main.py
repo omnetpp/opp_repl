@@ -181,6 +181,26 @@ def show_test_map_main():
         map_folder = get_default_test_map_folder(determine_default_simulation_project(name=args.simulation_project), "map")
     show_test_map(map_folder, path=args.path, line=args.line, list_tests=args.list_tests, test_filter=args.test_filter)
 
+def check_test_selection_main():
+    parser = argparse.ArgumentParser(description="Checks a selection of the change-based test selection against two full runs: each test whose result differs between the previous result files and the result files must be in the selection of the change (check V4). Exits with 1 if the selection misses a test.")
+    parser.add_argument("--changes", required=True, help="the change between the two runs, for example <commit of the previous run>..<commit of the run>")
+    parser.add_argument("--map", dest="map_folder", required=True, metavar="FOLDER", help="the test map of the previous run")
+    parser.add_argument("--results", dest="result_files", action="append", required=True, metavar="FILE", help="a result file (--result-file) of the run; can be specified multiple times")
+    parser.add_argument("--previous-results", dest="previous_result_files", action="append", required=True, metavar="FILE", help="a result file of the previous run; can be specified multiple times")
+    parser.add_argument("--kind", default="fingerprint", help="the kind of the tests (default: fingerprint)")
+    parser.add_argument("--ignore-environment", action="store_true", help="give a warning instead of selecting all tests when the environment differs from the map")
+    parser.add_argument("--load", action="append", default=[], metavar="OPP_FILE", help="load one or more .opp configuration files or directories at startup")
+    parser.add_argument("-p", "--simulation-project", default=None, help="name of the simulation project")
+    parser.add_argument("-l", "--log-level", choices=["ERROR", "WARN", "INFO", "DEBUG"], default="INFO", help="the log level")
+    args = parser.parse_args(sys.argv[1:])
+    initialize_logging(args.log_level, "WARN", None)
+    for opp_file in args.load or find_opp_files():
+        load_opp_file(opp_file)
+    simulation_project = determine_default_simulation_project(name=args.simulation_project)
+    missed = check_test_selection(simulation_project=simulation_project, changes=args.changes, map_folder=args.map_folder, result_files=args.result_files,
+                                  previous_result_files=args.previous_result_files, kind=args.kind, ignore_environment=args.ignore_environment)
+    sys.exit(1 if missed else 0)
+
 def select_tests_main():
     parser = argparse.ArgumentParser(description="Selects, from the test map, the tests whose outcome a change can change, and prints them for each kind of test, with the changed files and the rules that selected them.")
     parser.add_argument("--changes", default="worktree", help="the change: worktree (the working tree against HEAD, the default), a commit, a range rev1..rev2 or rev1...rev2 (rev2 can be worktree), or a patch file")

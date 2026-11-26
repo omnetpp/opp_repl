@@ -448,6 +448,19 @@ class FindTestMapTestCase(unittest.TestCase):
         write_files(self.root, {"coverage/test-map/map/header.json": json.dumps({"commit": self.commits[3]})})
         self.assertEqual(self.header_commit(find_test_map(self.project, self.commits[3])), self.commits[3])
 
+class CheckTestSelectionTestCase(unittest.TestCase):
+    def test_the_outcomes_of_a_result_file(self):
+        from opp_repl.test.test_map.check import read_test_outcomes
+        data = {"result": "FAIL", "results": [{"result": "PASS", "expected": True, "results": [
+            {"result": "PASS", "expected": True, "test_map_key": "fingerprint:a.ini:A:#0:1s:tplx"},
+            {"result": "FAIL", "expected": False, "test_map_key": "fingerprint:a.ini:A:#0:1s:~tNl"}]}]}
+        with tempfile.NamedTemporaryFile("w", suffix=".json", delete=False) as f:
+            json.dump(data, f)
+        try:
+            self.assertEqual(read_test_outcomes(f.name), {"fingerprint:a.ini:A:#0:1s:tplx": ("PASS", True), "fingerprint:a.ini:A:#0:1s:~tNl": ("FAIL", False)})
+        finally:
+            os.remove(f.name)
+
 class TopLevelItemsTestCase(unittest.TestCase):
     def items(self, text):
         return [(kind, first, last) for kind, first, last, _ in get_top_level_items(tokenize_cpp_lines(text))]
