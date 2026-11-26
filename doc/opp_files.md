@@ -117,6 +117,7 @@ Describes a simulation project (INET, Simu5G, OMNeT++ samples, etc.).
 | `github_owner` | `str` | `None` | GitHub owner/organization for workflow dispatch |
 | `github_repository` | `str` | `None` | GitHub repository name for workflow dispatch |
 | `github_workflows` | `list[str]` | `None` | GitHub Actions workflow file names (e.g. `["fingerprint-tests.yml"]`) |
+| `ci_files` | `list[str]` | `[]` | Regular expressions of the paths of the files that the CI jobs run, besides `.github/workflows/`; a change of such a file selects all tests in the change-based test selection |
 
 ## Examples
 

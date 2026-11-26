@@ -273,7 +273,7 @@ class OmnetppProject:
 #   baseline  — external repo to check out before the kind runs: {repository, ref or trailer, folder}
 #   runner    — dotted "module:function" ref for a project-specific kind (validation)
 #   report    — settings of the kind's report (coverage: exclude, areas; see the Coverage guide)
-RECOGNISED_TEST_ASPECTS = frozenset({"defaults", "store", "baseline", "runner", "report", "sim_time_limits"})
+RECOGNISED_TEST_ASPECTS = frozenset({"defaults", "store", "baseline", "runner", "report", "sim_time_limits", "test_selection"})
 
 
 def _validate_test_parameters(test_parameters, project_name):
@@ -315,7 +315,7 @@ class SimulationProject:
                  used_projects=[], external_bin_folders=[], external_library_folders=[], external_libraries=[], external_include_folders=[],
                  dll_symbol=None, feature_libraries=None, pkg_config_libraries=None, opp_defines_file=None, precompiled_header=None, extra_cflags=[], extra_ldflags=[],
                  simulation_configs=None, overlay_name=None, overlay_build_root=None, opp_env_workspace=None, opp_env_project=None,
-                 github_owner=None, github_repository=None, github_workflows=None, workspace=None, **kwargs):
+                 github_owner=None, github_repository=None, github_workflows=None, ci_files=None, workspace=None, **kwargs):
         """
         Initializes a new simulation project.
 
@@ -502,6 +502,11 @@ class SimulationProject:
                 (e.g. ``["fingerprint-tests.yml"]``).  Used by
                 :py:func:`dispatch_all_workflows <opp_repl.common.github.dispatch_all_workflows>`.
 
+            ci_files (list of str or None):
+                Regular expressions of the paths of the files that the CI jobs run, relative to the
+                root, besides ``.github/workflows/`` (e.g. ``["^_scripts/github/"]``). The change-based
+                test selection selects all tests for a change of such a file (rule H6).
+
             workspace (:py:class:`SimulationWorkspace` or None):
                 The workspace this project belongs to.  Used for resolving
                 ``used_projects`` references and the associated OMNeT++
@@ -588,6 +593,7 @@ class SimulationProject:
         self.github_owner = github_owner
         self.github_repository = github_repository
         self.github_workflows = github_workflows
+        self.ci_files = ci_files or []
         self._simulation_configs_freshness_key = None
         self.binary_simulation_distribution_file_paths = None
         self._overlay = None

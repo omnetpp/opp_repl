@@ -40,6 +40,8 @@ HARMLESS_PROJECT_FIELDS = {"github_owner", "github_repository", "github_workflow
 NON_TEST_KINDS = {"coverage"}
 # files of a harness commit that do not change the outcome of a test (rules H1 and H5)
 HARMLESS_HARNESS_FILES = re.compile(r"(^|/)(doc|plan|\.github)/|\.md$|^opp_repl/test/test_map/|^opp_repl/test/self/|^ui/")
+# rule H6: the files that the CI jobs of a GitHub project run; a project adds more with ci_files
+DEFAULT_CI_FILES = [r"^\.github/workflows/"]
 # the number of reasons that a test keeps for the explanation
 MAX_REASONS = 5
 # The kinds whose expected outcome is a text output, which can hold a line number: __LINE__ goes only
@@ -498,6 +500,7 @@ class ProjectInfo:
         self.ned_folders = [os.path.normpath(folder) for folder in simulation_project.ned_folders]
         self.test_parameters = simulation_project.test_parameters or {}
         self.python_folders = [os.path.normpath(folder) for folder in simulation_project.python_folders]
+        self.ci_files = [re.compile(pattern) for pattern in DEFAULT_CI_FILES + list(getattr(simulation_project, "ci_files", None) or [])]
         self.stores = {os.path.normpath(parameters["store"]): kind for kind, parameters in self.test_parameters.items() if isinstance(parameters, dict) and parameters.get("store")}
         # the folders of the own compiled code of the tests of a kind (rule H4): the support library
         # of the opp tests (lib_folder, else <test_folder>/lib), and the folder of a binary test
@@ -1185,6 +1188,9 @@ def select_side(test_map, project, file_changes, side):
             ned_changes.append(change)
             continue
         selection.begin_file(change, input_class)
+        if any(pattern.search(change.path) for pattern in project.ci_files):
+            # rule H6: the CI jobs build and run the tests with this file
+            selection.add_all("H6", change.path, "a file that the CI jobs run")
         _select_release_only_includes(selection, change)
         _select_test_code(selection, change, project, input_class)
         if input_class == "build":

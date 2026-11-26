@@ -153,6 +153,7 @@ class FakeProject:
         self.msg_folders = ["src"]
         self.ned_folders = ["src"]
         self.python_folders = ["python"]
+        self.ci_files = ["^_scripts/ci/"]
         self.test_parameters = {"fingerprint": {"store": "store.json"}, "unit": {"defaults": {"test_folder": "tests/unit"}}}
 
     def get_name(self):
@@ -289,6 +290,12 @@ class SelectionTestCase(unittest.TestCase):
         entries[0]["fingerprint"] = "2222-2222"
         _, selection = self.select({"store.json": json.dumps(entries)})
         self.assertEqual([(kind, key) for kind, key, _ in selection.tests], [("fingerprint", "fingerprint:examples/omnetpp.ini:One:#0:1s:tplx")])
+
+    def test_a_file_of_the_ci_jobs_selects_all(self):
+        for path in (".github/workflows/tests.yml", "_scripts/ci/build.sh"):
+            _, selection = self.select({path: "x\n"})
+            self.assertEqual([reason.rule for reason in selection.everything], ["H6"])
+            os.remove(os.path.join(self.root, path))
 
     def test_a_build_file_selects_all(self):
         _, selection = self.select({"src/makefrag": "X = 1\n"})

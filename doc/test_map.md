@@ -251,6 +251,7 @@ selection, but not a wrong one.
 | `.opp` file, only the pin of the statistical baseline moved | the tests whose `.sca` file differs between the two pins in the `statistics` checkout; all statistical tests if the checkout does not have both commits |
 | `.opp` file | for other changed test parameters of a kind, all tests of that kind; for other changed fields, all tests |
 | build file: `Makefile` and `makefrag` in the root or in a C++ folder, `.oppbuildspec`, `.oppfeatures`, `.oppfeaturestate`, `.nedfolders`, `.nedexclusions` | all tests |
+| file of the CI jobs: `.github/workflows/`, and the paths of `ci_files` of the project | all tests |
 | other file | the tests that read, examined or looked up the file; for a new or removed file, also the tests that listed its folder |
 
 The feature and validation tests have no records. A change of a C++, msg, NED,
