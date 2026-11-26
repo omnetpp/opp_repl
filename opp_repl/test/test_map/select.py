@@ -475,7 +475,8 @@ class TestMap:
         bits = 0
         for index, run_id in enumerate(self.run_ids):
             run = self.runs[run_id]
-            if os.path.normpath(os.path.join(run["working_directory"], run["ini_file"])) == path:
+            # the run of an opp test has no ini file of the project
+            if run["ini_file"] and os.path.normpath(os.path.join(run["working_directory"], run["ini_file"])) == path:
                 bits |= 1 << index
         return bits
 
