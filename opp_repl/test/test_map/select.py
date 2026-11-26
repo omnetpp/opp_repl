@@ -496,6 +496,25 @@ class ProjectInfo:
         self.ned_folders = [os.path.normpath(folder) for folder in simulation_project.ned_folders]
         self.test_parameters = simulation_project.test_parameters or {}
         self.stores = {os.path.normpath(parameters["store"]): kind for kind, parameters in self.test_parameters.items() if isinstance(parameters, dict) and parameters.get("store")}
+        # the folders of the own compiled code of the tests of a kind (rule H4): the support library
+        # of the opp tests (lib_folder, else <test_folder>/lib), and the folder of a binary test
+        self.test_code_folders = {}
+        for kind, parameters in self.test_parameters.items():
+            defaults = parameters.get("defaults", {}) if isinstance(parameters, dict) else {}
+            test_folder = defaults.get("test_folder")
+            if test_folder:
+                folder = defaults.get("lib_folder") or (test_folder if defaults.get("executable") else os.path.join(test_folder, "lib"))
+                self.test_code_folders[os.path.normpath(folder)] = kind
+
+    def get_test_code_kind(self, path):
+        """Returns the kind whose tests compile the file *path* into their support library or program (rule H4), or None."""
+        name = os.path.basename(path)
+        extension = os.path.splitext(path)[1]
+        if extension in SOURCE_EXTENSIONS or extension in HEADER_EXTENSIONS or extension in (".msg", ".ned") or name in BUILD_FILE_NAMES:
+            for folder, kind in self.test_code_folders.items():
+                if path.startswith(folder + "/"):
+                    return kind
+        return None
 
     def is_below(self, path, folders):
         return any(folder in (".", "") or path == folder or path.startswith(folder + "/") for folder in folders)
@@ -518,6 +537,8 @@ class ProjectInfo:
             return "ned"
         if extension == ".ini":
             return "ini"
+        if extension == ".test":
+            return "test"
         return "data"
 
 def get_fingerprint_store_test_keys(entries, ingredients_list=None):
@@ -649,6 +670,24 @@ def _select_cpp(selection, change, project, changed_headers):
             else:
                 changed_headers.setdefault(path, "R5" if containing else "R4")
 
+def _select_test_code(selection, change, project, input_class):
+    test_map = selection.test_map
+    # rule H4: the support library of the tests of a kind, or the program of a binary test
+    kind = project.get_test_code_kind(change.path)
+    if kind:
+        selection.add_kind(kind, "H4", change.path, f"the {kind} tests compile the file")
+    # rule E6: a .test file holds the code and the expected output of its opp test
+    if input_class == "test":
+        for test_kind, tests in test_map.tests.items():
+            key = f"{test_kind}:{change.path}"
+            if key in tests:
+                selection.add_test(test_kind, key, "E6", change.path, "the file of the test changed")
+    # the own code of a test includes the file; a C++ file of the project gets this from rule R4
+    if input_class != "cpp":
+        test_runs = (test_map.get(change.path) or {}).get("test_runs")
+        if test_runs:
+            selection.add(test_map.bits(test_runs), "R4", change.path, "the own code of a test includes the file")
+
 def _describe_block(block):
     return f"the release-only block {block['path']}:{block['lines'][0]}"
 
@@ -678,6 +717,12 @@ def _select_changed_headers(selection, changed_headers):
     includers = set()
     for header in changed_headers:
         includers.update((test_map.get(header) or {}).get("included_by", []))
+        # the own code of a test (an opp test or a binary test) that includes the header
+        test_runs = (test_map.get(header) or {}).get("test_runs")
+        if test_runs:
+            bits = test_map.bits(test_runs)
+            selection.add(bits, changed_headers[header], header, "the own code of a test includes the header")
+            selection.header_bits |= bits
     description = ", ".join(sorted(changed_headers)[:3]) + (f" and {len(changed_headers) - 3} more" if len(changed_headers) > 3 else "")
     rule = "R4" if "R4" in changed_headers.values() else sorted(set(changed_headers.values()))[0]
     for path, content in test_map.get_all_files().items():
@@ -902,6 +947,7 @@ def select_side(test_map, project, file_changes, side):
             continue
         selection.begin_file(change, input_class)
         _select_release_only_includes(selection, change)
+        _select_test_code(selection, change, project, input_class)
         if input_class == "build":
             selection.add_all("R11", change.path, "a build file")
         elif input_class == "opp":
@@ -931,7 +977,7 @@ def select_side(test_map, project, file_changes, side):
     # the v1 rule of the kinds without records: a file of these classes, or a file that a run used,
     # whose own rules select something; a line shift (R3) changes only text outputs
     for path, status, input_class, rules in selection.files:
-        if set(rules) - {"R3"} and (input_class in FEATURE_INPUT_CLASSES or input_class == "data"):
+        if (input_class in FEATURE_INPUT_CLASSES and set(rules) - {"R3"}) or (input_class == "data" and set(rules) & {"F1", "F2"}):
             for kind in KIND_LEVEL_KINDS:
                 selection.add_kind(kind, "V1", path, f"a {input_class} file with the rules {', '.join(sorted(set(rules) - {'R3'}))}")
     return selection
@@ -1206,6 +1252,9 @@ def get_test_key(kind, test_task):
     from opp_repl.test.test_map.record import get_test_map_run_key
     if kind == "feature":
         return f"feature:{test_task.type}:{test_task.feature or ''}"
+    if hasattr(test_task, "get_test_map_name"):
+        # an opp test (the path of its .test file) or a binary test (its folder)
+        return f"{kind}:{test_task.get_test_map_name()}"
     run_key = get_test_map_run_key(kind, test_task.simulation_task)
     return run_key + ":" + test_task.ingredients if kind == "fingerprint" else run_key
 
@@ -1273,6 +1322,8 @@ def apply_test_map_options(kind, multiple_test_tasks, kwargs, test_map_records=N
     if test_map_records:
         if kwargs.get("mode") != "coverage":
             raise Exception("The records of the test map need the coverage build (mode coverage)")
-        from opp_repl.test.test_map.record import get_test_map_simulation_runner_class
-        kwargs = dict(kwargs, simulation_runner_class=get_test_map_simulation_runner_class(test_map_records, kind))
+        from opp_repl.test.test_map.record import TestMapRecorderFactory, get_test_map_simulation_runner_class
+        # a simulation runs with the runner; an opp test and a binary test use the recorder themselves
+        kwargs = dict(kwargs, simulation_runner_class=get_test_map_simulation_runner_class(test_map_records, kind),
+                      test_map_recorder=TestMapRecorderFactory(test_map_records, kind))
     return kwargs

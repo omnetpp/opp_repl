@@ -225,19 +225,19 @@ def run_opp_tests_main():
     run_tasks_main(lambda **kwargs: run_opp_tests(test_folder=os.getcwd(), **kwargs), "opp tests")
 
 def run_unit_tests_main():
-    run_tasks_main(run_unit_tests, "unit tests")
+    run_tasks_main(run_unit_tests, "unit tests", extra_args_fn=_test_map_records_extra_args)
 
 def run_module_tests_main():
-    run_tasks_main(run_module_tests, "module tests")
+    run_tasks_main(run_module_tests, "module tests", extra_args_fn=_test_map_records_extra_args)
 
 def run_packet_tests_main():
-    run_tasks_main(run_packet_tests, "packet tests")
+    run_tasks_main(run_packet_tests, "packet tests", extra_args_fn=_test_map_records_extra_args)
 
 def run_queueing_tests_main():
-    run_tasks_main(run_queueing_tests, "queueing tests")
+    run_tasks_main(run_queueing_tests, "queueing tests", extra_args_fn=_test_map_records_extra_args)
 
 def run_protocol_tests_main():
-    run_tasks_main(run_protocol_tests, "protocol tests")
+    run_tasks_main(run_protocol_tests, "protocol tests", extra_args_fn=_test_map_records_extra_args)
 
 def run_validation_tests_main():
     run_tasks_main(run_validation_tests, "validation tests")

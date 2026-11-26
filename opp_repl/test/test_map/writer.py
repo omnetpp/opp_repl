@@ -61,12 +61,13 @@ def read_test_map_records(records_folders):
 
 def is_normal_end(record):
     """
-    True if the run ended normally and its record is complete: exit code 0, a profile, and a
-    section chain, and no CPU-time or real-time limit stopped it. Where such a limit stops a run
-    depends on the machine, so the record does not show what the run of a test uses.
+    True if the run ended normally and its record is complete: exit code 0, a profile, a section
+    chain, the NED types, and no CPU-time or real-time limit stopped it. Where such a limit stops a
+    run depends on the machine, so the record does not show what the run of a test uses.
     """
     text = (record.get("end") or {}).get("text") or ""
-    return record["exit_code"] == 0 and record["profile"] and record["sections"] is not None and not text.startswith(("CPU time limit reached", "Realtime limit reached"))
+    return record["exit_code"] == 0 and record["profile"] and record["sections"] is not None and record.get("ned_types") is not None and \
+        not text.startswith(("CPU time limit reached", "Realtime limit reached"))
 
 def get_fingerprint_ingredients(args):
     """Returns the ingredients of the ``--fingerprint`` argument of a run, for example ``["tplx", "~tNl"]``."""
@@ -234,6 +235,14 @@ def write_test_map(records, build_tables, root_folder, output_folder, header=Non
             included_by[header_file].append(unit)
     for header_file, units in included_by.items():
         files[header_file]["included_by"] = sorted(units)
+    # the headers that the own code of a test includes (an opp test or a binary test): the
+    # translation units of the test are not in the build tables of the project (rule R4)
+    test_include_bits = collections.defaultdict(int)
+    for index, record in enumerate(records):
+        for header_file in record.get("includes") or []:
+            test_include_bits[header_file] |= 1 << index
+    for header_file, bits in test_include_bits.items():
+        files[header_file]["test_runs"] = run_sets.to_json(bits)
     # the release-only blocks: the runs of the functions that hold a block, or of the translation
     # units that include the file of a block outside the functions
     release_only = []
@@ -252,7 +261,7 @@ def write_test_map(records, build_tables, root_folder, output_folder, header=Non
     ned_types = build_tables["ned_types"]
     type_bits = collections.defaultdict(int)
     for index, record in enumerate(records):
-        for qname in get_ned_type_closure(record["ned_types"], ned_types):
+        for qname in get_ned_type_closure(record["ned_types"] or [], ned_types):
             type_bits[qname] |= 1 << index
     ned_files = collections.defaultdict(dict)
     unresolved_types = set()
@@ -268,6 +277,8 @@ def write_test_map(records, build_tables, root_folder, output_folder, header=Non
     # the ini sections
     section_bits = collections.defaultdict(lambda: collections.defaultdict(int))
     for index, record in enumerate(records):
+        if not record["ini_file"]:
+            continue
         ini_file = os.path.normpath(os.path.join(record["working_directory"], record["ini_file"]))
         for section in record["sections"] or []:
             section_bits[ini_file][section] |= 1 << index
@@ -383,6 +394,11 @@ TEST_MAP_RUN_FUNCTIONS = {
     "fingerprint": ("opp_repl.test.fingerprint.task", "run_fingerprint_tests"),
     "statistical": ("opp_repl.test.statistical", "run_statistical_tests"),
     "smoke": ("opp_repl.test.smoke", "run_smoke_tests"),
+    "unit": ("opp_repl.test.opp", "run_unit_tests"),
+    "module": ("opp_repl.test.opp", "run_module_tests"),
+    "queueing": ("opp_repl.test.opp", "run_queueing_tests"),
+    "protocol": ("opp_repl.test.opp", "run_protocol_tests"),
+    "packet": ("opp_repl.test.opp", "run_packet_tests"),
 }
 
 def get_test_map_run_function(kind):

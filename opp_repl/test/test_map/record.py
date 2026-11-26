@@ -160,6 +160,103 @@ def build_file_trace_library(folder):
         os.replace(temporary, library)
     return library
 
+class TestMapRecorder:
+    """
+    Writes the record of one run of a test (see the module documentation): give the processes of the
+    run the environment of :py:meth:`get_env`, and call :py:meth:`write` after the run. A coverage
+    build of the run writes the profile; each process writes its own profile and file trace.
+    """
+    def __init__(self, records_folder, kind, trace_library, key, simulation_project, mode):
+        self.kind = kind
+        self.trace_library = trace_library
+        self.key = key
+        self.id = get_test_map_run_id(key)
+        self.simulation_project = simulation_project
+        self.mode = mode
+        self.folder = os.path.join(records_folder, self.id)
+        shutil.rmtree(self.folder, ignore_errors=True)
+        self.raw_profile_folder = os.path.join(self.folder, "profraw")
+        os.makedirs(self.raw_profile_folder)
+        self.start_time = time.time()
+
+    def get_env(self, env):
+        """Returns *env* with the variables of the profile and of the file trace of the run."""
+        env = dict(env)
+        # %p: the process id; all instrumented modules of one process write into the same file
+        env["LLVM_PROFILE_FILE"] = os.path.join(self.raw_profile_folder, "%p.profraw")
+        env["LD_PRELOAD"] = self.trace_library + (":" + env["LD_PRELOAD"] if env.get("LD_PRELOAD") else "")
+        env["OPP_REPL_FILE_TRACE"] = os.path.join(self.folder, "trace")
+        return env
+
+    def write(self, exit_code, args, output_folders=[], fields={}):
+        """
+        Writes the record of the run: the profile into the pool, the functions that ran, the files
+        that the run used except *output_folders* (relative to the project root), and ``run.json``
+        with *fields* (for example the config of a simulation).
+        """
+        from opp_repl.test.coverage import get_coverage_tool
+        simulation_project = self.simulation_project
+        elapsed_wall_time = time.time() - self.start_time
+        # the profile: a sparse .profdata in the pool of the project, and the list of the functions that ran
+        raw_profiles = sorted(glob.glob(os.path.join(self.raw_profile_folder, "*.profraw")))
+        num_functions = None
+        if raw_profiles:
+            profile_folder = simulation_project.get_coverage_profile_folder()
+            os.makedirs(profile_folder, exist_ok=True)
+            profile = os.path.join(profile_folder, self.id + ".profdata")
+            llvm_profdata = get_coverage_tool(simulation_project, "llvm-profdata", mode=self.mode)
+            run_command_with_logging([llvm_profdata, "merge", "-sparse", "-o", profile, *raw_profiles], error_message="Merging the profile of a run failed", command_line_logger=_logger)
+            show_output = subprocess.run([llvm_profdata, "show", "--all-functions", profile], capture_output=True, text=True, check=True).stdout
+            functions = sorted(set(read_functions_that_ran(show_output)))
+            num_functions = len(functions)
+            with gzip.open(os.path.join(self.folder, "functions.txt.gz"), "wt") as f:
+                f.write("".join(name + "\n" for name in functions))
+        shutil.rmtree(self.raw_profile_folder)
+        # the file trace: one file for each process of the run
+        trace_files = sorted(glob.glob(os.path.join(self.folder, "trace.*")))
+        trace_lines = []
+        for trace_file in trace_files:
+            with open(trace_file, errors="surrogateescape") as f:
+                trace_lines += f.readlines()
+            os.remove(trace_file)
+        files = reduce_file_trace(trace_lines, os.path.realpath(simulation_project.get_full_path(".")), output_folders=output_folders)
+        with open(os.path.join(self.folder, "files.txt"), "w", errors="surrogateescape") as f:
+            f.write("".join(f"{kind} {path}\n" for kind, path in files))
+        record = {"version": TEST_MAP_RECORD_VERSION,
+                  "id": self.id,
+                  "key": self.key,
+                  "kind": self.kind,
+                  "working_directory": None,
+                  "ini_file": None,
+                  "config": None,
+                  "run_number": None,
+                  "sim_time_limit": None,
+                  "mode": self.mode,
+                  "args": [*args],
+                  "exit_code": exit_code,
+                  "end": None,
+                  "elapsed_wall_time": round(elapsed_wall_time, 3),
+                  "profile": bool(raw_profiles),
+                  "num_functions": num_functions,
+                  "num_trace_lines": len(trace_lines),
+                  "ned_types": [],
+                  "sections": [],
+                  **fields}
+        with open(os.path.join(self.folder, "run.json"), "w") as f:
+            json.dump(record, f, indent=1)
+        return record
+
+class TestMapRecorderFactory:
+    """Makes the :py:class:`TestMapRecorder` of each run of the tests of *kind*; it compiles the file trace library into the records folder."""
+    def __init__(self, records_folder, kind):
+        self.records_folder = os.path.abspath(records_folder)
+        self.kind = kind
+        os.makedirs(self.records_folder, exist_ok=True)
+        self.trace_library = build_file_trace_library(self.records_folder)
+
+    def __call__(self, key, simulation_project, mode):
+        return TestMapRecorder(self.records_folder, self.kind, self.trace_library, key, simulation_project, mode)
+
 class TestMapSimulationRunner:
     """
     Runs a simulation of a coverage build as the subprocess runner does, and writes the record of the
@@ -175,73 +272,24 @@ class TestMapSimulationRunner:
         self.trace_library = trace_library
 
     def run(self, simulation_task, args):
-        from opp_repl.test.coverage import get_coverage_tool
         if not simulation_task.wait:
             raise Exception("The test map needs the end of each run, so the run must wait for the simulation")
         simulation_config = simulation_task.simulation_config
         simulation_project = simulation_config.simulation_project
         working_directory = simulation_project.get_full_path(simulation_config.working_directory)
-        run_key = get_test_map_run_key(self.kind, simulation_task)
-        run_id = get_test_map_run_id(run_key)
-        record_folder = os.path.join(self.records_folder, run_id)
-        shutil.rmtree(record_folder, ignore_errors=True)
-        raw_profile_folder = os.path.join(record_folder, "profraw")
-        os.makedirs(raw_profile_folder)
-        env = simulation_project.get_env(mode=simulation_task.mode)
-        # %p: the process id; all instrumented modules of one process write into the same file
-        env["LLVM_PROFILE_FILE"] = os.path.join(raw_profile_folder, "%p.profraw")
-        env["LD_PRELOAD"] = self.trace_library + (":" + env["LD_PRELOAD"] if env.get("LD_PRELOAD") else "")
-        env["OPP_REPL_FILE_TRACE"] = os.path.join(record_folder, "trace")
-        start_time = time.time()
+        recorder = TestMapRecorder(self.records_folder, self.kind, self.trace_library, get_test_map_run_key(self.kind, simulation_task), simulation_project, simulation_task.mode)
+        env = recorder.get_env(simulation_project.get_env(mode=simulation_task.mode))
         subprocess_result = run_command_with_logging([*args, "--print-instantiated-ned-types=true"], cwd=working_directory, env=env, command_line_logger=_logger)
-        elapsed_wall_time = time.time() - start_time
-        # the profile: a sparse .profdata in the pool of the project, and the list of the functions that ran
-        raw_profiles = sorted(glob.glob(os.path.join(raw_profile_folder, "*.profraw")))
-        num_functions = None
-        if raw_profiles:
-            profile_folder = simulation_project.get_coverage_profile_folder()
-            os.makedirs(profile_folder, exist_ok=True)
-            profile = os.path.join(profile_folder, run_id + ".profdata")
-            llvm_profdata = get_coverage_tool(simulation_project, "llvm-profdata", mode=simulation_task.mode)
-            run_command_with_logging([llvm_profdata, "merge", "-sparse", "-o", profile, *raw_profiles], error_message="Merging the profile of a run failed", command_line_logger=_logger)
-            show_output = subprocess.run([llvm_profdata, "show", "--all-functions", profile], capture_output=True, text=True, check=True).stdout
-            functions = sorted(set(read_functions_that_ran(show_output)))
-            num_functions = len(functions)
-            with gzip.open(os.path.join(record_folder, "functions.txt.gz"), "wt") as f:
-                f.write("".join(name + "\n" for name in functions))
-        shutil.rmtree(raw_profile_folder)
-        # the file trace: one file for each process of the run
-        trace_files = sorted(glob.glob(os.path.join(record_folder, "trace.*")))
-        trace_lines = []
-        for trace_file in trace_files:
-            with open(trace_file, errors="surrogateescape") as f:
-                trace_lines += f.readlines()
-            os.remove(trace_file)
         result_folder = os.path.join(simulation_config.working_directory, simulation_task.result_folder)
-        files = reduce_file_trace(trace_lines, os.path.realpath(simulation_project.get_full_path(".")), output_folders=[result_folder])
-        with open(os.path.join(record_folder, "files.txt"), "w", errors="surrogateescape") as f:
-            f.write("".join(f"{kind} {path}\n" for kind, path in files))
-        record = {"version": TEST_MAP_RECORD_VERSION,
-                  "id": run_id,
-                  "key": run_key,
-                  "kind": self.kind,
-                  "working_directory": simulation_config.working_directory,
-                  "ini_file": simulation_config.ini_file,
-                  "config": simulation_config.config,
-                  "run_number": simulation_task.run_number,
-                  "sim_time_limit": simulation_task.get_sim_time_limit(),
-                  "mode": simulation_task.mode,
-                  "args": [*args],
-                  "exit_code": subprocess_result.returncode,
-                  "end": read_end_of_run(subprocess_result.stdout),
-                  "elapsed_wall_time": round(elapsed_wall_time, 3),
-                  "profile": bool(raw_profiles),
-                  "num_functions": num_functions,
-                  "num_trace_lines": len(trace_lines),
-                  "ned_types": read_instantiated_ned_types(subprocess_result.stdout),
-                  "sections": self.get_section_chain(simulation_task, working_directory)}
-        with open(os.path.join(record_folder, "run.json"), "w") as f:
-            json.dump(record, f, indent=1)
+        recorder.write(subprocess_result.returncode, args, output_folders=[result_folder],
+                       fields={"working_directory": simulation_config.working_directory,
+                               "ini_file": simulation_config.ini_file,
+                               "config": simulation_config.config,
+                               "run_number": simulation_task.run_number,
+                               "sim_time_limit": simulation_task.get_sim_time_limit(),
+                               "end": read_end_of_run(subprocess_result.stdout),
+                               "ned_types": read_instantiated_ned_types(subprocess_result.stdout),
+                               "sections": self.get_section_chain(simulation_task, working_directory)})
         return subprocess_result
 
     def get_section_chain(self, simulation_task, working_directory):
@@ -267,7 +315,5 @@ def get_test_map_simulation_runner_class(records_folder, kind):
     *records_folder* for the tests of *kind* (for example ``fingerprint``). It compiles the file
     trace library into the records folder.
     """
-    records_folder = os.path.abspath(records_folder)
-    os.makedirs(records_folder, exist_ok=True)
-    trace_library = build_file_trace_library(records_folder)
-    return functools.partial(TestMapSimulationRunner, records_folder, kind, trace_library)
+    factory = TestMapRecorderFactory(records_folder, kind)
+    return functools.partial(TestMapSimulationRunner, factory.records_folder, kind, factory.trace_library)

@@ -152,7 +152,7 @@ class FakeProject:
         self.cpp_folders = ["src"]
         self.msg_folders = ["src"]
         self.ned_folders = ["src"]
-        self.test_parameters = {"fingerprint": {"store": "store.json"}}
+        self.test_parameters = {"fingerprint": {"store": "store.json"}, "unit": {"defaults": {"test_folder": "tests/unit"}}}
 
     def get_name(self):
         return "fake"
@@ -166,6 +166,9 @@ SOURCES = {
     "src/b.cc": "#include \"a.h\"\n\nint h()\n{\n    return 3;\n}\n",
     "examples/omnetpp.ini": "[General]\na = 1\n[Config One]\nb = 1\n[Config Two]\nb = 2\n",
     "examples/data.xml": "<x/>\n",
+    "tests/unit/A.test": "%description: a test\n",
+    "tests/unit/Support.h": "#pragma once\n",
+    "tests/unit/lib/L.cc": "int l() { return 0; }\n",
     "store.json": json.dumps([{"working_directory": "examples", "ini_file": "omnetpp.ini", "config": "One", "run_number": 0, "sim_time_limit": "1s",
                                "test_result": "PASS", "ingredients": "tplx", "fingerprint": "1111-1111", "timestamp": 1}]),
 }
@@ -180,12 +183,14 @@ MAP_FILES = {
     "runs.json": {"r1": run_entry("r1", "One"), "r2": run_entry("r2", "Two"), "r3": run_entry("r3", "Three", normal_end=False)},
     "tests.json": {"fingerprint": {f"fingerprint:examples/omnetpp.ini:{config}:#0:1s:tplx": [run_id] for run_id, config in [("r1", "One"), ("r2", "Two"), ("r3", "Three")]},
                    # the statistical tests share the runs here, which keeps the run sets of the other tests
-                   "statistical": {f"statistical:examples/omnetpp.ini:{config}:#0:1s": [run_id] for run_id, config in [("r1", "One"), ("r2", "Two")]}},
+                   "statistical": {f"statistical:examples/omnetpp.ini:{config}:#0:1s": [run_id] for run_id, config in [("r1", "One"), ("r2", "Two")]},
+                   "unit": {"unit:tests/unit/A.test": ["r1"]}},
     "src/a.h.json": {"functions": [{"lines": [4, 6], "name": "A::get()", "runs": ["r2"], "tus": ["src/b.cc"]}], "included_by": ["src/a.cc", "src/b.cc"]},
     "src/a.cc.json": {"functions": [{"lines": [4, 6], "name": "f()", "runs": ["r1"]}, {"lines": [9, 11], "name": "g()", "runs": "all"}], "tu_runs": "all"},
     "src/b.cc.json": {"functions": [{"lines": [4, 6], "name": "h()", "runs": ["r2"]}], "tu_runs": ["r2"]},
     "examples/omnetpp.ini.json": {"sections": {"Config One": ["r1"], "Config Two": ["r2"], "General": ["r1", "r2"]}, "data": {"read": ["r1", "r2"]}},
     "examples/data.xml.json": {"data": {"read": ["r2"]}},
+    "tests/unit/Support.h.json": {"test_runs": ["r2"]},
     "examples/index.json": {"data": 2, "listed": ["r1"]},
 }
 
@@ -321,6 +326,18 @@ class SelectionTestCase(unittest.TestCase):
         # a file that no run used selects no feature test
         _, selection = self.select({"examples/data.xml": SOURCES["examples/data.xml"], "doc/notes.txt": "x\n"})
         self.assertEqual(selection.kinds, {})
+
+    def test_the_file_of_an_opp_test_selects_the_test(self):
+        _, selection = self.select({"tests/unit/A.test": SOURCES["tests/unit/A.test"] + "%activity: x\n"})
+        self.assertEqual([(kind, key, reason.rule) for kind, key, reason in selection.tests], [("unit", "unit:tests/unit/A.test", "E6")])
+
+    def test_a_file_that_the_own_code_of_a_test_includes_selects_the_test(self):
+        runs, selection = self.select({"tests/unit/Support.h": "#pragma once\nint x;\n"})
+        self.assertEqual(runs, {"r2"})
+
+    def test_the_support_library_selects_all_tests_of_its_kind(self):
+        _, selection = self.select({"tests/unit/lib/L.cc": "int l() { return 1; }\n"})
+        self.assertEqual({kind: reason.rule for kind, reason in selection.kinds.items()}, {"unit": "H4"})
 
     def add_release_only_block(self, names=[], includes=[]):
         with open(os.path.join(self.map_folder, "release-only.json"), "w") as f:

@@ -103,6 +103,10 @@ class OppTestTask(TestTask):
     def get_parameters_string(self, **kwargs):
         return self.test_file_name
 
+    def get_test_map_name(self):
+        """The name of the test in the keys of the test map: the path of its ``.test`` file, relative to the project root."""
+        return os.path.normpath(os.path.relpath(os.path.join(self.working_directory, self.test_file_name), self.simulation_project.get_full_path(".")))
+
     def get_expected_result(self):
         """The declared expected result of this test, read from a
         ``%# expected-result: <PASS|FAIL|ERROR>`` comment line in the .test file.
@@ -143,7 +147,7 @@ class OppTestTask(TestTask):
             shutil.rmtree(self.get_test_directory(), ignore_errors=True)
         return task_result
 
-    def run_test(self, **kwargs):
+    def run_test(self, test_map_recorder=None, **kwargs):
         binary_suffix = "" if self.mode == "release" else self.simulation_project.get_omnetpp_project().get_library_suffix(mode=self.mode)
         expected_result = self.get_expected_result()
         test_file_name = os.path.join(self.working_directory, self.test_file_name)
@@ -179,12 +183,20 @@ class OppTestTask(TestTask):
         ned_directory = os.path.join(self.working_directory, "ned")
         ned_folders += ["."] + ([lib_relative_path] if has_lib else []) + ([os.path.relpath(ned_directory, test_directory)] if os.path.isdir(ned_directory) else [])
         simulation_args = ["--check-signals=false", f"-l{library_name}", "-n", ":".join(ned_folders)]
+        recorder = test_map_recorder(f"{test_map_recorder.kind}:{self.get_test_map_name()}", self.simulation_project, self.mode) if test_map_recorder and not self.debug else None
+        if recorder and not self.has_testprog():
+            # the NED types of the run, for the test map; a %testprog program can be another program
+            simulation_args.append("--print-instantiated-ned-types=true")
         if not self.debug:
             args = ["opp_test", "run", "-v", "-w", work_directory, "-p", test_program, self.test_file_name, "-a", *simulation_args]
             # a test script that starts bin/inet without --debug or --release picks its binary from MODE
             env = {**self.simulation_project.get_env(mode=self.mode), "MODE": self.mode}
+            if recorder:
+                env = recorder.get_env(env)
             subprocess_result = run_command_with_logging(args, cwd=self.working_directory, env=env, command_line_logger=_logger)
             stdout = subprocess_result.stdout
+            if recorder:
+                self.write_test_map_record(recorder, subprocess_result, args, test_directory)
         else:
             ide_opp_test = IdeOppTest(remove_launch=self.remove_launch)
             ide_opp_test.args = types.SimpleNamespace(verbose=True, workdir=os.path.join(self.working_directory, work_directory), mode="run", testprogram=test_program, extraargs=" ".join(simulation_args), filenames=[test_file_name])
@@ -210,6 +222,43 @@ class OppTestTask(TestTask):
             return self.task_result_class(self, result="CANCEL", expected_result=expected_result, reason="Cancel by user")
         else:
             return self.task_result_class(self, result="FAIL", expected_result=expected_result, reason=f"Non-zero exit code: {subprocess_result.returncode}", stdout=stdout, stderr=stderr)
+
+    def write_test_map_record(self, recorder, subprocess_result, args, test_directory):
+        """Writes the record of the run of the test for the test map (see :py:mod:`opp_repl.test.test_map.record`)."""
+        from opp_repl.test.test_map.record import read_end_of_run, read_instantiated_ned_types
+        root_folder = self.simulation_project.get_full_path(".")
+        output = ""
+        for name in ("test.out", "test.err"):
+            if os.path.isfile(os.path.join(test_directory, name)):
+                with open(os.path.join(test_directory, name), errors="replace") as f:
+                    output += f.read()
+        recorder.write(subprocess_result.returncode, args, output_folders=[os.path.relpath(test_directory, root_folder)],
+                       fields={"working_directory": os.path.relpath(self.working_directory, root_folder),
+                               "end": read_end_of_run(output),
+                               # the NED types of a %testprog program are not known
+                               "ned_types": None if self.has_testprog() else read_instantiated_ned_types(output),
+                               "includes": get_build_includes(test_directory, root_folder)})
+
+def get_build_includes(folder, root_folder, dependency_folders=None):
+    """
+    Returns the project files that the C++ files built in *folder* include, relative to
+    *root_folder*, from the ``.d`` files below *dependency_folders* (default: *folder*). The paths
+    in the ``.d`` files are relative to *folder*, where ``make`` runs. The files below *folder* are
+    left out: they are the own files of the test.
+    """
+    root_folder = os.path.realpath(root_folder)
+    includes = set()
+    dependency_files = [file for dependency_folder in (dependency_folders or [folder]) for file in glob.glob(os.path.join(dependency_folder, "**", "*.d"), recursive=True)]
+    for dependency_file in dependency_files:
+        with open(dependency_file, errors="replace") as f:
+            text = f.read().replace("\\\n", " ")
+        for token in text.split():
+            if token.endswith(":"):
+                continue
+            path = os.path.realpath(os.path.join(folder, token))
+            if path.startswith(root_folder + os.sep) and not path.startswith(os.path.realpath(folder) + os.sep):
+                includes.add(os.path.relpath(path, root_folder))
+    return sorted(includes)
 
 def get_opp_test_tasks(test_folder, simulation_project=None, filter=".*", full_match=False, suite_folders=False, lib_folder=None, lib_name="test", **kwargs):
     """
@@ -344,7 +393,11 @@ class BinaryTestTask(TestTask):
     def get_parameters_string(self, **kwargs):
         return f"{self.test_folder} -c {self.config}"
 
-    def run_protected(self, **kwargs):
+    def get_test_map_name(self):
+        """The name of the test in the keys of the test map: its test folder."""
+        return self.test_folder
+
+    def run_protected(self, test_map_recorder=None, **kwargs):
         binary_suffix = "" if self.mode == "release" else self.simulation_project.get_omnetpp_project().get_library_suffix(mode=self.mode)
         working_directory = self.simulation_project.get_full_path(self.test_folder)
         env = self.simulation_project.get_env(mode=self.mode)
@@ -356,7 +409,19 @@ class BinaryTestTask(TestTask):
         run_args = [f"./{self.executable}{binary_suffix}", "-s", "-u", "Cmdenv", "-c", self.config]
         if self.ini_file:
             run_args += ["-f", self.ini_file]
+        recorder = test_map_recorder(f"{test_map_recorder.kind}:{self.get_test_map_name()}", self.simulation_project, self.mode) if test_map_recorder else None
+        if recorder:
+            run_args.append("--print-instantiated-ned-types=true")
+            env = recorder.get_env(env)
         subprocess_result = run_command_with_logging(run_args, cwd=working_directory, env=env, command_line_logger=_logger)
+        if recorder:
+            from opp_repl.test.test_map.record import read_end_of_run, read_instantiated_ned_types
+            root_folder = self.simulation_project.get_full_path(".")
+            recorder.write(subprocess_result.returncode, run_args, output_folders=[os.path.join(self.test_folder, "results")],
+                           fields={"working_directory": self.test_folder, "ini_file": self.ini_file or "omnetpp.ini", "config": self.config,
+                                   "end": read_end_of_run(subprocess_result.stdout), "ned_types": read_instantiated_ned_types(subprocess_result.stdout),
+                                   # the Makefile of the folder writes its objects into out/<config>/<folder> of the project
+                                   "includes": get_build_includes(working_directory, root_folder, [working_directory, *glob.glob(os.path.join(root_folder, "out", "*", self.test_folder))])})
         if subprocess_result.returncode == 0:
             return self.task_result_class(self, result="PASS", stdout=subprocess_result.stdout, stderr=subprocess_result.stderr)
         elif subprocess_result.returncode in (signal.SIGINT.value, -signal.SIGINT.value):
@@ -390,7 +455,14 @@ def run_opp_tests(test_folder, **kwargs):
     multiple_test_tasks = get_opp_test_tasks(test_folder, **kwargs)
     return multiple_test_tasks.run(**kwargs)
 
-def _run_folder_opp_tests(kind, **kwargs):
+def _apply_test_map_options(kind, multiple_test_tasks, kwargs, test_map_records=None, changes=None, test_map=None, ignore_environment=False):
+    if changes or test_map_records:
+        # lazy: the test map imports the coverage module, which imports the simulation modules
+        from opp_repl.test.test_map.select import apply_test_map_options
+        kwargs = apply_test_map_options(kind, multiple_test_tasks, kwargs, test_map_records=test_map_records, changes=changes, test_map=test_map, ignore_environment=ignore_environment)
+    return kwargs
+
+def _run_folder_opp_tests(kind, test_map_records=None, changes=None, test_map=None, ignore_environment=False, **kwargs):
     """Run the opp ``.test`` suites for a folder-scoped kind (unit/module/queueing/…).
 
     These kinds are the generic ``opp`` runner scoped to a project-specific test
@@ -401,9 +473,10 @@ def _run_folder_opp_tests(kind, **kwargs):
     kwargs = apply_project_test_defaults(kind, kwargs)
     test_folder = kwargs.pop("test_folder", os.getcwd())
     multiple_test_tasks = get_opp_test_tasks(test_folder, **kwargs)
+    kwargs = _apply_test_map_options(kind, multiple_test_tasks, kwargs, test_map_records=test_map_records, changes=changes, test_map=test_map, ignore_environment=ignore_environment)
     return multiple_test_tasks.run(**kwargs)
 
-def run_binary_tests(kind, **kwargs):
+def run_binary_tests(kind, test_map_records=None, changes=None, test_map=None, ignore_environment=False, **kwargs):
     """Run a project's self-checking binary test folder for *kind* (see
     :py:class:`BinaryTestTask`). The ``test_folder``/``executable``/``config``
     come from the project's ``.opp`` ``test_parameters[kind]["defaults"]``."""
@@ -413,21 +486,24 @@ def run_binary_tests(kind, **kwargs):
     config = kwargs.pop("config", "UnitTest")
     ini_file = kwargs.pop("ini_file", None)
     multiple_test_tasks = get_binary_test_tasks(test_folder, executable, config=config, ini_file=ini_file, **kwargs)
+    kwargs = _apply_test_map_options(kind, multiple_test_tasks, kwargs, test_map_records=test_map_records, changes=changes, test_map=test_map, ignore_environment=ignore_environment)
     return multiple_test_tasks.run(**kwargs)
 
-def run_unit_tests(**kwargs):
-    return _run_folder_opp_tests("unit", **kwargs)
+# The run commands of the kinds take the options of the test map (see run_fingerprint_tests): the
+# command line passes --changes only to a function that names it.
+def run_unit_tests(test_map_records=None, changes=None, test_map=None, ignore_environment=False, **kwargs):
+    return _run_folder_opp_tests("unit", test_map_records=test_map_records, changes=changes, test_map=test_map, ignore_environment=ignore_environment, **kwargs)
 
-def run_module_tests(**kwargs):
-    return _run_folder_opp_tests("module", **kwargs)
+def run_module_tests(test_map_records=None, changes=None, test_map=None, ignore_environment=False, **kwargs):
+    return _run_folder_opp_tests("module", test_map_records=test_map_records, changes=changes, test_map=test_map, ignore_environment=ignore_environment, **kwargs)
 
-def run_packet_tests(**kwargs):
+def run_packet_tests(test_map_records=None, changes=None, test_map=None, ignore_environment=False, **kwargs):
     # INET's tests/packet is a single self-checking binary, not a .test suite.
-    return run_binary_tests("packet", **kwargs)
+    return run_binary_tests("packet", test_map_records=test_map_records, changes=changes, test_map=test_map, ignore_environment=ignore_environment, **kwargs)
 
-def run_queueing_tests(**kwargs):
-    return _run_folder_opp_tests("queueing", **kwargs)
+def run_queueing_tests(test_map_records=None, changes=None, test_map=None, ignore_environment=False, **kwargs):
+    return _run_folder_opp_tests("queueing", test_map_records=test_map_records, changes=changes, test_map=test_map, ignore_environment=ignore_environment, **kwargs)
 
-def run_protocol_tests(**kwargs):
-    return _run_folder_opp_tests("protocol", **kwargs)
+def run_protocol_tests(test_map_records=None, changes=None, test_map=None, ignore_environment=False, **kwargs):
+    return _run_folder_opp_tests("protocol", test_map_records=test_map_records, changes=changes, test_map=test_map, ignore_environment=ignore_environment, **kwargs)
 run_opp_tests.__signature__ = combine_signatures(run_opp_tests, get_opp_test_tasks)

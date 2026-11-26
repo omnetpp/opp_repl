@@ -316,10 +316,12 @@ class WriterTestCase(unittest.TestCase):
         self.assertNotIn("C0", output.getvalue())
 
     def test_a_run_that_a_cpu_time_limit_stopped_did_not_end_normally(self):
-        record = {"exit_code": 0, "profile": True, "sections": ["General"], "end": {"text": "CPU time limit reached -- at t=0.5s, event #10"}}
+        record = {"exit_code": 0, "profile": True, "sections": ["General"], "ned_types": [], "end": {"text": "CPU time limit reached -- at t=0.5s, event #10"}}
         self.assertFalse(is_normal_end(record))
         record["end"]["text"] = "Simulation time limit reached -- at t=0.5s, event #10"
         self.assertTrue(is_normal_end(record))
+        # a run whose NED types are not known, for example of a %testprog program
+        self.assertFalse(is_normal_end(dict(record, ned_types=None)))
 
     def test_a_smoke_record_is_also_the_run_of_the_sanitizer_test(self):
         import json
@@ -331,6 +333,29 @@ class WriterTestCase(unittest.TestCase):
             tests = json.load(f)
         self.assertEqual(tests["smoke"], {"smoke:examples/x/omnetpp.ini:C0:#0:1s": ["r000000000"]})
         self.assertEqual(tests["sanitizer"], {"sanitizer:examples/x/omnetpp.ini:C0:#0:1s": ["r000000000"]})
+
+    def test_the_headers_that_the_own_code_of_a_test_includes(self):
+        import json
+        records = read_test_map_records([self.records_folder])
+        records[1] = dict(records[1], kind="unit", key="unit:tests/unit/A.test", ini_file=None, includes=["src/a/A.h", "tests/unit/Support.h"])
+        map_folder = os.path.join(self.folder.name, "map4")
+        write_test_map(records, self.build_tables, self.folder.name, map_folder, header={"project": "x"}, tracked_files=set())
+        with open(os.path.join(map_folder, "tests/unit/Support.h.json")) as f:
+            self.assertEqual(json.load(f)["test_runs"], ["r000000001"])
+        with open(os.path.join(map_folder, "tests.json")) as f:
+            self.assertEqual(json.load(f)["unit"], {"unit:tests/unit/A.test": ["r000000001"]})
+
+    def test_the_includes_of_a_build(self):
+        from opp_repl.test.opp import get_build_includes
+        folder = os.path.join(self.folder.name, "tests", "x", "work", "T")
+        os.makedirs(os.path.join(folder, "out"))
+        os.makedirs(os.path.join(self.folder.name, "src", "a"), exist_ok=True)
+        for name in ("src/a/A.h", "src/a/B.h"):
+            open(os.path.join(self.folder.name, name), "w").close()
+        with open(os.path.join(folder, "out", "test.d"), "w") as f:
+            f.write("out/test.o: test.cc \\\n ../../../../src/a/A.h /usr/include/stdio.h \\\n ../../../../src/a/B.h test.h\n")
+        open(os.path.join(folder, "test.h"), "w").close()
+        self.assertEqual(get_build_includes(folder, self.folder.name), ["src/a/A.h", "src/a/B.h"])
 
     def test_fingerprint_ingredients(self):
         self.assertEqual(get_fingerprint_ingredients(["--fingerprint", "1234-5678/tplx,0000-0000/~tND"]), ["tplx", "~tND"])
