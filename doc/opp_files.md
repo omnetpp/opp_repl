@@ -98,7 +98,6 @@ Describes a simulation project (INET, Simu5G, OMNeT++ samples, etc.).
 | `statistics_folder` | `str` | `"."` | Directory for statistical test baseline results (relative to root) |
 | `fingerprint_store` | `str` | `"fingerprint.json"` | Path to the JSON fingerprint store (relative to root) |
 | `speed_store` | `str` | `"speed.json"` | Path to the JSON speed measurement store (relative to root) |
-| `dependency_store` | `str` | `"dependency.json"` | Path to the JSON simulation-task dependency store (relative to root) |
 | `external_bin_folders` | `list[str]` | `[]` | Absolute directories containing external binaries |
 | `external_library_folders` | `list[str]` | `[]` | Absolute directories containing external libraries |
 | `external_libraries` | `list[str]` | `[]` | Names of external libraries to link |

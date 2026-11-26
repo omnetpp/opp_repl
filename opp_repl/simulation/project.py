@@ -310,7 +310,7 @@ class SimulationProject:
                  bin_folder=".", library_folder=".", executables=None, dynamic_libraries=None, static_libraries=None, build_types=["dynamic library"],
                  ned_folders=["."], ned_exclusions=[], ini_file_folders=["."], python_folders=["python"], image_folders=["."],
                  include_folders=["."], cpp_folders=["."], cpp_exclusions=[], cpp_defines=[], msg_folders=["."],
-                 media_folder=".", module_image_baseline_folder="media/module_images", statistics_folder=".", fingerprint_store="fingerprint.json", speed_store="speed.json", dependency_store="dependency.json",
+                 media_folder=".", module_image_baseline_folder="media/module_images", statistics_folder=".", fingerprint_store="fingerprint.json", speed_store="speed.json",
                  validation_test_runner=None, test_parameters=None,
                  used_projects=[], external_bin_folders=[], external_library_folders=[], external_libraries=[], external_include_folders=[],
                  dll_symbol=None, feature_libraries=None, pkg_config_libraries=None, opp_defines_file=None, precompiled_header=None, extra_cflags=[], extra_ldflags=[],
@@ -414,9 +414,6 @@ class SimulationProject:
 
             speed_store (String):
                 The relative path of the JSON measurement store for speed tests.
-
-            dependency_store (String):
-                The relative path of the JSON dependency store for simulation task dependencies.
 
             used_projects (List of strings):
                 The list of used simulation project names.
@@ -562,7 +559,6 @@ class SimulationProject:
         _validate_test_parameters(test_parameters, name)
         self.test_parameters = test_parameters
         self.module_image_baseline_folder = module_image_baseline_folder
-        self.dependency_store = dependency_store
         _chart_baseline = test_parameters.get("chart", {}).get("baseline", {})
         _stat_baseline = test_parameters.get("statistical", {}).get("baseline", {})
         self.media_folder = _chart_baseline.get("read_folder", _chart_baseline.get("folder", media_folder))
