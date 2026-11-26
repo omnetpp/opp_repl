@@ -1143,25 +1143,31 @@ def _select_baseline_pin(selection, change, project, kind, before, after):
         return {key: value for key, value in parameters.items() if key != name}
     if without(before, "baseline") != without(after, "baseline") or without(old_baseline, "ref") != without(new_baseline, "ref"):
         return False
-    old_ref, new_ref = old_baseline["ref"], new_baseline["ref"]
     folder = os.path.join(project.root_folder, new_baseline.get("folder", "."))
-    if not os.path.isdir(folder) or not is_commit(folder, old_ref) or not is_commit(folder, new_ref):
-        selection.add_kind(kind, rule, change.path, f"the baseline pin moved from {old_ref[:10]} to {new_ref[:10]}, and the checkout {new_baseline.get('folder')} does not have both commits")
-        return True
-    names = _git(folder, "-c", "core.quotePath=false", "diff", "--name-only", "--no-renames", old_ref, new_ref, "--").stdout.splitlines()
+    _select_changed_baseline_files(selection, kind, rule, change.path, folder, new_baseline.get("folder"), old_baseline["ref"], new_baseline["ref"])
+    return True
+
+def _select_changed_baseline_files(selection, kind, rule, path, folder, folder_name, old_commit, new_commit):
+    # rules E2 and E3: the tests whose baseline file differs between two commits of the checkout of the
+    # baseline repository; all tests of the kind if the checkout does not have both commits
+    if not os.path.isdir(folder) or not is_commit(folder, old_commit) or not is_commit(folder, new_commit):
+        selection.add_kind(kind, rule, path, f"the baseline moved from {old_commit[:10]} to {new_commit[:10]}, and the checkout {folder_name} does not have both commits")
+        return
+    names = _git(folder, "-c", "core.quotePath=false", "diff", "--name-only", "--no-renames", old_commit, new_commit, "--").stdout.splitlines()
+    # the rule shows for the file also when no test of the map has a changed baseline file
+    selection._note(rule)
     if kind == "chart":
         # the chart images of <folder>/doc/media of the project are <folder>/doc/ of the media repository
         changed_folders = {}
         for name in names:
             if "/doc/" in name:
                 changed_folders.setdefault(name[:name.index("/doc/")], name)
-        selection._note(rule)
         for key in selection.test_map.tests.get(kind, {}):
             analysis_file = key[len("chart:"):].rsplit(":", 1)[0]
             name = changed_folders.get(os.path.dirname(analysis_file))
             if name:
-                selection.add_test(kind, key, rule, change.path, f"the baseline file {name} of its folder changed")
-        return True
+                selection.add_test(kind, key, rule, path, f"the baseline file {name} of its folder changed")
+        return
     # the key of a test without its sim time limit -> the changed baseline file
     changed = {}
     for name in names:
@@ -1169,13 +1175,36 @@ def _select_baseline_pin(selection, change, project, kind, before, after):
         if match:
             ini_path = os.path.normpath(os.path.join(os.path.dirname(name), match.group(1)))
             changed[f"{kind}:{ini_path}:{match.group(2)}:#{match.group(3)}:"] = name
-    # the rule shows for the file also when no test of the map has a changed baseline file
-    selection._note("E2")
     for key in selection.test_map.tests.get(kind, {}):
         name = changed.get(key[:key.rindex(":") + 1])
         if name:
-            selection.add_test(kind, key, "E2", change.path, f"the baseline file {name} changed")
-    return True
+            selection.add_test(kind, key, rule, path, f"the baseline file {name} changed")
+
+def select_baseline_trailers(selection, project, start, end):
+    """
+    Rules E2 and E3 for a baseline entry of the trailer form. A commit names its baseline in a trailer
+    of its message, so the baseline moves without a change of a file. The rule compares the baselines
+    of the two ends of the diff of *selection*, the commits *start* and *end*, as
+    :py:func:`opp_repl.test.baseline.resolve_test_baseline` finds them without a fetch, and selects the
+    tests whose baseline file differs. If a baseline is not known, for example because the checkout does
+    not have a pin, all tests of the kind are selected.
+    """
+    from opp_repl.test.baseline import resolve_test_baseline
+    for kind, rule in (("statistical", "E2"), ("chart", "E3")):
+        baseline = (project.test_parameters.get(kind) or {}).get("baseline") or {}
+        if not baseline.get("trailer") or kind not in selection.test_map.tests:
+            continue
+        try:
+            old = resolve_test_baseline(kind, simulation_project=project.simulation_project, project_commit=start, fetch=False)
+            new = resolve_test_baseline(kind, simulation_project=project.simulation_project, project_commit=end, fetch=False)
+        except Exception as e:
+            selection.add_kind(kind, rule, None, f"the {kind} baseline of {start[:10]} or of {end[:10]} is not known: {e}")
+            continue
+        if old.commit != new.commit:
+            # the place is the commit whose trailer gives the new baseline, else a mark moved it
+            path = f"{baseline['trailer']} of {new.cause[:10]}" if new.cause else f"the mark of {new.marked[:10] if new.marked else end[:10]}"
+            folder = project.simulation_project.get_full_path(baseline.get("folder") or ".")
+            _select_changed_baseline_files(selection, kind, rule, path, folder, baseline.get("folder"), old.commit, new.commit)
 
 def select_side(test_map, project, file_changes, side):
     """Applies the rules of section 5 of the plan to the changes of one diff, and returns a :py:class:`SideSelection`."""
@@ -1432,8 +1461,11 @@ def select_tests(simulation_project=None, changes=WORKTREE, map_folder=None, kin
     sides = []
     if changes.base != map_commit:
         sides.append(select_side(test_map, project, get_file_changes(root_folder, map_commit, changes.base), "A..B"))
+        select_baseline_trailers(sides[-1], project, map_commit, changes.base)
     if changes.target != changes.base:
         sides.append(select_side(test_map, project, get_file_changes(root_folder, map_commit, changes.target), "A..C"))
+        # the working tree has no commit message, so its trailers are those of HEAD
+        select_baseline_trailers(sides[-1], project, map_commit, "HEAD" if changes.target == WORKTREE else changes.target)
     # the chart tests draw their images with the Python packages of this process
     from opp_repl.test.test_map.writer import get_chart_python_packages
     kind_environment = {}

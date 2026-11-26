@@ -395,6 +395,76 @@ class SelectionTestCase(unittest.TestCase):
         self.assertEqual(runs, {"r1", "r2"})
         self.assertIn("R-NDEBUG", [reason.rule for _, reason in selection.entries])
 
+class BaselineTrailerTestCase(unittest.TestCase):
+    """
+    Rules E2 and E3 for the trailer form of a baseline entry: the map commit A has a mark in the
+    statistics repository, and a series commit C names a new baseline in its trailer.
+    """
+
+    ONE = "statistical:examples/omnetpp.ini:One:#0:1s"
+    TWO = "statistical:examples/omnetpp.ini:Two:#0:1s"
+
+    def setUp(self):
+        self.folder = tempfile.TemporaryDirectory()
+        self.addCleanup(self.folder.cleanup)
+        folder = os.path.realpath(self.folder.name)
+        self.statistics = os.path.join(folder, "statistics.git")
+        os.makedirs(self.statistics)
+        files = {f"examples/omnetpp.ini-{config}-#0.sca": f"scalar x y {value}\n" for config, value in [("One", 1), ("Two", 2)]}
+        self.first = make_repository(self.statistics, files)
+        git(self.statistics, "branch", "-M", "master")
+        self.root = os.path.join(folder, "demo")
+        os.makedirs(self.root)
+        entry = {"repository": "file://" + self.statistics, "folder": "statistics", "trailer": "Statistical-Baseline"}
+        self.parameters = {"statistical": {"baseline": entry}}
+        self.map_commit = make_repository(self.root, {".gitignore": "/statistics\n", "demo.opp": f"SimulationProject(test_parameters={self.parameters!r})\n"})
+        git(self.root, "branch", "-M", "master")
+        # the mark of the map commit, and a baseline branch whose commit changes the result of One
+        git(self.statistics, "commit", "-q", "--allow-empty", "-m", f"Baseline of demo\n\nBaseline-Of: {self.map_commit} {self.first}")
+        git(self.statistics, "checkout", "-q", "-b", "series", self.first)
+        write_files(self.statistics, {"examples/omnetpp.ini-One-#0.sca": "scalar x y 5\n"})
+        git(self.statistics, "commit", "-q", "-a", "-m", "second")
+        self.second = git(self.statistics, "rev-parse", "HEAD")
+        git(self.statistics, "checkout", "-q", "master")
+        self.test_map = types.SimpleNamespace(tests={"statistical": {self.ONE: None, self.TWO: None}})
+
+    def commit(self, pin=None):
+        # a commit of a series, which is not on the target branch master
+        git(self.root, "checkout", "-q", "-B", "series", self.map_commit)
+        write_files(self.root, {"source.txt": "change\n"})
+        git(self.root, "add", "source.txt")
+        git(self.root, "commit", "-q", "-m", "change" + (f"\n\nStatistical-Baseline: {pin}" if pin else ""))
+        return git(self.root, "rev-parse", "HEAD")
+
+    def select(self, end, clone=True):
+        from opp_repl.simulation.project import SimulationProject
+        if clone:
+            git(self.root, "clone", "-q", "--no-checkout", "file://" + self.statistics, "statistics")
+        project = ProjectInfo(SimulationProject(name="demo", root_folder=self.root, test_parameters=self.parameters))
+        selection = SideSelection(self.test_map, "A..C")
+        select_baseline_trailers(selection, project, self.map_commit, end)
+        return selection
+
+    def test_a_pin_trailer_selects_the_tests_of_the_changed_results(self):
+        end = self.commit(pin=self.second)
+        selection = self.select(end)
+        self.assertEqual([(kind, key, reason.rule) for kind, key, reason in selection.tests], [("statistical", self.ONE, "E2")])
+        self.assertIn("Statistical-Baseline of " + end[:10], str(selection.tests[0][2]))
+        self.assertEqual(selection.kinds, {})
+
+    def test_a_commit_without_a_trailer_selects_no_statistical_test(self):
+        selection = self.select(self.commit())
+        self.assertEqual((selection.tests, selection.kinds), ([], {}))
+
+    def test_a_missing_checkout_selects_all_statistical_tests(self):
+        selection = self.select(self.commit(pin=self.second), clone=False)
+        self.assertEqual({kind: reason.rule for kind, reason in selection.kinds.items()}, {"statistical": "E2"})
+
+    def test_a_kind_that_the_map_does_not_hold_is_not_resolved(self):
+        self.test_map.tests = {"fingerprint": {}}
+        selection = self.select(self.commit(pin=self.second), clone=False)
+        self.assertEqual((selection.tests, selection.kinds), ([], {}))
+
 class SmokeTestTimeLimitsTestCase(unittest.TestCase):
     """The bound of the smoke tests from the store of the simulation-time limits (decision D2c)."""
     def test_the_limits_of_a_config_with_and_without_a_value(self):

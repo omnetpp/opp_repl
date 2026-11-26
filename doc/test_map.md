@@ -323,6 +323,7 @@ selection, but not a wrong one.
 | ini file | the tests whose section chain has a changed section, also for a change of a key that opp_repl reads from a comment (`#expected-result`, `#abstract`, `#emulation`, `#bounded`); for a change of iteration variables, `repeat` or `constraint`, all tests of the ini file; the tests whose ini file includes the file |
 | fingerprint store | the tests whose entry changed, without the timestamp |
 | `.opp` file, only the pin of the statistical baseline moved | the tests whose `.sca` file differs between the two pins in the `statistics` checkout; all statistical tests if the checkout does not have both commits |
+| a baseline entry of the trailer form (`trailer` instead of `ref`): a pin trailer in a commit message, or a new mark in the baseline repository | the tests whose baseline file differs between the baselines of the two ends of each diff, as `resolve_test_baseline` finds them without a fetch; all tests of the kind if a baseline is not known, for example if the checkout does not have a pin |
 | `.opp` file | for other changed test parameters of a kind, all tests of that kind; for other changed fields, all tests |
 | build file: `Makefile` and `makefrag` in the root or in a C++ folder, `.oppbuildspec`, `.oppfeatures`, `.oppfeaturestate`, `.nedfolders`, `.nedexclusions` | all tests |
 | file of the CI jobs: `.github/workflows/`, and the paths of `ci_files` of the project | all tests |
