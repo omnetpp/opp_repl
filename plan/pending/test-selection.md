@@ -1,7 +1,9 @@
 # Change-based test selection
 
-> **Status:** phase 2 done, phase 3 next · **Owner:** opp_repl · **Also changes:** INET (weekly coverage
-> workflow, `inet.opp`), the `inet-framework/coverage` repository, optionally omnetpp (section 11)
+> **Status:** phase 2 done; next: phases 4 and 5 for the fingerprint tests, then phase 3 (D8) ·
+> **Owner:** opp_repl · **Also changes:** INET (the coverage workflow, the workflows of pull requests,
+> `inet.opp`, `run-the-gates.md` and the test rules), the `inet-framework/coverage` repository,
+> optionally omnetpp (section 11)
 
 For a change, find the tests whose outcome can differ, in every test suite, and run only those
 tests. A full run of all suites with the coverage build of opp_repl (`-m coverage`) makes a **test
@@ -254,6 +256,7 @@ reads all NED files, so F1 would select all tests for each NED change.
 | H3 | A `.anf` file | the chart tests of this file |
 | H4 | `tests/protocol/lib` and other test libraries | the C++ rules, because the coverage build compiles them |
 | H5 | omnetpp commit differs from the map | all tests (v1). Later: compile omnetpp in coverage mode and apply 5.1 to its sources |
+| H6 | A CI file of the project, for INET `.github/workflows/` and `_scripts/github/`; the project gives the path patterns | all tests. Phase 2 gives these files the class "data" and no map record names them, so without H6 they select no test (15.1) |
 
 ## 6. The suites
 
@@ -425,6 +428,10 @@ did this test use", and gives the summary for each folder. It reads the same fil
 - **V3 Mutation sample.** Change a constant in a sample of functions that ran, run all tests, and
   compare. The tests whose fingerprint changed must be a subset of the selection. This is expensive,
   so do it once for some functions.
+- **V4 Check of each push.** A push to `master` runs all tests (15.3). Then it computes the
+  selection for `github.event.before..github.sha`. Each test whose outcome differs from the
+  previous push run must be in the selection. If one is not, the job fails and names the test, the
+  commit and the rules.
 
 ## 11. Proposed omnetpp changes
 
@@ -437,6 +444,10 @@ All are optional. Each one removes a workaround in opp_repl.
 | O3 | Print the included ini files of a run | the file trace gives them |
 
 ## 12. Steps
+
+The order of the phases (D8): phases 4 and 5 for the fingerprint tests come before phase 3. Then
+phase 3 adds one kind at a time, and each kind goes through the replay of phase 4 and the jobs of
+phase 5 before the next kind starts.
 
 ### Phase 0 — repair the weekly report, and measure
 
@@ -845,17 +856,36 @@ from main f6d900a). The checks use the map of version 2 that the phase 1 records
 
 ### Phase 4 — validation
 
-- [ ] Replay (V1) over the last 200 INET master commits. Repair each rule that misses a test.
+- [ ] Replay (V1) over the last 200 INET master commits, for each kind in the map, first the
+  fingerprint tests. Repair each rule that misses a test. A kind goes into the CI of phase 5 only
+  after its replay finds no missed test.
+  - The replay uses a map whose commit is near the replayed commits. diff(A,B) grows with the
+    distance, and a big diff gives a correct but wide selection, which makes the ratio useless.
+- [ ] The mutation sample (V3), once for the fingerprint tests.
 - [ ] Write the selection ratio for each suite into this plan.
 
-### Phase 5 — CI
+### Phase 5 — CI and the agent documentation
+
+The design is in section 15.
 
 - [ ] The weekly coverage workflow writes the per-run profiles and the map. The report job commits
   `map/` to the `master` branch of `inet-framework/coverage` (8.4).
+- [ ] The map header gives the commit of opp_repl also for an installed package, so that a pull
+  request job can install the same opp_repl (15.2). The jobs install opp_repl with `pip`, which
+  leaves no git checkout; `opp_repl/_version.py` has `commit_id`.
 - [ ] The viewer page on `gh-pages`, and links to it from the `genhtml` pages.
 - [ ] The shadow check (V2) in the weekly workflow.
 - [ ] opp_repl finds and reads the map from the history of `inet-framework/coverage`.
+  `opp_checkout_test_baselines` also checks out this repository, next to `statistics` and
+  `media`, so that `opp_select_tests` finds the map without `--map`.
+- [ ] Rule H6: a change of a CI file selects all tests (5.6).
+- [ ] The pull request job of 15.2 for each kind that passed its replay, first the fingerprint
+  tests.
+- [ ] The check of each push (V4, 15.3).
+- [ ] The agent documentation of 15.4: INET `run-the-gates.md` and `testing.md`, opp_repl
+  `doc/test_map.md`.
 - [ ] opp_ci: a selection option for branch runs.
+- [ ] Later: TR-CI-EVERY-COMMIT, with the selection of each commit of a pull request (15.3).
 
 ### Phase 6 — refinements, only where the replay shows a cost
 
@@ -881,6 +911,13 @@ from main f6d900a). The checks use the map of version 2 that the phase 1 records
   phase 0. Speed cannot run now (section 6).
 - **D7 (decided 2026-11-25)** The `master` branch of `inet-framework/coverage` can lose old history
   (8.4).
+- **D8 (decided 2026-11-26)** The fingerprint tests go through all the steps first: the replay
+  (phase 4), the map and the jobs of phase 5, and the agent documentation. Then phase 3 adds one
+  kind at a time on the same path.
+- **D9 (decided 2026-11-26)** A pull request job uses the omnetpp commit and the opp_repl commit of
+  the map, not the newest commits of `omnetpp-6.x` and `github_ci`. Without this, H1 or H5 would
+  select all tests on 49 of 84 days (15.1). The other option was not chosen: pins of omnetpp and
+  opp_repl in `inet.opp`, as for the baselines.
 
 Open:
 
@@ -906,3 +943,88 @@ Open:
   the work.
 - The rules in 4.4 and section 7 are assumptions. V1 and V2 find a defect when an assumption is
   false in practice.
+- A pull request job tests in the environment of the map, which is up to one week old (D9). A
+  change of omnetpp or opp_repl that breaks INET shows first in the push run and in the weekly run,
+  not in the pull requests.
+- If the fingerprint store of `master` changes for a newer omnetpp, E1 selects the changed tests in
+  each pull request, and they fail with the omnetpp of the map until the next map. A manual start of
+  the coverage workflow then makes a new map.
+
+## 15. CI and the agent documentation
+
+The user agreed to this design on 2026-11-26 (D8, D9). Phase 5 has its steps.
+
+### 15.1 Facts (2026-11-26)
+
+- The test workflows of INET now:
+
+  | Event | Workflows |
+  | --- | --- |
+  | Pull request and push to `master` | fingerprint (debug and release, 4 splits each), statistical, chart; build-linux for `src/**` |
+  | Push to `master` only | unit, module, queueing, protocol, packet, validation |
+  | Weekly | coverage (Sunday, the map run); feature, the macOS and the Windows builds (Saturday) |
+
+- The test jobs check out the newest commit of `omnetpp-6.x` and install the newest commit of the
+  opp_repl branch `github_ci`. From 2026-08-30 to 2026-11-22 (84 days), omnetpp changed a file
+  outside the harmless files of H5 on 20 days, and opp_repl on 15 days. With a map each Sunday, H1
+  or H5 would select all tests on 49 of the 84 days: on 40 days because of omnetpp, on 31 days
+  because of opp_repl.
+- `ProjectInfo.classify` gives the class "data" to `.github/workflows/*.yml` and
+  `_scripts/github/*.sh`. No map record names these files, so a change of them selects no test.
+- TR-CI-EVERY-COMMIT of INET has no enforcement: the workflows test only the head of a pull
+  request.
+- INET `AGENTS.md` only points to other documents, and DR-NO-SECOND-COPY does not let it copy a
+  rule. For tests, it sends agents to `doc/project/guide/run-the-gates.md` and
+  `doc/project/rule/testing.md`.
+
+### 15.2 The job of a pull request
+
+The selection only decides how long a pull request waits. `master` keeps the full run (15.3). Each
+kind gets this job after its replay (phase 4). Until then, the kind runs as now.
+
+1. Check out INET with the history back to the map commit (`fetch-depth: 0`), and check out the
+   map from `inet-framework/coverage`.
+2. Read the header of the map. Check out omnetpp at its `omnetpp_commit`, and install opp_repl at
+   its commit (D9). The pull request thus tests only its own change, in the environment of the map.
+3. Build, as now. The build always runs.
+4. Run `opp_run_<kind>_tests ... --changes HEAD`. GitHub tests the merge commit of the pull
+   request, so B is the newest commit of `master` and C is the merge commit.
+5. With the label `full-tests`, run all tests of the kind, without `--changes`. A change of a CI
+   file (H6) and the reasons of 4.3 select all tests with no help from the workflow.
+
+The job always runs and reports `Selected N of M`, also for N = 0, so each required check gets a
+result. After phase 3, the kinds that run only on a push now (unit, module, queueing, protocol,
+packet, validation) also get this job.
+
+### 15.3 Push to `master`, the week, and each commit
+
+- A push to `master` runs all tests, as now, with the newest omnetpp and opp_repl. Nobody waits for
+  this run, and it is the input of the check V4 (section 10).
+- The weekly coverage run makes the new map and does the check V2.
+- Later: each commit of a pull request runs the tests that its own change selects (`--changes
+  <commit>`). This enforces TR-CI-EVERY-COMMIT at the cost of one build for each commit.
+
+A test that the selection of a pull request misses can fail only after the merge. The push run then
+finds the failure, and V4 names the rule. This is not less protection than now: now the pull
+requests do not run the unit, module and protocol tests at all.
+
+### 15.4 The agent documentation
+
+The changes go into the documents that `AGENTS.md` points to, not into `AGENTS.md`. The INET
+changes go on a local INET branch.
+
+- INET `doc/project/guide/run-the-gates.md`:
+  - "During focused development": first `opp_select_tests --changes origin/master...worktree
+    --explain`. It lists the tests that the change can affect, with the rule and the changed place
+    for each test. `opp_show_test_map` tells which tests use a file or a function. The agent picks
+    the directly related cases from this list. TR-FOCUSED-EVIDENCE does not change.
+  - "Before every push": a new step, `opp_run_all_tests --changes origin/master...HEAD`. The
+    report gives the line `Selected N of M`, the map commit and each reason for all tests.
+  - The local omnetpp, opp_repl or compiler is usually different from the map, and then the
+    selection gives all tests. The agent then adds `--ignore-environment` and says so in the
+    report. CI never uses this option.
+- INET `doc/project/rule/testing.md`: a new rule, for example TR-SELECTED-PASS: "Before a push, the
+  tests that the selection gives for the series pass." The selected tests show that the change
+  breaks no other test. They do not prove the change itself, which still needs its directly related
+  cases. The pull request jobs enforce the rule (T3).
+- opp_repl `doc/test_map.md`: the sections "In development" and "In CI".
