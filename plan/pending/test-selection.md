@@ -887,8 +887,22 @@ from main f6d900a). The checks use the map of version 2 that the phase 1 records
 
 ### Phase 3 — the other suites
 
+The work goes in the worktree `opp_repl-test-selection` (branch `topic/test-selection`), one kind
+at a time. Each kind gets: records from its run command (`--test-map-records`), its test keys in
+`tests.json`, the filter of its tasks for `--changes`, its rules for expected results, self tests,
+and a check on a real INET map with the scenarios of phase 2.
+
+- [ ] The kinds in general: one function applies `--test-map-records` and `--changes` to the
+  tasks of any simulation test kind, `run_fingerprint_tests` uses it too, and
+  `opp_update_test_map --kind` makes the map of more than one kind.
 - [ ] Statistical (with R-NDEBUG), speed (speed only after omnetpp has `--measure-cpu-usage`,
   section 6).
+  - E2: a move of the `statistics` pin selects the tests whose `.sca` file differs between the
+    two pins. Without the two commits in the `statistics` checkout, it selects all statistical
+    tests.
+  - R-NDEBUG: the build tables list the release-only blocks and the names in them. A changed
+    function whose name is in such a block also selects the tests of the function that holds the
+    block, or of the translation units that include the file for a block outside a function.
 - [ ] Smoke and sanitizer, with the bound of D2c (section 7): the store of the simulation-time
   limits, the calibration run, and the command that writes the store. The `#expected-result`
   comments of the ini files are expected results of the smoke tests. The ini rule ignores comments,
