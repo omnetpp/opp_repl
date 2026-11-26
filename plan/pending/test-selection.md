@@ -1121,6 +1121,20 @@ old: INET `origin/master` cites opp_repl 5930baf (now c6213e7) in `plan/pending/
 and `plan/pending/required-checks.md`, and the local INET commit b79190d7e5 cites 5d46ac3 (now
 d555265); the rebase of the local INET `master` onto `origin/master` is to correct the second.
 
+E2 and E3 for the trailer form (5356090): for a kind whose entry has a `trailer`,
+`select_baseline_trailers` resolves the baseline at both ends of each diff with
+`resolve_test_baseline(fetch=False)` and selects the tests whose baseline file differs. The `ref`
+form keeps the rule of the `.opp` diff, because `resolve_test_baseline` reads the `ref` of the
+loaded project, not the `ref` of the commit. Found on the way: `_find_pin` of `origin/main`
+b3ea94e (also `github_ci`) fails with `ValueError: not enough values to unpack` for each series
+whose oldest commit has no trailer, because `_git` strips the output and Python takes `\x1f` for
+white space; reproduced with `_find_pin` over 4 INET commits without a trailer. Every INET pull
+request whose paths can change a statistical or chart result then fails at
+`opp_checkout_test_baselines`; the pull requests since the switch to the trailer form (INET
+25bb4dee13, 14:30 UTC) changed only module tests and ran no such step. The repair is ac74914 on
+the local branch `topic/baseline-pin-parse` (worktree `opp_repl-baseline-pin-parse`, on
+`origin/main`), cherry-picked here as 4267bc0. It is not pushed.
+
 The INET branch is `topic/test-selection-ci` (worktree `inet-test-selection-ci`, on INET
 `origin/master` 22df607673, not pushed): 2a5b6b8c8c splits `configure-omnetpp.sh` and
 `configure-inet.sh` out of the build scripts, 49391b2ec3 adds `_scripts/github/get-test-map.sh`,
