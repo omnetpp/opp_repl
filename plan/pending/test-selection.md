@@ -183,7 +183,21 @@ conservative: an unknown place gets the wider rule.
 
 R6 and R7 are wide. A new module class (new `.cc` with `Define_Module`) selects all tests. The
 replay (section 10) shows how often this occurs. A later refinement can treat registrations that
-other code finds only by name as narrow.
+other code finds only by name as narrow (R7, phase 6).
+
+**R6 v2 (D10, before phase 5).** A hunk outside the function bodies that holds only complete
+function definitions and comments, at both sides, cannot change the static initialization. For
+such a hunk:
+
+- a function of side A that the hunk removes or changes selects the tests that ran it (R2);
+- a new function selects nothing by itself. Its callers changed, so their hunks select their tests
+  (R2), or its declaration is in a changed header (R4).
+
+The hunk keeps R6 if it holds anything else: a declaration outside a function (global data, a
+static member, a registration macro, `#include`, `using`), a part that the parser cannot classify,
+or a function that runs with no caller (a replacement `operator new` or `operator delete`, a
+function with `__attribute__((constructor))`). The measurement for D5 (15.1) found such a hunk in
+`Mldv1.cc`: it renames one function and removes another, and R6 v1 selects all tests for it.
 
 ### 5.2 NED
 
@@ -296,16 +310,33 @@ A run to a later point is a superset only for the event loop. `finish()` runs at
 its path can depend on the state at that point. So a run to a deterministic bound is correct only
 for the same bound.
 
-Two options:
+Three options (D2):
 
-- **D2a (recommended).** Make the bound deterministic. Add an event-count limit to omnetpp (O2),
-  and change the smoke, sanitizer and feature tests from `cpu_time_limit=1s` to an event limit that
-  is about 1 s on the CI machine. The `cpu_time_limit` stays as a safety stop, as in the fingerprint
-  tests. Then the map run uses the same bound, and the record is exact.
+- **D2a.** Make the bound deterministic. Add an event-count limit to omnetpp (O2), and change the
+  smoke, sanitizer and feature tests from `cpu_time_limit=1s` to an event limit that is about 1 s on
+  the CI machine. The `cpu_time_limit` stays as a safety stop, as in the fingerprint tests. Then the
+  map run uses the same bound, and the record is exact.
 - **D2b.** Keep the CPU-time limit. The map run uses K × the limit (K=10 by default) and records the
   last event number. The real test also logs its last event number. If a real run gets past the
   recorded event, opp_repl gives a warning and selects the test until the next map. This is correct
-  in practice but not proven, because of `finish()`.
+  in practice but not proven, because of `finish()` and the destructors. An example from INET:
+  before d5418ec4c3 (2026-11-25), `Mldv1::~Mldv1()` called `deleteHeldMessages()` only if a message
+  was held at the stop. A map run that stopped when no message was held has no record of that
+  function for the test, so a crash in it at the end of the real test is not selected.
+- **D2c (decided 2026-11-26).** A fixed `sim-time-limit` for each config, in a store of its own. A
+  calibration run measures, for each config, the simulation time that 1 s of CPU time reaches in
+  release mode on the CI runner, and a command writes the values into the store. The smoke,
+  sanitizer and feature tests run the same configs (run 0), so they share the store.
+  - The tests stop at this simulation time, and the map run uses the same limit. Both stop at the
+    same event, so the record is exact, also for `finish()` and the destructors.
+  - A larger `cpu_time_limit` stays as a safety stop; the map run has a larger one than the tests,
+    because the coverage build is slower. A run that a safety stop ends gives a warning, and the map
+    records it with `normal_end` false, so the selection always selects it (4.3).
+  - A config without a value (a new config, or a config whose calibration run does not get past the
+    initialization) runs with the CPU-time limit of now. The map has no exact record of it, so the
+    selection always selects it.
+  - omnetpp needs no change: `sim-time-limit` exists, so the event-count limit of D2a (O2) is not
+    necessary.
 
 The fingerprint and statistical tests already have a deterministic bound (the sim time limit), so
 they do not have this problem.
@@ -391,6 +422,13 @@ gets no map, and then the selection selects all tests.
 
 A developer can also make a map locally (`opp_update_test_map`).
 
+**The map of each push (D11).** The push run of the fingerprint tests on `master` runs in coverage
+mode instead of debug mode. Thus it also makes a map of the fingerprint tests, and it saves the map
+as an artifact of the workflow run. A selection takes the map of the newest finished push run whose
+commit is an ancestor of B. Without such an artifact (for example, after the retention time of the
+artifacts), it takes the weekly map of this section. The weekly map stays for the viewer, and for
+the kinds that the push runs do not run in coverage mode.
+
 ### 8.5 Reverse queries
 
 `opp_show_test_map` answers "which tests used this file, function, NED type or ini section", "what
@@ -415,6 +453,10 @@ did this test use", and gives the summary for each folder. It reads the same fil
 4. Add the tests of 4.3.
 5. Print the result. An inverted index (function → runs, file → runs, NED type → runs) makes the
    lookups fast.
+6. Give the map commit, its date, and the number of tests that the A..B side alone selects. This
+   number is the cost of the age of the map (D5). If the map is older than 2 days, give a warning:
+   with the maps of the push runs (D11), such a map means that the push runs make no maps, or that
+   opp_repl did not find the newest map.
 
 ## 10. How we make sure that the selection is correct
 
@@ -440,7 +482,7 @@ All are optional. Each one removes a workaround in opp_repl.
 | Id | Change | Without it |
 | --- | --- | --- |
 | O1 | The usage collector also prints the base types, the interfaces and the failed lookups of NED types, with the file of each declaration | opp_repl computes the closure from the NED sources; failed lookups stay unknown (4.3) |
-| O2 | An event-count limit config option | D2b (section 7) |
+| O2 | An event-count limit config option | not necessary: D2c uses `sim-time-limit` (section 7) |
 | O3 | Print the included ini files of a run | the file trace gives them |
 
 ## 12. Steps
@@ -847,12 +889,16 @@ from main f6d900a). The checks use the map of version 2 that the phase 1 records
 
 - [ ] Statistical (with R-NDEBUG), speed (speed only after omnetpp has `--measure-cpu-usage`,
   section 6).
-- [ ] Smoke and sanitizer, after decision D2. The `#expected-result` comments of the ini files are
-  expected results of the smoke tests. The ini rule ignores comments, so they need their own
-  rule, as E1 for the store (phase 2: INET 0af9da9b1e changes only these comments).
+- [ ] Smoke and sanitizer, with the bound of D2c (section 7): the store of the simulation-time
+  limits, the calibration run, and the command that writes the store. The `#expected-result`
+  comments of the ini files are expected results of the smoke tests. The ini rule ignores comments,
+  so they need their own rule, as E1 for the store (phase 2: INET 0af9da9b1e changes only these
+  comments).
 - [ ] The opp tests: per-test profiles and the `.d` files of the test builds; packet as one run.
 - [ ] Chart and validation, with the traced process tree.
-- [ ] Feature tests (v1 rule).
+- [ ] Feature tests (v1 rule). Their smoke runs use the store of D2c.
+- [ ] For each kind, decide where its records come from: from its push job in coverage mode
+  (D11), or from the weekly map. With the weekly map, the A..B side of the kind is wider.
 
 ### Phase 4 — validation
 
@@ -877,8 +923,16 @@ The design is in section 15.
 - [ ] The shadow check (V2) in the weekly workflow.
 - [ ] opp_repl finds and reads the map from the history of `inet-framework/coverage`.
   `opp_checkout_test_baselines` also checks out this repository, next to `statistics` and
-  `media`, so that `opp_select_tests` finds the map without `--map`.
+  `media`, so that `opp_select_tests` finds the map without `--map`. If `gh` is available, it also
+  downloads the map of the newest finished push run (D11).
 - [ ] Rule H6: a change of a CI file selects all tests (5.6).
+- [ ] R6 v2 (D10, 5.1), before the pull request jobs.
+- [ ] The push run of the fingerprint tests runs in coverage mode instead of debug mode and saves
+  its map as an artifact (D11, 8.4). Each split saves its records, and one more job writes the map
+  from them and from the tables of the build. First compare the compile flags of `MODE=debug` and
+  `MODE=coverage`: the coverage build must have all flags and defines of the debug build.
+- [ ] D5: the report gives the cost of the age of the map, and a map that is older than 2 days
+  gives a warning (section 9, step 6).
 - [ ] The pull request job of 15.2 for each kind that passed its replay, first the fingerprint
   tests.
 - [ ] The check of each push (V4, 15.3).
@@ -890,7 +944,7 @@ The design is in section 15.
 ### Phase 6 — refinements, only where the replay shows a cost
 
 - [ ] R10 v2: generate the `_m` files at both sides.
-- [ ] A narrow rule for registrations (R6, R7).
+- [ ] A narrow rule for registrations (R7). R6 v2 moved to phase 5 (D10).
 - [ ] I2 v2: section logic for included ini files.
 - [ ] H5: instrument omnetpp.
 - [ ] Refresh the map for each test that a selected run executes in coverage mode.
@@ -906,6 +960,14 @@ The design is in section 15.
 - **D1 (decided 2026-11-25)** The map run uses the coverage build that opp_repl has now
   (`-m coverage`), and it is the weekly coverage run. The map goes into the `inet-framework/coverage`
   repository, so that people can browse it (8.4).
+- **D2 (decided 2026-11-26)** The CPU-time limits (section 7): D2c, a fixed `sim-time-limit` for
+  each config in a store of its own. The user chose it over D2b, because D2b has no record of the
+  code at the stop point, and over D2a, because D2c needs no omnetpp change.
+- **D4 (decided by the phase 0 measurement)** File trace: `LD_PRELOAD` (about 1% against 33% for
+  `strace`, the same project files).
+- **D5 (decided 2026-11-26)** No age limit for the map. Each report gives the cost of the age, and
+  a map that is older than 2 days gives a warning (section 9, step 6). The measurement (15.1)
+  showed that the age, not a warning, decides the benefit, so D10 and D11 came from this decision.
 - **D6 (decided 2026-11-25)** The weekly run gets the suites that the map needs and that it does
   not run now: statistical, smoke, chart, validation and speed (8.1). The user moved this step into
   phase 0. Speed cannot run now (section 6).
@@ -918,16 +980,17 @@ The design is in section 15.
   the map, not the newest commits of `omnetpp-6.x` and `github_ci`. Without this, H1 or H5 would
   select all tests on 49 of 84 days (15.1). The other option was not chosen: pins of omnetpp and
   opp_repl in `inet.opp`, as for the baselines.
+- **D10 (decided 2026-11-26)** R6 v2 (5.1) comes before the pull request jobs of phase 5, not in
+  phase 6. Without it, a hunk that only renames or removes functions selects all tests (15.1).
+- **D11 (decided 2026-11-26)** Each push to `master` makes a map of the fingerprint tests: its debug
+  fingerprint jobs become coverage jobs (about 7% slower), and the map is an artifact of the run
+  (8.4). A pull request job uses the map of the newest finished push run, so the map is minutes or
+  hours old, and the environment of D9 is that of the last push run.
 
 Open:
 
-- **D2** CPU-time limits (7). Recommended: an event limit in omnetpp, and smoke tests with an event
-  limit.
 - **D3** NED closure: in opp_repl first, or omnetpp change O1 first. Recommended: opp_repl first; O1
   when the failed lookups cost too much (4.3).
-- **D4 (decided by the phase 0 measurement)** File trace: `LD_PRELOAD` (about 1% against 33% for
-  `strace`, the same project files).
-- **D5** Maximum age of the map before opp_repl gives a warning.
 
 ## 14. Risks
 
@@ -939,20 +1002,23 @@ Open:
   (D7). A force push to `master` needs a deploy key that is allowed to do it.
 - Wide headers (`Packet.h`, `INETDefs.h`) select almost all tests. This is correct, but such a
   change gets no benefit.
-- R6 and R7 are wide, and a new module selects all tests. The replay shows if a refinement is worth
-  the work.
+- R7 is wide, and a new module selects all tests. The replay shows if a refinement is worth the
+  work. R6 v2 (D10) narrows R6.
 - The rules in 4.4 and section 7 are assumptions. V1 and V2 find a defect when an assumption is
   false in practice.
-- A pull request job tests in the environment of the map, which is up to one week old (D9). A
-  change of omnetpp or opp_repl that breaks INET shows first in the push run and in the weekly run,
-  not in the pull requests.
+- A pull request job tests in the environment of the map (D9). With the maps of the push runs
+  (D11), this is the environment of the last push run, some hours old. A change of omnetpp or
+  opp_repl that breaks INET shows first in the push run, not in the pull requests.
 - If the fingerprint store of `master` changes for a newer omnetpp, E1 selects the changed tests in
-  each pull request, and they fail with the omnetpp of the map until the next map. A manual start of
-  the coverage workflow then makes a new map.
+  each pull request, and they fail with the omnetpp of the map until a push run makes a new map.
+- The values of the store of D2c age. If a model gets slower, its smoke run takes more than 1 s.
+  The safety stop limits the cost, and a new calibration run corrects the values.
+- A base B that is older than the retention time of the artifacts gets the weekly map, so its
+  selection is wider.
 
 ## 15. CI and the agent documentation
 
-The user agreed to this design on 2026-11-26 (D8, D9). Phase 5 has its steps.
+The user agreed to this design on 2026-11-26 (D8 to D11). Phase 5 has its steps.
 
 ### 15.1 Facts (2026-11-26)
 
@@ -976,13 +1042,24 @@ The user agreed to this design on 2026-11-26 (D8, D9). Phase 5 has its steps.
 - INET `AGENTS.md` only points to other documents, and DR-NO-SECOND-COPY does not let it copy a
   rule. For tests, it sends agents to `doc/project/guide/run-the-gates.md` and
   `doc/project/rule/testing.md`.
+- The age of the map (measured for D5): the A..B side alone, with A = the map commit 0af9da9b1e and
+  B = k commits older, selects 3 of 4726 tests (the abnormal run) for k = 1 to 12 (4 to 21 changed
+  files), and all tests for k = 20 (37 files; R6 in `Mldv1.cc`), 30 and 45. INET `master` got 522
+  commits in the 30 days before 2026-11-25, about 120 each week, so a weekly map often selects all
+  tests.
+- On GitHub, fingerprint split 0 needs 22.6 minutes in debug mode and 24.3 minutes in coverage mode
+  (phase 0), so a coverage job costs about 7% more than a debug job.
+- The smoke, sanitizer and feature tests stop after 1 s of CPU time; INET has 672 smoke tests.
+  omnetpp has `sim-time-limit`, `cpu-time-limit` and `real-time-limit`, and no event-count limit.
+  No workflow on `master` runs the smoke or sanitizer tests; the feature tests run weekly.
 
 ### 15.2 The job of a pull request
 
 The selection only decides how long a pull request waits. `master` keeps the full run (15.3). Each
 kind gets this job after its replay (phase 4). Until then, the kind runs as now.
 
-1. Check out INET with the history back to the map commit (`fetch-depth: 0`), and check out the
+1. Check out INET with the history back to the map commit (`fetch-depth: 0`). Download the map of
+   the newest finished push run whose commit is an ancestor of B (D11). Without one, use the weekly
    map from `inet-framework/coverage`.
 2. Read the header of the map. Check out omnetpp at its `omnetpp_commit`, and install opp_repl at
    its commit (D9). The pull request thus tests only its own change, in the environment of the map.
@@ -998,8 +1075,9 @@ packet, validation) also get this job.
 
 ### 15.3 Push to `master`, the week, and each commit
 
-- A push to `master` runs all tests, as now, with the newest omnetpp and opp_repl. Nobody waits for
-  this run, and it is the input of the check V4 (section 10).
+- A push to `master` runs all tests, as now, with the newest omnetpp and opp_repl. Its fingerprint
+  jobs run in coverage mode instead of debug mode, and the run saves the map of its commit (D11,
+  8.4). Nobody waits for this run, and it is the input of the check V4 (section 10).
 - The weekly coverage run makes the new map and does the check V2.
 - Later: each commit of a pull request runs the tests that its own change selects (`--changes
   <commit>`). This enforces TR-CI-EVERY-COMMIT at the cost of one build for each commit.
