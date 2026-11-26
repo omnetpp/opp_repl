@@ -1,6 +1,6 @@
 # Change-based test selection
 
-> **Status:** phase 2 done except the removal of the old filter (waits for the user), phase 3 next · **Owner:** opp_repl · **Also changes:** INET (weekly coverage
+> **Status:** phase 2 done, phase 3 next · **Owner:** opp_repl · **Also changes:** INET (weekly coverage
 > workflow, `inet.opp`), the `inet-framework/coverage` repository, optionally omnetpp (section 11)
 
 For a change, find the tests whose outcome can differ, in every test suite, and run only those
@@ -31,6 +31,8 @@ whose outcome changes. If the map does not know something, the test is selected.
 run stays, and it makes the map.
 
 ## 2. What exists now
+
+This section gives the state before phase 2. Phase 2 removed the old filter (section 12, phase 2).
 
 - `opp_repl/simulation/dependency.py` has `SimulationTaskDependencyStore`. It works at the level of
   `.oppfeatures` features. A simulation run with `--print-instantiated-ned-types=true` gives the NED
@@ -806,10 +808,19 @@ from main f6d900a). The checks use the map of version 2 that the phase 1 records
     patch selects 105 of 4726 tests, the same as `opp_select_tests`, so the keys of the test
     tasks are the keys of the map.
   - The guide is the section "Select tests" of `doc/test_map.md`.
-- [ ] Remove `dependency.py`, `affected_by_modification_filter`, the `dependency_store` field and
+- [x] Remove `dependency.py`, `affected_by_modification_filter`, the `dependency_store` field and
   INET `tests/dependency.json`. Before the removal, show the evidence of section 2 that nothing
   uses them.
-  - The evidence (2026-11-25), shown to the user; the removal waits for the user's agreement:
+  - Done 2026-11-26, after the user agreed: opp_repl 5d46ac3 removes the code, the parameters and
+    the line of `doc/opp_files.md`. INET de20ccae69 removes `tests/dependency.json`, on the local
+    branch `topic/remove-dependency-json` from `master` 85ccac161e. The 165 tests of
+    `opp_run_self_test` pass, and the dry run of the fingerprint tests with `--changes` again
+    selects 105 of 4726 tests.
+  - One more user came up before the removal: the workspace file
+    `inet-master+omnetpp-6.x.opp` (2026-05-07, not in git) sets
+    `dependency_store="tests/dependency.json"`. `SimulationProject` takes `**kwargs` and ignores
+    an unknown parameter, so the file loads as before. The dead line was removed from the file.
+  - The evidence (2026-11-25), shown to the user before the removal:
     - opp_repl 2a08716 (2026-04-29) added `opp_repl/simulation/dependency.py` (197 lines) and
       `affected_by_modification_filter`. Its users are only `opp_repl/simulation/__init__.py`
       (`import *`), `get_simulation_tasks` (`opp_repl/simulation/task.py`, the parameter and 15
