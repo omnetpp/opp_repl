@@ -60,8 +60,13 @@ def read_test_map_records(records_folders):
     return [records[run_id] for run_id in sorted(records)]
 
 def is_normal_end(record):
-    """True if the run ended normally and its record is complete: exit code 0, a profile, and a section chain."""
-    return record["exit_code"] == 0 and record["profile"] and record["sections"] is not None
+    """
+    True if the run ended normally and its record is complete: exit code 0, a profile, and a
+    section chain, and no CPU-time or real-time limit stopped it. Where such a limit stops a run
+    depends on the machine, so the record does not show what the run of a test uses.
+    """
+    text = (record.get("end") or {}).get("text") or ""
+    return record["exit_code"] == 0 and record["profile"] and record["sections"] is not None and not text.startswith(("CPU time limit reached", "Realtime limit reached"))
 
 def get_fingerprint_ingredients(args):
     """Returns the ingredients of the ``--fingerprint`` argument of a run, for example ``["tplx", "~tNl"]``."""
@@ -324,6 +329,10 @@ def write_test_map(records, build_tables, root_folder, output_folder, header=Non
                 tests["fingerprint"][record["key"] + ":" + ingredients] = [record["id"]]
         else:
             tests[record["kind"]][record["key"]] = [record["id"]]
+        if record["kind"] == "smoke":
+            # a sanitizer test stops where the smoke test of its config stops, and the sanitizer
+            # only examines the code that runs, so the run of the smoke test is its run too
+            tests["sanitizer"]["sanitizer" + record["key"][len("smoke"):]] = [record["id"]]
     write("emitter-sets.json", {"sets": emitter_sets}, True)
     write("release-only.json", {"blocks": release_only}, True)
     write("runs.json", runs, True)
@@ -373,6 +382,7 @@ def clear_test_map_records(records_folder):
 TEST_MAP_RUN_FUNCTIONS = {
     "fingerprint": ("opp_repl.test.fingerprint.task", "run_fingerprint_tests"),
     "statistical": ("opp_repl.test.statistical", "run_statistical_tests"),
+    "smoke": ("opp_repl.test.smoke", "run_smoke_tests"),
 }
 
 def get_test_map_run_function(kind):

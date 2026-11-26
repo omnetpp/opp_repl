@@ -133,7 +133,7 @@ def run_simulations_main():
     run_tasks_main(run_simulations, "simulations")
 
 def run_smoke_tests_main():
-    run_tasks_main(run_smoke_tests, "smoke tests")
+    run_tasks_main(run_smoke_tests, "smoke tests", extra_args_fn=_test_map_records_extra_args)
 
 def _fingerprint_extra_args(parser):
     parser.add_argument("--ingredients", action="append", dest="ingredients_list", default=None, metavar="INGREDIENTS", help="the fingerprint ingredients to use, for example tplx or ~tND; can be specified multiple times (default: the project's ingredients, else all known ones)")
@@ -394,6 +394,9 @@ def update_module_image_test_results_main():
 
 def run_module_image_tests_main():
     _module_image_main(run_module_image_tests, "module image tests", output_dir_required=False)
+
+def update_smoke_test_sim_time_limits_main():
+    run_tasks_main(update_smoke_test_sim_time_limits, "smoke tests with only their CPU-time limit, and writes the simulation time that each run reached into the store of the simulation-time limits of the project;")
 
 def update_statistical_test_results_main():
     run_tasks_main(update_statistical_test_results, "update statistical test results")

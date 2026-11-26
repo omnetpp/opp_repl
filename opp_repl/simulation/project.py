@@ -273,7 +273,7 @@ class OmnetppProject:
 #   baseline  — external repo to check out before the kind runs: {repository, ref or trailer, folder}
 #   runner    — dotted "module:function" ref for a project-specific kind (validation)
 #   report    — settings of the kind's report (coverage: exclude, areas; see the Coverage guide)
-RECOGNISED_TEST_ASPECTS = frozenset({"defaults", "store", "baseline", "runner", "report"})
+RECOGNISED_TEST_ASPECTS = frozenset({"defaults", "store", "baseline", "runner", "report", "sim_time_limits"})
 
 
 def _validate_test_parameters(test_parameters, project_name):

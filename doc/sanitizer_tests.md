@@ -29,6 +29,10 @@ summary as the reason.
 By default, simulations are limited by a CPU time limit (`cpu_time_limit`,
 default `"1s"`) instead of simulation time to keep sanitizer runs
 practical, since instrumented builds are significantly slower.
+If the project has a store of simulation-time limits for its smoke tests (see
+[Smoke Tests](smoke_tests.md#the-end-of-a-run)), a sanitizer test stops at the
+same simulation time as the smoke test of its config. The sanitizer build is
+slower, so such a run takes more than 1 s of CPU time.
 
 A sanitizer test reads only the stdout and the stderr of the simulation, thus it
 turns the result files and the eventlog off with

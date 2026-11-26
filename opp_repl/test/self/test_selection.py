@@ -330,6 +330,21 @@ class SelectionTestCase(unittest.TestCase):
         self.assertEqual(runs, {"r1", "r2"})
         self.assertIn("R-NDEBUG", [reason.rule for _, reason in selection.entries])
 
+class SmokeTestTimeLimitsTestCase(unittest.TestCase):
+    """The bound of the smoke tests from the store of the simulation-time limits (decision D2c)."""
+    def test_the_limits_of_a_config_with_and_without_a_value(self):
+        from opp_repl.test.smoke import SMOKE_TEST_SAFETY_CPU_TIME_LIMIT, get_smoke_test_time_limits
+        limits = {("examples", "omnetpp.ini", "Fast", 0): "0.5s", ("examples", "omnetpp.ini", "Short", 0): None}
+        sim_time_limit, cpu_time_limit = get_smoke_test_time_limits(None, cpu_time_limit="1s", sim_time_limits=limits)
+        def config(name, limit=None):
+            return types.SimpleNamespace(working_directory="examples", ini_file="omnetpp.ini", config=name, sim_time_limit=limit)
+        self.assertEqual((sim_time_limit(config("Fast"), 0), cpu_time_limit(config("Fast"), 0)), ("0.5s", SMOKE_TEST_SAFETY_CPU_TIME_LIMIT))
+        # a run that ends by itself keeps the limit of its config
+        self.assertEqual((sim_time_limit(config("Short", "10s"), 0), cpu_time_limit(config("Short"), 0)), ("10s", SMOKE_TEST_SAFETY_CPU_TIME_LIMIT))
+        # a config without a value keeps the CPU-time limit
+        self.assertEqual((sim_time_limit(config("Other"), 0), cpu_time_limit(config("Other"), 0)), (None, "1s"))
+        self.assertEqual(get_smoke_test_time_limits(types.SimpleNamespace(test_parameters={}), cpu_time_limit="1s"), (None, "1s"))
+
 class ReleaseOnlyTestCase(unittest.TestCase):
     """The release-only blocks of rule R-NDEBUG."""
     def blocks(self, text, texts=None):

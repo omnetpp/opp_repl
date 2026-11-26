@@ -315,6 +315,23 @@ class WriterTestCase(unittest.TestCase):
         self.assertIn("fingerprint:examples/x/omnetpp.ini:C2:#0:1s:tplx", output.getvalue())
         self.assertNotIn("C0", output.getvalue())
 
+    def test_a_run_that_a_cpu_time_limit_stopped_did_not_end_normally(self):
+        record = {"exit_code": 0, "profile": True, "sections": ["General"], "end": {"text": "CPU time limit reached -- at t=0.5s, event #10"}}
+        self.assertFalse(is_normal_end(record))
+        record["end"]["text"] = "Simulation time limit reached -- at t=0.5s, event #10"
+        self.assertTrue(is_normal_end(record))
+
+    def test_a_smoke_record_is_also_the_run_of_the_sanitizer_test(self):
+        import json
+        records = read_test_map_records([self.records_folder])
+        records[0] = dict(records[0], kind="smoke", key="smoke:examples/x/omnetpp.ini:C0:#0:1s")
+        map_folder = os.path.join(self.folder.name, "map3")
+        write_test_map(records, self.build_tables, self.folder.name, map_folder, header={"project": "x"}, tracked_files=set())
+        with open(os.path.join(map_folder, "tests.json")) as f:
+            tests = json.load(f)
+        self.assertEqual(tests["smoke"], {"smoke:examples/x/omnetpp.ini:C0:#0:1s": ["r000000000"]})
+        self.assertEqual(tests["sanitizer"], {"sanitizer:examples/x/omnetpp.ini:C0:#0:1s": ["r000000000"]})
+
     def test_fingerprint_ingredients(self):
         self.assertEqual(get_fingerprint_ingredients(["--fingerprint", "1234-5678/tplx,0000-0000/~tND"]), ["tplx", "~tND"])
         self.assertEqual(get_fingerprint_ingredients(["--fingerprint=1234-5678/tplx"]), ["tplx"])

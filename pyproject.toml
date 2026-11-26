@@ -125,6 +125,7 @@ opp_run_module_image_tests = "opp_repl.main:run_module_image_tests_main"
 opp_update_fingerprint_test_results = "opp_repl.main:update_fingerprint_test_results_main"
 opp_update_speed_test_results = "opp_repl.main:update_speed_test_results_main"
 opp_update_statistical_test_results = "opp_repl.main:update_statistical_test_results_main"
+opp_update_smoke_test_sim_time_limits = "opp_repl.main:update_smoke_test_sim_time_limits_main"
 opp_diff_charts = "opp_repl.diffcharts:main"
 
 [tool.setuptools]
