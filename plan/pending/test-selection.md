@@ -1137,13 +1137,14 @@ request whose paths can change a statistical or chart result then fails at
 `opp_checkout_test_baselines`; the pull requests since the switch to the trailer form (INET
 25bb4dee13, 14:30 UTC) changed only module tests and ran no such step. The repair is ac74914 on
 the local branch `topic/baseline-pin-parse` (worktree `opp_repl-baseline-pin-parse`, on
-`origin/main`), cherry-picked here as 4267bc0. It is not pushed.
+`origin/main`), cherry-picked here as 4267bc0. The user agreed, and ac74914 is on `main` and
+`github_ci` since 2026-11-26.
 
 The INET branch is `topic/test-selection-ci` (worktree `inet-test-selection-ci`, on INET
 `origin/master` 22df607673, not pushed): 2a5b6b8c8c splits `configure-omnetpp.sh` and
 `configure-inet.sh` out of the build scripts, 49391b2ec3 adds `_scripts/github/get-test-map.sh`,
-bb45252b8f writes the new `fingerprint-tests.yml` and the field `ci_files` of `inet.opp`, and
-e8d37e7882 the agent documentation. Each commit passes `check-pull-request.sh`. The branch can land
+bb45252b8f writes the new `fingerprint-tests.yml` and the field `ci_files` of `inet.opp`,
+e8d37e7882 the agent documentation, and f57d77cec3 and 3036d85a93 the updated maps of 15.6. Each commit passes `check-pull-request.sh`. The branch can land
 only after this opp_repl branch is on `github_ci`: the opp_repl of the CI jobs does not accept an
 unknown field in `inet.opp` (its `SimulationProject.__init__` has no `**kwargs`), and it has none
 of the new commands.
@@ -1203,7 +1204,7 @@ of the new commands.
   opp_repl `doc/test_map.md`. TR-SELECTED-PASS applies only to the kinds that the map holds: with
   the fingerprint map of a push run, `opp_run_all_tests --changes` would run all tests of each
   other kind, and that is the unfiltered campaign that `run-the-gates.md` does not ask for.
-- [ ] Updated maps (D14, 15.6), on the local branches:
+- [x] Updated maps (D14, 15.6), on the local branches:
   - [x] U1: the map holds its build tables; the header fields `update_of`, `full_commit`,
     `updates`; `commit` in `runs.json`; the data of a run from a map, with the self test of 15.6
     item 6. `read_test_map_runs` of `writer.py`. Checked also on the 4751 chart records of phase
@@ -1217,9 +1218,17 @@ of the new commands.
     runs, and all tests of each run, so check V5 compares whole runs. On the fingerprint map of
     1847 runs, `--sample 0.05` adds 93 runs (239 tests), and two selections give the same runs.
   - [x] U4: `doc/test_map.md`: "Update a map", the layout, "In CI" and the sample.
-  - [ ] U5: INET `get-test-map.sh` (`FULL_ONLY`, `NEED_BUILD_TABLES`, the scheduled runs,
+  - [x] U5: INET `get-test-map.sh` (`FULL_ONLY`, `NEED_BUILD_TABLES`, the scheduled runs,
     `run_id`) and `fingerprint-tests.yml` (the update on a push, the full run each night, V4 only
-    in a full run), and the INET documentation.
+    in a full run), and the INET documentation: INET f57d77cec3 and 3036d85a93, not run. Tested
+    here: `get-test-map.sh` against a local map repository with a full map and the map of an
+    update (each limit takes the right map), the YAML, and the shell syntax of each `run` block.
+    The run kinds of the job `environment`: `pull-request`, `update` (a push with a map that has
+    build tables), `full` (a push without one, a scheduled run after a change, and
+    `workflow_dispatch`, which runs in debug mode without records as before), and `skip`. In an
+    update, split 0 builds only if the selection gives a test, which the sample almost always does;
+    without the build tables of split 0, the job `test-map` writes no map, and the old map stays
+    the newest map.
 - [ ] opp_ci: a selection option for branch runs.
 - [ ] Later: TR-CI-EVERY-COMMIT, with the selection of each commit of a pull request (15.3).
 
