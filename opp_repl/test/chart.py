@@ -268,12 +268,12 @@ def write_chart_test_members(multiple_chart_test_tasks, records_folder):
     with open(os.path.join(records_folder, "chart-tests.json"), "w") as f:
         json.dump(members, f, indent=1, sort_keys=True)
 
-def run_chart_tests(test_map_records=None, changes=None, test_map=None, ignore_environment=False, **kwargs):
+def run_chart_tests(test_map_records=None, changes=None, test_map=None, ignore_environment=False, sample=None, **kwargs):
     """
     Runs one or more chart tests that match the provided filter criteria.
 
     Parameters:
-        test_map_records, changes, test_map, ignore_environment:
+        test_map_records, changes, test_map, ignore_environment, sample:
             The options of the test map, as for
             :py:func:`opp_repl.test.fingerprint.task.run_fingerprint_tests`. The simulations of the
             chart tests write the records, and the records folder gets the simulations of each chart
@@ -292,7 +292,7 @@ def run_chart_tests(test_map_records=None, changes=None, test_map=None, ignore_e
     if changes or test_map_records:
         # lazy: the test map imports the coverage module, which imports the simulation modules
         from opp_repl.test.test_map.select import apply_test_map_options
-        kwargs = apply_test_map_options("chart", multiple_chart_test_tasks, kwargs, test_map_records=test_map_records, changes=changes, test_map=test_map, ignore_environment=ignore_environment)
+        kwargs = apply_test_map_options("chart", multiple_chart_test_tasks, kwargs, test_map_records=test_map_records, changes=changes, test_map=test_map, ignore_environment=ignore_environment, sample=sample)
         if changes:
             select_chart_simulation_tasks(multiple_chart_test_tasks)
         if test_map_records:

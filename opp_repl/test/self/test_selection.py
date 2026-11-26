@@ -378,6 +378,25 @@ class SelectionTestCase(unittest.TestCase):
         _, selection = self.select({"tests/unit/lib/L.cc": "int l() { return 1; }\n"})
         self.assertEqual({kind: reason.rule for kind, reason in selection.kinds.items()}, {"unit": "H4"})
 
+    def test_the_sample_takes_runs_that_the_selection_does_not_give(self):
+        from opp_repl.test.test_map.select import KindSelection, _add_sample
+        def sample(fraction, seed, tests=None):
+            kind_selection = KindSelection("fingerprint", tests=tests)
+            kind_selection.selected = {"fingerprint:examples/omnetpp.ini:One:#0:1s:tplx": [Reason("R2", None, None, None)]}
+            _add_sample(kind_selection, self.test_map, fraction, seed)
+            return {key: [reason.rule for reason in reasons] for key, reasons in kind_selection.selected.items()}
+        # r2 and r3 are not selected: half of them is one run, and the seed decides which
+        one = sample(0.5, "c1")
+        self.assertEqual(len(one), 2)
+        self.assertEqual([rules for key, rules in one.items() if "One" not in key], [["V5"]])
+        self.assertEqual(sample(0.5, "c1"), one)
+        self.assertEqual(len(sample(1, "c1")), 3)
+        # a test that is not a test at the target is not in the sample
+        self.assertEqual(sample(1, "c1", tests=["fingerprint:examples/omnetpp.ini:Two:#0:1s:tplx"]),
+                         {"fingerprint:examples/omnetpp.ini:One:#0:1s:tplx": ["R2"], "fingerprint:examples/omnetpp.ini:Two:#0:1s:tplx": ["V5"]})
+        with self.assertRaises(Exception):
+            sample(1.5, "c1")
+
     def add_release_only_block(self, names=[], includes=[]):
         with open(os.path.join(self.map_folder, "release-only.json"), "w") as f:
             json.dump({"blocks": [{"path": "src/a.h", "lines": [2, 4], "names": names, "includes": includes, "inside_function": False, "runs": ["r1"]}]}, f)

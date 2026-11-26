@@ -1213,7 +1213,9 @@ of the new commands.
   - [x] U2: `--update-from` of `opp_update_test_map`, with the check of the join and the check V5
     (`get_updated_test_map_records`). A run command now accepts `--changes` with
     `--test-map-records`: such records are the new records of an update.
-  - [ ] U3: `--sample FRACTION` of the run commands and of `opp_select_tests`.
+  - [x] U3: `--sample FRACTION` of the run commands and of `opp_select_tests`. The sample takes
+    runs, and all tests of each run, so check V5 compares whole runs. On the fingerprint map of
+    1847 runs, `--sample 0.05` adds 93 runs (239 tests), and two selections give the same runs.
   - [ ] U4: `doc/test_map.md`.
   - [ ] U5: INET `get-test-map.sh` (`FULL_ONLY`, `NEED_BUILD_TABLES`, the scheduled runs,
     `run_id`) and `fingerprint-tests.yml` (the update on a push, the full run each night, V4 only

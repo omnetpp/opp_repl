@@ -110,12 +110,12 @@ def get_smoke_test_tasks(cpu_time_limit="1s", run_number=None, sim_time_limits=N
     return get_simulation_test_tasks(cpu_time_limit=cpu_time_limit, run_number=run_number, name="smoke test", simulation_test_task_class=SmokeTestTask, **kwargs)
 get_smoke_test_tasks.__signature__ = combine_signatures(get_smoke_test_tasks, get_simulation_test_tasks, get_simulation_tasks)
 
-def run_smoke_tests(test_map_records=None, changes=None, test_map=None, ignore_environment=False, **kwargs):
+def run_smoke_tests(test_map_records=None, changes=None, test_map=None, ignore_environment=False, sample=None, **kwargs):
     """
     Runs one or more smoke tests that match the provided filter criteria.
 
     Parameters:
-        test_map_records, changes, test_map, ignore_environment:
+        test_map_records, changes, test_map, ignore_environment, sample:
             The options of the test map, as for
             :py:func:`opp_repl.test.fingerprint.task.run_fingerprint_tests`. The records of the
             smoke tests also serve the sanitizer tests, which stop at the same simulation time.
@@ -130,7 +130,7 @@ def run_smoke_tests(test_map_records=None, changes=None, test_map=None, ignore_e
     if changes or test_map_records:
         # lazy: the test map imports the coverage module, which imports the simulation modules
         from opp_repl.test.test_map.select import apply_test_map_options
-        kwargs = apply_test_map_options("smoke", multiple_test_tasks, kwargs, test_map_records=test_map_records, changes=changes, test_map=test_map, ignore_environment=ignore_environment)
+        kwargs = apply_test_map_options("smoke", multiple_test_tasks, kwargs, test_map_records=test_map_records, changes=changes, test_map=test_map, ignore_environment=ignore_environment, sample=sample)
     return multiple_test_tasks.run(**kwargs)
 run_smoke_tests.__signature__ = combine_signatures(run_smoke_tests, get_smoke_test_tasks)
 

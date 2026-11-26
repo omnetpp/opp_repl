@@ -486,14 +486,14 @@ def run_opp_tests(test_folder, **kwargs):
     multiple_test_tasks = get_opp_test_tasks(test_folder, **kwargs)
     return multiple_test_tasks.run(**kwargs)
 
-def _apply_test_map_options(kind, multiple_test_tasks, kwargs, test_map_records=None, changes=None, test_map=None, ignore_environment=False):
+def _apply_test_map_options(kind, multiple_test_tasks, kwargs, test_map_records=None, changes=None, test_map=None, ignore_environment=False, sample=None):
     if changes or test_map_records:
         # lazy: the test map imports the coverage module, which imports the simulation modules
         from opp_repl.test.test_map.select import apply_test_map_options
-        kwargs = apply_test_map_options(kind, multiple_test_tasks, kwargs, test_map_records=test_map_records, changes=changes, test_map=test_map, ignore_environment=ignore_environment)
+        kwargs = apply_test_map_options(kind, multiple_test_tasks, kwargs, test_map_records=test_map_records, changes=changes, test_map=test_map, ignore_environment=ignore_environment, sample=sample)
     return kwargs
 
-def _run_folder_opp_tests(kind, test_map_records=None, changes=None, test_map=None, ignore_environment=False, **kwargs):
+def _run_folder_opp_tests(kind, test_map_records=None, changes=None, test_map=None, ignore_environment=False, sample=None, **kwargs):
     """Run the opp ``.test`` suites for a folder-scoped kind (unit/module/queueing/…).
 
     These kinds are the generic ``opp`` runner scoped to a project-specific test
@@ -504,10 +504,10 @@ def _run_folder_opp_tests(kind, test_map_records=None, changes=None, test_map=No
     kwargs = apply_project_test_defaults(kind, kwargs)
     test_folder = kwargs.pop("test_folder", os.getcwd())
     multiple_test_tasks = get_opp_test_tasks(test_folder, **kwargs)
-    kwargs = _apply_test_map_options(kind, multiple_test_tasks, kwargs, test_map_records=test_map_records, changes=changes, test_map=test_map, ignore_environment=ignore_environment)
+    kwargs = _apply_test_map_options(kind, multiple_test_tasks, kwargs, test_map_records=test_map_records, changes=changes, test_map=test_map, ignore_environment=ignore_environment, sample=sample)
     return multiple_test_tasks.run(**kwargs)
 
-def run_binary_tests(kind, test_map_records=None, changes=None, test_map=None, ignore_environment=False, **kwargs):
+def run_binary_tests(kind, test_map_records=None, changes=None, test_map=None, ignore_environment=False, sample=None, **kwargs):
     """Run a project's self-checking binary test folder for *kind* (see
     :py:class:`BinaryTestTask`). The ``test_folder``/``executable``/``config``
     come from the project's ``.opp`` ``test_parameters[kind]["defaults"]``."""
@@ -517,24 +517,24 @@ def run_binary_tests(kind, test_map_records=None, changes=None, test_map=None, i
     config = kwargs.pop("config", "UnitTest")
     ini_file = kwargs.pop("ini_file", None)
     multiple_test_tasks = get_binary_test_tasks(test_folder, executable, config=config, ini_file=ini_file, **kwargs)
-    kwargs = _apply_test_map_options(kind, multiple_test_tasks, kwargs, test_map_records=test_map_records, changes=changes, test_map=test_map, ignore_environment=ignore_environment)
+    kwargs = _apply_test_map_options(kind, multiple_test_tasks, kwargs, test_map_records=test_map_records, changes=changes, test_map=test_map, ignore_environment=ignore_environment, sample=sample)
     return multiple_test_tasks.run(**kwargs)
 
 # The run commands of the kinds take the options of the test map (see run_fingerprint_tests): the
 # command line passes --changes only to a function that names it.
-def run_unit_tests(test_map_records=None, changes=None, test_map=None, ignore_environment=False, **kwargs):
-    return _run_folder_opp_tests("unit", test_map_records=test_map_records, changes=changes, test_map=test_map, ignore_environment=ignore_environment, **kwargs)
+def run_unit_tests(test_map_records=None, changes=None, test_map=None, ignore_environment=False, sample=None, **kwargs):
+    return _run_folder_opp_tests("unit", test_map_records=test_map_records, changes=changes, test_map=test_map, ignore_environment=ignore_environment, sample=sample, **kwargs)
 
-def run_module_tests(test_map_records=None, changes=None, test_map=None, ignore_environment=False, **kwargs):
-    return _run_folder_opp_tests("module", test_map_records=test_map_records, changes=changes, test_map=test_map, ignore_environment=ignore_environment, **kwargs)
+def run_module_tests(test_map_records=None, changes=None, test_map=None, ignore_environment=False, sample=None, **kwargs):
+    return _run_folder_opp_tests("module", test_map_records=test_map_records, changes=changes, test_map=test_map, ignore_environment=ignore_environment, sample=sample, **kwargs)
 
-def run_packet_tests(test_map_records=None, changes=None, test_map=None, ignore_environment=False, **kwargs):
+def run_packet_tests(test_map_records=None, changes=None, test_map=None, ignore_environment=False, sample=None, **kwargs):
     # INET's tests/packet is a single self-checking binary, not a .test suite.
-    return run_binary_tests("packet", test_map_records=test_map_records, changes=changes, test_map=test_map, ignore_environment=ignore_environment, **kwargs)
+    return run_binary_tests("packet", test_map_records=test_map_records, changes=changes, test_map=test_map, ignore_environment=ignore_environment, sample=sample, **kwargs)
 
-def run_queueing_tests(test_map_records=None, changes=None, test_map=None, ignore_environment=False, **kwargs):
-    return _run_folder_opp_tests("queueing", test_map_records=test_map_records, changes=changes, test_map=test_map, ignore_environment=ignore_environment, **kwargs)
+def run_queueing_tests(test_map_records=None, changes=None, test_map=None, ignore_environment=False, sample=None, **kwargs):
+    return _run_folder_opp_tests("queueing", test_map_records=test_map_records, changes=changes, test_map=test_map, ignore_environment=ignore_environment, sample=sample, **kwargs)
 
-def run_protocol_tests(test_map_records=None, changes=None, test_map=None, ignore_environment=False, **kwargs):
-    return _run_folder_opp_tests("protocol", test_map_records=test_map_records, changes=changes, test_map=test_map, ignore_environment=ignore_environment, **kwargs)
+def run_protocol_tests(test_map_records=None, changes=None, test_map=None, ignore_environment=False, sample=None, **kwargs):
+    return _run_folder_opp_tests("protocol", test_map_records=test_map_records, changes=changes, test_map=test_map, ignore_environment=ignore_environment, sample=sample, **kwargs)
 run_opp_tests.__signature__ = combine_signatures(run_opp_tests, get_opp_test_tasks)

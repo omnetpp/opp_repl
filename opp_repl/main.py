@@ -61,6 +61,7 @@ def parse_run_tasks_arguments(task_name, extra_args_fn=None):
     parser.add_argument("--changes", default=None, help="run only the tests whose outcome this change can change, from the test map of the change-based test selection: worktree (the working tree against HEAD), a commit, a range rev1..rev2 or rev1...rev2 (rev2 can be worktree), or a patch file; a kind of test that the map does not hold runs all its tests")
     parser.add_argument("--test-map", default=None, metavar="FOLDER", help="the folder of the test map for --changes (default: coverage/test-map/map in the project root)")
     parser.add_argument("--ignore-environment", action="store_true", help="with --changes: give a warning instead of selecting all tests when the environment differs from the map (the omnetpp or opp_repl commit, the compiler, the features)")
+    parser.add_argument("--sample", type=float, default=None, metavar="FRACTION", help="with --changes: also run this part of the runs whose tests the selection does not give, chosen at random with the target commit as the seed (check V5 of an update of the test map)")
     parser.set_defaults(concurrent=True, build=True, dry_run=False, handle_exception=True)
     if extra_args_fn is not None:
         extra_args_fn(parser)
@@ -105,11 +106,14 @@ def run_tasks_main(main_function, task_name, extra_args_fn=None):
         initialize_logging(args.log_level, args.external_command_log_level, args.log_file)
         _logger.debug(f"Processing command line arguments: {args}")
         kwargs = process_run_tasks_arguments(args)
-        if "changes" not in inspect.signature(main_function).parameters:
+        parameters = inspect.signature(main_function).parameters
+        if "changes" not in parameters:
             if kwargs.get("changes"):
                 _logger.warning(f"The test selection does not hold the {task_name} yet, so all of them run")
             for name in ("changes", "test_map", "ignore_environment"):
                 kwargs.pop(name, None)
+        if "sample" not in parameters:
+            kwargs.pop("sample", None)
         _logger.debug(f"Calling main function with: {kwargs}")
         result = main_function(**kwargs)
         _logger.debug(f"Main function returned: {result}")
@@ -211,6 +215,7 @@ def select_tests_main():
     parser.add_argument("--summary", action="store_true", help="print only the number of selected tests of each kind")
     parser.add_argument("--json", action="store_true", help="print the selection as JSON")
     parser.add_argument("--ignore-environment", action="store_true", help="give a warning instead of selecting all tests when the environment differs from the map (the omnetpp or opp_repl commit, the compiler, the features)")
+    parser.add_argument("--sample", type=float, default=None, metavar="FRACTION", help="also select this part of the runs whose tests the selection does not give, chosen at random with the target commit as the seed (check V5 of an update of the test map)")
     parser.add_argument("--load", action="append", default=[], metavar="OPP_FILE", help="load one or more .opp configuration files or directories at startup")
     parser.add_argument("-p", "--simulation-project", default=None, help="name of the simulation project (auto-detected from the working directory if not specified)")
     parser.add_argument("-l", "--log-level", choices=["ERROR", "WARN", "INFO", "DEBUG"], default="WARN", help="controls the verbosity of log messages (default: WARN)")
@@ -220,7 +225,7 @@ def select_tests_main():
         for opp_file in args.load or find_opp_files():
             load_opp_file(opp_file)
         simulation_project = determine_default_simulation_project(name=args.simulation_project)
-        test_selection = select_tests(simulation_project=simulation_project, changes=args.changes, map_folder=args.map_folder, kinds=args.kinds, ignore_environment=args.ignore_environment)
+        test_selection = select_tests(simulation_project=simulation_project, changes=args.changes, map_folder=args.map_folder, kinds=args.kinds, ignore_environment=args.ignore_environment, sample=args.sample)
         if args.json:
             print(json.dumps(test_selection.to_dict(), indent=1))
         else:

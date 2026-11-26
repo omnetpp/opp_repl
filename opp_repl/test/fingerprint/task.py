@@ -433,7 +433,7 @@ def get_fingerprint_test_tasks(stored_only=False, **kwargs):
     return get_tasks(**kwargs)
 get_fingerprint_test_tasks.__signature__ = combine_signatures(get_fingerprint_test_tasks, collect_fingerprint_test_groups, get_fingerprint_test_task, get_simulation_tasks)
 
-def run_fingerprint_tests(test_map_records=None, changes=None, test_map=None, ignore_environment=False, **kwargs):
+def run_fingerprint_tests(test_map_records=None, changes=None, test_map=None, ignore_environment=False, sample=None, **kwargs):
     """
     Runs one or more fingerprint tests that match the provided filter criteria.
 
@@ -456,6 +456,11 @@ def run_fingerprint_tests(test_map_records=None, changes=None, test_map=None, ig
             With *changes*: a difference between the environment of the map and this one gives a
             warning instead of selecting all tests.
 
+        sample (float or None):
+            With *changes*: also run this part of the tests that the selection does not give, chosen
+            at random with the target commit as the seed (check V5 of an update of the map, see
+            :py:func:`opp_repl.test.test_map.select.select_tests`).
+
         kwargs (dict):
             The filter criteria parameters are inherited from the :py:func:`get_fingerprint_test_tasks` function.
 
@@ -467,7 +472,7 @@ def run_fingerprint_tests(test_map_records=None, changes=None, test_map=None, ig
     if changes or test_map_records:
         # lazy: the test map imports the coverage module, which imports the simulation modules
         from opp_repl.test.test_map.select import apply_test_map_options
-        kwargs = apply_test_map_options("fingerprint", multiple_fingerprint_test_tasks, kwargs, test_map_records=test_map_records, changes=changes, test_map=test_map, ignore_environment=ignore_environment)
+        kwargs = apply_test_map_options("fingerprint", multiple_fingerprint_test_tasks, kwargs, test_map_records=test_map_records, changes=changes, test_map=test_map, ignore_environment=ignore_environment, sample=sample)
     return multiple_fingerprint_test_tasks.run(**kwargs)
 run_fingerprint_tests.__signature__ = combine_signatures(run_fingerprint_tests, get_fingerprint_test_tasks)
 

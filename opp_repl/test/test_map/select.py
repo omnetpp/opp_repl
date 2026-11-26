@@ -14,7 +14,9 @@ import ast
 import collections
 import json
 import logging
+import math
 import os
+import random
 import re
 import subprocess
 import sys
@@ -1413,7 +1415,26 @@ def _warn_about_an_old_map(test_map):
         if age > datetime.timedelta(days=MAX_TEST_MAP_AGE_DAYS):
             _logger.warning(f"The test map is {age.days} days old; each push run makes a map, so a newer map can exist, and an old map selects more tests")
 
-def select_tests(simulation_project=None, changes=WORKTREE, map_folder=None, kinds=None, ignore_environment=False):
+def _add_sample(kind_selection, test_map, sample, seed):
+    # check V5 of an update of the map: a random part of the runs whose tests the selection does not
+    # give, and all tests of these runs (at C, if the tests at C are known)
+    if not 0 < sample <= 1:
+        raise Exception(f"The sample {sample} is not more than 0 and at most 1")
+    kind = kind_selection.kind
+    tests_at_target = set(kind_selection.tests) if kind_selection.tests is not None else None
+    run_keys = collections.defaultdict(list)
+    for key, run_ids in test_map.tests.get(kind, {}).items():
+        if tests_at_target is None or key in tests_at_target:
+            for run_id in run_ids:
+                run_keys[run_id].append(key)
+    candidates = sorted(run_id for run_id, keys in run_keys.items() if not any(key in kind_selection.selected for key in keys))
+    count = min(len(candidates), math.ceil(sample * len(candidates)))
+    reason = Reason("V5", None, f"the random sample of {count} of the {len(candidates)} runs that the selection does not give", None)
+    for run_id in random.Random(f"{seed}:{kind}").sample(candidates, count):
+        for key in run_keys[run_id]:
+            kind_selection.selected.setdefault(key, []).append(reason)
+
+def select_tests(simulation_project=None, changes=WORKTREE, map_folder=None, kinds=None, ignore_environment=False, sample=None):
     """
     Selects the tests whose outcome a change can change.
 
@@ -1436,6 +1457,13 @@ def select_tests(simulation_project=None, changes=WORKTREE, map_folder=None, kin
         ignore_environment (bool):
             If true, a difference between the environment of the map and this one (the omnetpp and
             opp_repl commits, the compiler, the features) gives a warning instead of selecting all tests.
+
+        sample (float or None):
+            Also select this part (more than 0, at most 1) of the runs of each kind whose tests the
+            selection does not give, chosen at random, and all tests of these runs, with the rule V5.
+            The seed is the target commit, so each split of a run and the update of the map get the
+            same sample. Check V5 of an update of the map compares their new records with the old map
+            (section 15.6 of the test selection plan).
 
     Returns (:py:class:`TestSelection`):
         the selected tests of each kind, with the reasons.
@@ -1523,6 +1551,8 @@ def select_tests(simulation_project=None, changes=WORKTREE, map_folder=None, kin
                     if pattern.search(key):
                         kind_selection.selected.setdefault(key, []).append(Reason("4.3", None, "the project selects this test always", None))
                         break
+        if sample and not kind_selection.everything and kind not in KIND_LEVEL_KINDS:
+            _add_sample(kind_selection, test_map, sample, changes.base if changes.target == WORKTREE else changes.target)
         result[kind] = kind_selection
     test_selection = TestSelection(test_map, changes, map_folder, sides, environment, result)
     if is_ancestor:
@@ -1613,9 +1643,9 @@ def select_fingerprint_test_tasks(multiple_fingerprint_test_tasks, test_selectio
     multiple_fingerprint_test_tasks.tasks = groups
     return selected, total
 
-def get_test_selection_for_run(simulation_project, changes, test_map=None, ignore_environment=False, kinds=None):
+def get_test_selection_for_run(simulation_project, changes, test_map=None, ignore_environment=False, kinds=None, sample=None):
     """Returns the :py:class:`TestSelection` for the ``changes`` option of a run command, and logs what the selection includes."""
-    test_selection = select_tests(simulation_project=simulation_project, changes=changes, map_folder=test_map, kinds=kinds, ignore_environment=ignore_environment)
+    test_selection = select_tests(simulation_project=simulation_project, changes=changes, map_folder=test_map, kinds=kinds, ignore_environment=ignore_environment, sample=sample)
     if test_selection.changes.is_target_dirty():
         _logger.warning(f"The working tree has changes that the changes {changes} do not include; the tests run with them")
     for reason in test_selection.environment:
@@ -1638,7 +1668,7 @@ def select_test_tasks(kind, multiple_test_tasks, test_selection):
     _logger.info(f"Selected {selected} of {total} {kind} tests for the changes {test_selection.changes.describe()}" + (f": {everything}" if everything else ""))
     return multiple_test_tasks
 
-def apply_test_map_options(kind, multiple_test_tasks, kwargs, test_map_records=None, changes=None, test_map=None, ignore_environment=False):
+def apply_test_map_options(kind, multiple_test_tasks, kwargs, test_map_records=None, changes=None, test_map=None, ignore_environment=False, sample=None):
     """
     Applies the options of the test map to the tasks of a run command of *kind*, and returns the
     keyword arguments for the run of the tasks. With *changes*, only the selected tests stay (see
@@ -1647,7 +1677,7 @@ def apply_test_map_options(kind, multiple_test_tasks, kwargs, test_map_records=N
     selection are the new records of an update of the map (``opp_update_test_map --update-from``).
     """
     if changes:
-        test_selection = get_test_selection_for_run(kwargs["simulation_project"], changes, test_map=test_map, ignore_environment=ignore_environment, kinds=[kind])
+        test_selection = get_test_selection_for_run(kwargs["simulation_project"], changes, test_map=test_map, ignore_environment=ignore_environment, kinds=[kind], sample=sample)
         select_test_tasks(kind, multiple_test_tasks, test_selection)
     if test_map_records:
         if kwargs.get("mode") != "coverage":
