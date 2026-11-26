@@ -257,15 +257,38 @@ assumes that the environment does not change which code the tests run.
 
 ### In CI
 
+The INET workflow `fingerprint-tests.yml` is the model for a kind of test.
+
+A push to `master` runs all tests. Its debug jobs run in coverage mode, which
+has all flags of the debug mode, with `--test-map-records`. After its tests,
+split 0 runs `opp_update_test_map --no-run`, which adds the build tables of its
+build to its records. One more job writes the map from the records of all
+splits with `--no-run --records ... --build-tables ...`, and saves it as the
+artifact `test-map-<kind>`. The map is good also when a test fails, because the
+records give what the runs used, not the verdicts. The same job runs
+`opp_check_test_selection` against the previous push run (check V4).
+
 A pull request job selects its tests before it builds (INET rule T8):
 
 1. Get the map of the newest finished push run whose commit is an ancestor of
-   the merge base, else the weekly map.
-2. Install the commits of omnetpp and opp_repl that the header of the map
-   names (`omnetpp_commit`, `opp_repl_commit`).
-3. Run `opp_select_tests --kind <kind> --summary`. With `Selected 0 of M`, skip
-   the build and the tests; else build, and run the test command with
-   `--changes HEAD` (the merge commit of the pull request).
+   the base, else the weekly map (INET `_scripts/github/get-test-map.sh`).
+2. Check out omnetpp and install opp_repl at the commits that the header of the
+   map names (`omnetpp_commit`, `opp_repl_commit`). Configure omnetpp and the
+   project, but do not compile: the selection compares the compiler and the
+   features with the map.
+3. Run `opp_select_tests --kind <kind> --changes HEAD --json`, where `HEAD` is
+   the merge commit of the pull request. The number of the keys of
+   `kinds.<kind>.selected` is N. If `kinds.<kind>.tests` is null, the selection
+   cannot count the tests, and the job builds.
+4. The run splits the selected tests: split i of n gets every n-th group of
+   them, from group i. A group holds at least one test, so a split with i ≥ N
+   has no test. It skips its build and its tests, and its check passes. The
+   other splits build, and run the test command with `--changes HEAD --test-map
+   <map>`.
+
+A label such as `full-tests` and a missing map run all tests, with the newest
+omnetpp and opp_repl. A change that needs a newer omnetpp or opp_repl than the
+map needs this label.
 
 The selection before the build needs the tests of the kind at the merge commit,
 also the new ones: the fingerprint tests come from the store, the opp tests from
