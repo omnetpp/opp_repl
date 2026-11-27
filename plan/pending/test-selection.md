@@ -1705,3 +1705,38 @@ Limits:
   run read as an untracked file, the map does not give that file to the run, but a full map does.
 - A push that needs a newer omnetpp or opp_repl than the map fails in the environment of the map.
   The next full run (each night, or a push after a new full map) repairs this.
+
+### 15.7 The INET statistical and chart workflows (D13, proposed 2026-11-27)
+
+Facts (INET `master` 60160028cb):
+- `statistical-tests.yml` and `chart-tests.yml` each have three jobs: `changes` (the paths of a
+  pull request, a trivial landing of M9, and a run by hand for a pull request), the test job
+  `statistical-tests (release)` or `chart-tests (release)` (both required contexts), and `status`
+  (the commit status of a run by hand). On `master` they run by `workflow_run` after
+  `Check: baseline masters`, so that the baseline repositories hold the baseline of the commit.
+- `Master green` waits for the full run of the head of `master`, also for these two workflows,
+  and counts each job except `Test map` of the fingerprint workflow (`NOT_COUNTED_JOBS` of INET
+  `master_green.py`). Now the statistical job needs about 18 minutes, the chart job about 31.
+- In coverage mode, the statistical tests are about 3 times and the chart tests about 5 times
+  slower than in release mode (the weekly check run 45618369076). The verdicts are the same,
+  except `tutorials/protocol -c Network7`: its baseline records undefined behavior, which INET
+  c5d48a5cb4 repairs on a local branch.
+
+The design:
+1. The verdict stays in release mode. A coverage job as the verdict would make each landing
+   wait 3 to 5 times longer for `Master green`, and Network7 would fail until c5d48a5cb4 lands.
+2. On `master` (the `workflow_run` and a new nightly `schedule`), each of the two workflows gets
+   a job `records (coverage)` and a job `Test map`, as the fingerprint workflow has: the records
+   job runs the kind in coverage mode with `--test-map-records`, and its verdict does not count.
+   A push run updates the map of an earlier run (15.6), and the nightly run makes a full map when
+   `master`, omnetpp or opp_repl changed. `master_green.py` lists both jobs in
+   `NOT_COUNTED_JOBS`, so `Master green` waits only for the release job, as now.
+3. A pull request keeps the path job in front. For a relevant change, the job
+   `Environment and test map` finds the map of the kind (`get-test-map.sh`), and the release job
+   selects before the build (T8, with the tests at C of 93ee86d) and runs with
+   `--changes HEAD --test-map`. The names of the required contexts stay. The label `full-tests`
+   and a missing map run all tests.
+4. The run by hand for a pull request (the sweep) runs all tests, as now.
+5. First the statistical workflow; the chart workflow follows after its first runs on GitHub.
+6. Before each push, the order of the steps of each new or changed job runs in a new workspace
+   with real artifacts (the lesson of 15.5).
