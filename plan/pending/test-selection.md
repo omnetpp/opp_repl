@@ -520,7 +520,10 @@ phase 5 before the next kind starts.
     68.5%, functions 68.9%, branches 58.1%.
 - [x] Add the statistical, chart, smoke and validation tests to the weekly coverage run (D6). INET
   commit 0798401b78 on the local branch `topic/coverage-more-suites` (worktree
-  `inet-coverage-more-suites`), pushed to `origin` on 2026-11-25 without a pull request.
+  `inet-coverage-more-suites`), pushed to `origin` on 2026-11-25 without a pull request. On
+  2026-11-27 the user chose to put the weekly map on this branch; the local branch is rebased onto
+  `origin/master` 22df607673 (not pushed): 0798401b78, 6921020a07 and 0af9da9b1e are now
+  e217b83e87, 86f7c3baf0 and e9703f7200. The text below cites the old ids.
   - New jobs: `statistical-0` and `statistical-1` (945 tests in 2 splits), `chart` (236 charts,
     4752 simulations), `smoke` (945 runs) and `validation` (8 tests). Each writes one lcov file
     with the name of its suite. `-m coverage` replaces the release mode of the `inet.opp` defaults.
@@ -1140,35 +1143,52 @@ the local branch `topic/baseline-pin-parse` (worktree `opp_repl-baseline-pin-par
 `origin/main`), cherry-picked here as 4267bc0. The user agreed, and ac74914 is on `main` and
 `github_ci` since 2026-11-26.
 
-The INET branch is `topic/test-selection-ci` (worktree `inet-test-selection-ci`, on INET
-`origin/master` 22df607673, not pushed): 2a5b6b8c8c splits `configure-omnetpp.sh` and
-`configure-inet.sh` out of the build scripts, 49391b2ec3 adds `_scripts/github/get-test-map.sh`,
-bb45252b8f writes the new `fingerprint-tests.yml` and the field `ci_files` of `inet.opp`,
-e8d37e7882 the agent documentation, and f57d77cec3 and 3036d85a93 the updated maps of 15.6. Each commit passes `check-pull-request.sh`. The branch can land
+The INET branch is `topic/test-selection-ci` (worktree `inet-test-selection-ci`, not pushed). Since
+2026-11-27 it is on `topic/coverage-more-suites`, which is on INET `origin/master` 22df607673,
+because the weekly map needs the jobs of that branch (the old ids of the next commits are in
+`/var/tmp/claude-coverage-build/p5/inet-ci-rebase-map.txt`). `topic/coverage-more-suites` needs no
+new opp_repl, so it can land first. cc3cc8f3b1 splits `configure-omnetpp.sh` and
+`configure-inet.sh` out of the build scripts, 3213538917 adds `_scripts/github/get-test-map.sh`,
+5a7e7f984b writes the new `fingerprint-tests.yml` and the field `ci_files` of `inet.opp`,
+4b03c35597 the agent documentation, 2fd48daeed and 82508a9b20 the updated maps of 15.6, and
+f9ab27e6b9 the weekly map of 8.4. Each commit passes `check-pull-request.sh`. The branch can land
 only after this opp_repl branch is on `github_ci`: the opp_repl of the CI jobs does not accept an
 unknown field in `inet.opp` (its `SimulationProject.__init__` has no `**kwargs`), and it has none
 of the new commands.
 
-- [ ] The weekly coverage workflow writes the per-run profiles and the map. The report job commits
-  `map/` to the `master` branch of `inet-framework/coverage` (8.4).
+- [x] The weekly coverage workflow writes the per-run profiles and the map. The report job commits
+  `map/` to the `master` branch of `inet-framework/coverage` (8.4). INET f9ab27e6b9, not run: each
+  test job records (`--test-map-records`; the validation tests have no records), `fingerprint-0`
+  makes the build tables inside `run_suite`, while `LLVM_PROFILE_FILE` still names its pool, a new
+  job `test-map` writes the map of all kinds as the artifact `test-map-weekly` (30 days), and the
+  publish step commits it into `map/` without `build-tables.json.gz` (3.7 MB each week, and only
+  an update needs it, which starts from a map of the fingerprint workflow). A new job
+  `environment` fixes the omnetpp and opp_repl commits, which the header of the map names. Open:
+  the trim of the history to 52 weeks. The chart job used 90 of its 240 minutes without records;
+  locally (32 cores) the chart map run needed 18 minutes and the fingerprint map run 8.5 minutes.
 - [x] The map header gives the commit of opp_repl also for an installed package, so that a pull
   request job can install the same opp_repl (15.2). The jobs install opp_repl with `pip`, which
   leaves no git checkout; `opp_repl/_version.py` has `commit_id` (44fd08e). The value is short,
   for example `b1207b4ab`; pip accepts it after `@`, and the version string that the selection
   compares (`0.6.dev75+gb1207b4ab`) depends only on the commit.
 - [ ] The viewer page on `gh-pages`, and links to it from the `genhtml` pages.
-- [ ] The shadow check (V2) in the weekly workflow.
+- [ ] The shadow check (V2) in the weekly workflow. Deferred on 2026-11-27, with these facts: only
+  the fingerprint results have `test_map_key`, which `opp_check_test_selection` reads; the weekly
+  run uses the newest omnetpp and opp_repl, which usually changed in a week (15.1: on 49 of 84
+  days with a weekly map), and then the selection gives all tests and V2 checks nothing; the check
+  V4 of the nightly full run (15.6) already checks the fingerprint tests. V2 comes with the pull
+  request jobs of the other kinds (D12, D13), which need the selection of these kinds to be right.
 - [ ] opp_repl finds and reads the map from the history of `inet-framework/coverage`.
   `opp_checkout_test_baselines` also checks out this repository, next to `statistics` and
   `media`, so that `opp_select_tests` finds the map without `--map`. If `gh` is available, it also
   downloads the map of the newest finished push run (D11).
   Done: `find.py` (1ef30bf) and the field `test_map_repository` (75c9b58). The download of the map
-  of a push run is the INET script `get-test-map.sh` (49391b2ec3), because a pull request job needs
+  of a push run is the INET script `get-test-map.sh` (3213538917), because a pull request job needs
   the map before it installs opp_repl; `run-the-gates.md` uses the script also for a local map.
-  Open: `inet.opp` gets `test_map_repository` only when the weekly run writes maps, because
-  `inet-framework/coverage` has no `map/` yet.
+  `inet.opp` gets `test_map_repository` (folder `coverage/map-repository`, inside the folder
+  `/coverage` that INET ignores) together with the weekly map, in INET f9ab27e6b9.
 - [x] Rule H6: a change of a CI file selects all tests (5.6), 37cd323; INET `inet.opp` adds
-  `ci_files=[r"^_scripts/github/"]` (bb45252b8f).
+  `ci_files=[r"^_scripts/github/"]` (5a7e7f984b).
 - [ ] Calibrate the store of simulation-time limits of D2c on the CI runner, in the mode of the
   smoke tests (a manual workflow job), and replace the local values of INET 8e6b35315d.
 - [x] R6 v2 (D10, 5.1), before the pull request jobs (98023d7).
@@ -1178,11 +1198,11 @@ of the new commands.
   `MODE=coverage`: the coverage build must have all flags and defines of the debug build.
   The flags: omnetpp `Makefile.inc.in` gives `CFLAGS = $(CFLAGS_DEBUG) $(CFLAGS_COVERAGE)` for the
   coverage mode, INET adds only the precompiled header of the mode, and `precompiled_debug.h` and
-  `precompiled_coverage.h` are the same. Written in bb45252b8f, not run (15.5).
+  `precompiled_coverage.h` are the same. Written in 5a7e7f984b, not run (15.5).
 - [x] D5: the report gives the cost of the age of the map, and a map that is older than 2 days
   gives a warning (section 9, step 6), 1ef30bf.
 - [ ] The pull request job of 15.2 for each kind that passed its replay, first the fingerprint
-  tests. The fingerprint job is written in bb45252b8f, not run (15.5); G2a is then not necessary. It selects before the build (INET T8). It skips its steps with a step-level `if:`, not
+  tests. The fingerprint job is written in 5a7e7f984b, not run (15.5); G2a is then not necessary. It selects before the build (INET T8). It skips its steps with a step-level `if:`, not
   with a job-level `if:`: GitHub gives a matrix job that its job-level `if:` skips the name without
   its matrix value, so its required context never reports (INET `plan/pending/required-checks.md`
   F4, repaired for the statistical and chart jobs in INET 0572d1152e). Until the selection
@@ -1199,8 +1219,8 @@ of the new commands.
   their configs at C. Done for the fingerprint, opp and binary kinds (426f137); open for the
   kinds of simulations.
 - [x] The check of each push (V4, 15.3): `opp_check_test_selection` (955e6f3), and the step of the
-  job `test-map` of bb45252b8f, not run (15.5).
-- [x] The agent documentation of 15.4: INET `run-the-gates.md` and `testing.md` (e8d37e7882),
+  job `test-map` of 5a7e7f984b, not run (15.5).
+- [x] The agent documentation of 15.4: INET `run-the-gates.md` and `testing.md` (4b03c35597),
   opp_repl `doc/test_map.md`. TR-SELECTED-PASS applies only to the kinds that the map holds: with
   the fingerprint map of a push run, `opp_run_all_tests --changes` would run all tests of each
   other kind, and that is the unfiltered campaign that `run-the-gates.md` does not ask for.
@@ -1220,7 +1240,7 @@ of the new commands.
   - [x] U4: `doc/test_map.md`: "Update a map", the layout, "In CI" and the sample.
   - [x] U5: INET `get-test-map.sh` (`FULL_ONLY`, `NEED_BUILD_TABLES`, the scheduled runs,
     `run_id`) and `fingerprint-tests.yml` (the update on a push, the full run each night, V4 only
-    in a full run), and the INET documentation: INET f57d77cec3 and 3036d85a93, not run. Tested
+    in a full run), and the INET documentation: INET 2fd48daeed and 82508a9b20, not run. Tested
     here: `get-test-map.sh` against a local map repository with a full map and the map of an
     update (each limit takes the right map), the YAML, and the shell syntax of each `run` block.
     The run kinds of the job `environment`: `pull-request`, `update` (a push with a map that has
@@ -1433,7 +1453,7 @@ changes go on a local INET branch.
 
 ### 15.5 The INET fingerprint workflow (written 2026-11-26, not run)
 
-INET bb45252b8f replaces `fingerprint-tests.yml` with three jobs:
+INET 5a7e7f984b replaces `fingerprint-tests.yml` with three jobs:
 
 1. `environment` ("Environment and test map") fixes the omnetpp and opp_repl commits for all
    jobs of the run. On a pull request, they are the commits of the map, which `get-test-map.sh`
