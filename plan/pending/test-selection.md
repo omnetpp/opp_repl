@@ -1290,7 +1290,7 @@ from a `pip install` of git, as in CI. The results:
   with the change of the ruleset (W2). Only an admin changes the ruleset. Since 2026-11-26 it
   requires 14 contexts, among them the 8 `fingerprint-tests (debug|release, 0..3)`,
   `statistical-tests (release)`, `chart-tests (release)` and `Enforcement checker tests`.
-- [ ] H6 for each kind (the user decided on 2026-11-27). Every push of that day changed a file in
+- [x] H6 for each kind (the user decided on 2026-11-27). Every push of that day changed a file in
   `.github/workflows/` (for example the new `claude-code-review.yml`), so each push run selected
   all tests and wrote a full map. A kind names the files that its CI jobs run in
   `test_parameters[kind]["test_selection"]["ci_files"]`, and a change of such a file selects all
@@ -1299,6 +1299,9 @@ from a `pip install` of git, as in CI. The results:
   opp_repl 78dcb60 reads only `always` of `test_selection`, so INET can add the key while its
   maps still name that opp_repl; those jobs keep the wider rule until a map has the new one.
   INET names `fingerprint-tests.yml` for the fingerprint tests. INET T4 changes with it.
+  Done: opp_repl 402d864 and INET 60160028cb, pushed on 2026-11-27. With the INET `inet.opp` of
+  60160028cb, opp_repl 78dcb60 selects all 4726 fingerprint tests for the two commits that add
+  the Claude workflows, and 402d864 selects 3 (the run with the expected ERROR).
 - [ ] The tests of each kind at C without a build, for the selection before the build (T8): the
   `.test` files of the opp tests, the folder of the packet test; the kinds of simulations need
   their configs at C. Done for the fingerprint, opp and binary kinds (b66dd6a); open for the
@@ -1344,7 +1347,7 @@ from a `pip install` of git, as in CI. The results:
 - [ ] I2 v2: section logic for included ini files.
 - [ ] H5: instrument omnetpp.
 - [ ] Refresh the map for each test that a selected run executes in coverage mode.
-- [ ] R4: the constructors and destructors of the generated class descriptors depend only on the
+- [x] R4: the constructors and destructors of the generated class descriptors depend only on the
   name of their class and of its base class, which their own `.msg` file declares. If R4 leaves
   them out, 361 instead of 620 INET headers select all runs (phase 2). This is an assumption
   about the generated code, so it needs a decision.
@@ -1372,6 +1375,12 @@ from a `pip install` of git, as in CI. The results:
     with a value from the changed header, into a registry of another translation unit. One run
     still tests the skipped functions, so a crash in them is found, and V5 on each push and V4
     each night measure the misses.
+  - The user chose case (d) on 2026-11-27. `is_constructor_or_destructor` reads the component C1,
+    C2, C3, D0, D1 or D2 of the mangled nested name, also of a class template; on the 1996
+    functions of all runs it finds 1944, the 1943 of a regular expression and one constructor
+    template. `TestMap.get_shortest_run` gives the run that ended normally with the fewest
+    events. With only the changes of PR #1502 on the map commit 86cb985b6c, the selection gives
+    905 instead of 4726 fingerprint tests: R2 of `computeNumberOfBccEncoders` gives 899 of them.
 - [ ] R3 for the opp tests: select only the tests whose `.test` file names the changed file (a
   line number reaches a text output only with the name of the file). Phase 3 measured 296
   module and 654 protocol tests for a comment in line 1 of `Ipv4.cc`.

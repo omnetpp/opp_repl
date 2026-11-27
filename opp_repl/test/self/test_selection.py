@@ -297,6 +297,32 @@ class SelectionTestCase(unittest.TestCase):
             self.assertEqual([reason.rule for reason in selection.everything], ["H6"])
             os.remove(os.path.join(self.root, path))
 
+    def test_a_constructor_that_every_run_uses_selects_only_the_shortest_run(self):
+        # a header that only c.cc includes; c.cc has the constructor of a static object and k(), which r2 uses
+        write_files(self.root, {"src/c.h": "#pragma once\nstruct C {\n    C();\n};\n", "src/c.cc": "#include \"c.h\"\nC::C() {}\nint k() { return 4; }\n"})
+        git(self.root, "add", "src/c.h", "src/c.cc")
+        git(self.root, "commit", "-q", "-m", "c")
+        self.map_commit = git(self.root, "rev-parse", "HEAD")
+        for path, content in {"src/c.h.json": {"functions": [], "included_by": ["src/c.cc"]},
+                              "src/c.cc.json": {"functions": [{"lines": [2, 2], "name": "_ZN1CC2Ev", "runs": "all"},
+                                                              {"lines": [3, 3], "name": "_Z1kv", "runs": ["r2"]}], "tu_runs": "all"}}.items():
+            with open(os.path.join(self.map_folder, path), "w") as f:
+                json.dump(content, f)
+        self.test_map = TestMap(self.map_folder)
+        runs, selection = self.select({"src/c.h": "#pragma once\nstruct C {\n    C();\n    int y = 0;\n};\n"})
+        # r1 and r2 end normally with the same number of events, so r1 is the shortest run; r3 did not end normally
+        self.assertEqual(runs, {"r1", "r2"})
+        self.assertIn("the shortest run tests them", " ".join(reason.detail for _, reason in selection.entries))
+
+    def test_the_names_of_constructors_and_destructors(self):
+        for name in ("_ZN4inet3FooC2Ev", "_ZN4inet3FooD0Ev", "_ZN4inet4sctp20SctpHeaderSerializerC2EPKc", "_ZN1AC2IiEET_",
+                     "_ZNSt6vectorIiSaIiEED2Ev", "_ZN1XILi3EEC2Ev", "_ZN4inet5units5valueIlNS0_5units1bEEC2ERKl", "x.cc:_ZN1AD1Ev",
+                     "_ZN4inet18DelayedInitializerINS_13physicallayer14Ieee80211HtmcsEEC2ESt8functionIFPS2_vEE"):
+            self.assertTrue(is_constructor_or_destructor(name), name)
+        for name in ("_ZNK4inet13physicallayer19Ieee802154UwbIrMode6make_sEv", "_ZN4inet17InitStageRegistry12addInitStageEPKNS_9InitStageE",
+                     "x.cc:_ZN4inet12_GLOBAL__N_119__onstartup_func_15Ev", "_ZN1XILi3EE3getEv", "_ZN4inet5C1E2x3getEv", "_Z1kv", "main"):
+            self.assertFalse(is_constructor_or_destructor(name), name)
+
     def test_a_kind_that_names_the_files_of_its_ci_jobs(self):
         project = FakeProject(self.root)
         project.test_parameters = dict(project.test_parameters, fingerprint={"store": "store.json", "test_selection": {"ci_files": [r"^\.github/workflows/fingerprint\.yml$"]}})

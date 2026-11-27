@@ -355,7 +355,7 @@ selection, but not a wrong one.
 | C++ file, only comments or white space | none |
 | C++ file, inside a function body | the tests that ran the function |
 | C++ source, outside the function bodies; a new or removed source | all tests, because the static initialization of each process can change |
-| C++ header, outside the function bodies; a removed header | the tests that ran a function whose emitting translation units all include a changed header, and the tests whose own code includes it |
+| C++ header, outside the function bodies; a removed header | the tests that ran a function whose emitting translation units all include a changed header, and the tests whose own code includes it; for a constructor or a destructor that every run uses, only the shortest run |
 | a file outside the C++ folders that the own code of a test includes | the tests whose own code includes it |
 | `.test` file | its opp test |
 | `.anf` file | its chart tests |
@@ -425,9 +425,17 @@ sample. The update of a map uses the sample for check V5.
   build mode does not change the path of the code (no undefined behavior), and
   each inline and template function has the same definition in all translation
   units.
-- Some rules are wide. Each process runs the constructors of the generated
-  class descriptors, so a change of a header that a `_m.cc` file includes
-  selects all tests.
+- Some rules are wide, and one rule assumes something about the code. Each
+  process runs the constructors of static objects when the library loads: the
+  generated class descriptors, registered serializers and singletons. For a
+  changed header, rule R4 does not take such a constructor or destructor, which
+  every run uses, for a reason to select all tests; the shortest run tests it.
+  The assumption: a run sees a change of such a function only through the
+  state of its object, which the run reads with another function that R4 sees.
+  It fails for such a constructor that writes a value of the changed header
+  into a registry of another translation unit. The checks V4 and V5 measure
+  the misses. A function of all runs that is not a constructor or destructor,
+  for example a registry function, still selects all tests.
 - A run that does not end normally (an exit code other than 0, no profile, or
   no section chain) has `normal_end` false in `runs.json`. Such a run can have
   used inputs that the map does not show, for example NED lookups that failed.

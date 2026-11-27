@@ -489,6 +489,12 @@ class TestMap:
     def get_abnormal_runs(self):
         return sum(1 << index for index, run_id in enumerate(self.run_ids) if not self.runs[run_id].get("normal_end", True))
 
+    def get_shortest_run(self):
+        """Returns the bit of the run that ended normally with the fewest events, or 0 for a map without one."""
+        events = lambda index: ((self.runs[self.run_ids[index]].get("end") or {}).get("event") or 0, index)
+        normal = [index for index, run_id in enumerate(self.run_ids) if self.runs[run_id].get("normal_end", True)]
+        return 1 << min(normal, key=events) if normal else 0
+
 #
 # the rules
 #
@@ -949,12 +955,67 @@ def _select_release_only_includes(selection, change):
         for block in release_only[1].get(change.path, []):
             selection.add(selection.test_map.bits(block["runs"]), "R-NDEBUG", change.path, f"{_describe_block(block)} includes the file")
 
+CONSTRUCTOR_OR_DESTRUCTOR = ("C1", "C2", "C3", "D0", "D1", "D2")
+
+def is_constructor_or_destructor(name):
+    """
+    True if *name*, the Itanium-mangled name of a function, perhaps after the prefix ``<file>:`` of an
+    internal name, is a constructor or a destructor: a component C1, C2, C3, D0, D1 or D2 of its nested
+    name.
+    """
+    start = name.find("_ZN")
+    if start < 0:
+        return False
+    i, depth = start + 3, 0
+    while i < len(name) and name[i] in "rVKRO":
+        i += 1
+    while i < len(name):
+        c = name[i]
+        if c.isdigit():
+            j = i
+            while j < len(name) and name[j].isdigit():
+                j += 1
+            i = j + int(name[i:j])
+        elif depth == 0 and name.startswith(CONSTRUCTOR_OR_DESTRUCTOR, i) and name[i + 2:i + 3] in ("E", "I", "B"):
+            return True
+        elif c == "S":
+            # a substitution: St, Sa, Sb, Ss, Si, So, Sd, or S<seq-id>_
+            if name[i + 1:i + 2] in ("t", "a", "b", "s", "i", "o", "d"):
+                i += 2
+            else:
+                j = name.find("_", i + 1)
+                i = j + 1 if j > 0 else len(name)
+        elif c == "I" or (c == "N" and depth > 0):
+            # template arguments, or a nested name inside them, end with E
+            depth += 1
+            i += 1
+        elif c == "L" and depth > 0:
+            # a literal of a template argument: its value is not a length
+            j = name.find("E", i + 1)
+            i = j + 1 if j > 0 else len(name)
+        elif c == "E":
+            if depth == 0:
+                return False
+            depth -= 1
+            i += 1
+        else:
+            i += 1
+    return False
+
 def _select_changed_headers(selection, changed_headers):
     """
     Rule R4: a header changed outside the function bodies. Under the one-definition rule, a function
     can change only if each translation unit that emits it includes a changed header: a translation
     unit without one has the same text at both sides, so its copy of the function, and so all copies,
     stay the same.
+
+    A constructor or a destructor that every run of the map uses belongs to a static object, which each
+    simulation makes when the library loads, for example a class descriptor, a registered serializer or
+    a singleton. Its change can change a run only through the state of that object, which the run reads
+    with another function that this rule still sees, so the rule does not select all runs for it. The
+    shortest run tests these functions, so a crash in them is still found. The assumption fails for such
+    a constructor that writes a value of the changed header into a registry of another translation unit;
+    the checks V4 and V5 measure the misses.
     """
     test_map = selection.test_map
     includers = set()
@@ -968,6 +1029,7 @@ def _select_changed_headers(selection, changed_headers):
             selection.header_bits |= bits
     description = ", ".join(sorted(changed_headers)[:3]) + (f" and {len(changed_headers) - 3} more" if len(changed_headers) > 3 else "")
     rule = "R4" if "R4" in changed_headers.values() else sorted(set(changed_headers.values()))[0]
+    static_objects = 0 # the constructors and destructors that every run uses, which the shortest run tests
     for path, content in test_map.get_all_files().items():
         if not content or not content.get("functions"):
             continue
@@ -991,9 +1053,16 @@ def _select_changed_headers(selection, changed_headers):
                     continue
                 emitters = []
             if all(emitter in includers for emitter in emitters):
+                if function["runs"] == "all" and is_constructor_or_destructor(function.get("name") or ""):
+                    static_objects += 1
+                    continue
                 bits |= test_map.bits(function["runs"])
                 count += 1
         selection.add(bits, rule, description, f"{count} function(s) of {path}")
+        selection.header_bits |= bits
+    if static_objects:
+        bits = test_map.get_shortest_run()
+        selection.add(bits, rule, description, f"{static_objects} constructor(s) or destructor(s) that every run uses: the shortest run tests them")
         selection.header_bits |= bits
 
 def _select_ned(selection, changes, project):
