@@ -15,7 +15,7 @@ import unittest
 from opp_repl.test.test_map.changes import *
 from opp_repl.test.test_map.ndebug import *
 from opp_repl.test.test_map.select import *
-from opp_repl.test.test_map.select import _is_inside
+from opp_repl.test.test_map.select import _is_inside, _get_kind_reasons
 
 def git(folder, *args):
     return subprocess.run(["git", "-C", folder, *args], capture_output=True, text=True, check=True).stdout.strip()
@@ -296,6 +296,26 @@ class SelectionTestCase(unittest.TestCase):
             _, selection = self.select({path: "x\n"})
             self.assertEqual([reason.rule for reason in selection.everything], ["H6"])
             os.remove(os.path.join(self.root, path))
+
+    def test_a_kind_that_names_the_files_of_its_ci_jobs(self):
+        project = FakeProject(self.root)
+        project.test_parameters = dict(project.test_parameters, fingerprint={"store": "store.json", "test_selection": {"ci_files": [r"^\.github/workflows/fingerprint\.yml$"]}})
+        self.project = ProjectInfo(project)
+        rules = lambda reasons: [reason.rule for reason in reasons]
+        # another workflow: all tests of the kinds that name no files, none of the fingerprint tests
+        _, other = self.select({".github/workflows/other.yml": "x\n"})
+        self.assertEqual((other.everything, other.kinds, rules(other.unnamed_kinds)), ([], {}, ["H6"]))
+        self.assertEqual(rules(_get_kind_reasons("fingerprint", self.project, [other], {})), [])
+        self.assertEqual(rules(_get_kind_reasons("statistical", self.project, [other], {})), ["H6"])
+        os.remove(os.path.join(self.root, ".github/workflows/other.yml"))
+        # the own workflow of the fingerprint tests: all of them, and it is a workflow file for the other kinds
+        _, own = self.select({".github/workflows/fingerprint.yml": "x\n"})
+        self.assertEqual(rules(_get_kind_reasons("fingerprint", self.project, [own], {})), ["H6"])
+        self.assertEqual(rules(_get_kind_reasons("unit", self.project, [own], {})), ["H6"])
+        os.remove(os.path.join(self.root, ".github/workflows/fingerprint.yml"))
+        # a file of the CI jobs of each kind
+        _, script = self.select({"_scripts/ci/build.sh": "x\n"})
+        self.assertEqual(rules(script.everything), ["H6"])
 
     def test_a_build_file_selects_all(self):
         _, selection = self.select({"src/makefrag": "X = 1\n"})

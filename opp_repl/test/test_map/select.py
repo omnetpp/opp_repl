@@ -42,7 +42,9 @@ HARMLESS_PROJECT_FIELDS = {"github_owner", "github_repository", "github_workflow
 NON_TEST_KINDS = {"coverage"}
 # files of a harness commit that do not change the outcome of a test (rules H1 and H5)
 HARMLESS_HARNESS_FILES = re.compile(r"(^|/)(doc|plan|\.github)/|\.md$|^opp_repl/test/test_map/|^opp_repl/test/self/|^ui/")
-# rule H6: the files that the CI jobs of a GitHub project run; a project adds more with ci_files
+# rule H6: the workflow files of a GitHub project. A change of such a file selects all tests of each
+# kind that does not name the files of its CI jobs (test_parameters[kind]["test_selection"]["ci_files"]);
+# the project-level ci_files name the files that the CI jobs of each kind run.
 DEFAULT_CI_FILES = [r"^\.github/workflows/"]
 # the number of reasons that a test keeps for the explanation
 MAX_REASONS = 5
@@ -502,7 +504,13 @@ class ProjectInfo:
         self.ned_folders = [os.path.normpath(folder) for folder in simulation_project.ned_folders]
         self.test_parameters = simulation_project.test_parameters or {}
         self.python_folders = [os.path.normpath(folder) for folder in simulation_project.python_folders]
-        self.ci_files = [re.compile(pattern) for pattern in DEFAULT_CI_FILES + list(getattr(simulation_project, "ci_files", None) or [])]
+        # rule H6: the files of the CI jobs of each kind, the workflow files, and the files of the CI jobs
+        # of the kinds that name them
+        self.ci_files = [re.compile(pattern) for pattern in getattr(simulation_project, "ci_files", None) or []]
+        self.workflow_files = [re.compile(pattern) for pattern in DEFAULT_CI_FILES]
+        self.kind_ci_files = {kind: [re.compile(pattern) for pattern in parameters["test_selection"]["ci_files"]]
+                              for kind, parameters in self.test_parameters.items()
+                              if isinstance(parameters, dict) and "ci_files" in (parameters.get("test_selection") or {})}
         self.stores = {os.path.normpath(parameters["store"]): kind for kind, parameters in self.test_parameters.items() if isinstance(parameters, dict) and parameters.get("store")}
         # the folders of the own compiled code of the tests of a kind (rule H4): the support library
         # of the opp tests (lib_folder, else <test_folder>/lib), and the folder of a binary test
@@ -576,6 +584,7 @@ class SideSelection:
         self.entries = [] # (bits, reason)
         self.tests = [] # (kind, key, reason)
         self.kinds = {} # kind -> reason: all tests of the kind
+        self.unnamed_kinds = [] # reasons: all tests of each kind that does not name the files of its CI jobs (H6)
         self.everything = [] # reasons: all tests
         self.files = [] # (path, status, input class, {rule: effect})
         self.header_bits = 0 # the runs of rule R4 for all changed headers
@@ -602,6 +611,10 @@ class SideSelection:
     def add_kind(self, kind, rule, path, detail=""):
         self.kinds.setdefault(kind, Reason(rule, path, detail, self.side))
         self._note(rule, kind=kind)
+
+    def add_unnamed_kinds(self, rule, path, detail=""):
+        self.unnamed_kinds.append(Reason(rule, path, detail, self.side))
+        self._note(rule, kind="each kind that names no CI files")
 
     def add_test(self, kind, key, rule, path, detail=""):
         self.tests.append((kind, key, Reason(rule, path, detail, self.side)))
@@ -1219,9 +1232,16 @@ def select_side(test_map, project, file_changes, side):
             ned_changes.append(change)
             continue
         selection.begin_file(change, input_class)
-        if any(pattern.search(change.path) for pattern in project.ci_files):
-            # rule H6: the CI jobs build and run the tests with this file
+        # rule H6: the CI jobs build and run the tests with this file
+        workflow_file = any(pattern.search(change.path) for pattern in project.workflow_files)
+        if any(pattern.search(change.path) for pattern in project.ci_files) or (workflow_file and not project.kind_ci_files):
             selection.add_all("H6", change.path, "a file that the CI jobs run")
+        else:
+            for kind, patterns in sorted(project.kind_ci_files.items()):
+                if any(pattern.search(change.path) for pattern in patterns):
+                    selection.add_kind(kind, "H6", change.path, f"a file that the CI jobs of the {kind} tests run")
+            if workflow_file:
+                selection.add_unnamed_kinds("H6", change.path, "a workflow file, and the kind names no CI files")
         _select_release_only_includes(selection, change)
         _select_test_code(selection, change, project, input_class)
         if input_class == "build":
@@ -1434,6 +1454,14 @@ def _add_sample(kind_selection, test_map, sample, seed):
         for key in run_keys[run_id]:
             kind_selection.selected.setdefault(key, []).append(reason)
 
+def _get_kind_reasons(kind, project, sides, kind_environment):
+    """The reasons that select all tests of *kind*: the rules of the kind, its environment, and rule H6 for a
+    workflow file when the kind does not name the files of its CI jobs."""
+    reasons = [side.kinds[kind] for side in sides if kind in side.kinds] + ([kind_environment[kind]] if kind in kind_environment else [])
+    if kind not in project.kind_ci_files:
+        reasons += [reason for side in sides for reason in side.unnamed_kinds]
+    return reasons
+
 def select_tests(simulation_project=None, changes=WORKTREE, map_folder=None, kinds=None, ignore_environment=False, sample=None):
     """
     Selects the tests whose outcome a change can change.
@@ -1532,7 +1560,7 @@ def select_tests(simulation_project=None, changes=WORKTREE, map_folder=None, kin
     for kind in kinds:
         run_reasons = get_run_reasons(kind in LINE_SENSITIVE_KINDS)
         always = [re.compile(pattern) for pattern in project.test_parameters.get(kind, {}).get("test_selection", {}).get("always", [])]
-        kind_reasons = [side.kinds[kind] for side in sides if kind in side.kinds] + ([kind_environment[kind]] if kind in kind_environment else [])
+        kind_reasons = _get_kind_reasons(kind, project, sides, kind_environment)
         kind_selection = KindSelection(kind, tests=_get_test_universe(kind, project, target_side),
                                        everything=(everything or kind_reasons or [None])[0])
         if kind not in test_map.tests and kind not in KIND_LEVEL_KINDS:

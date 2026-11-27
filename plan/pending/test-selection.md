@@ -1290,6 +1290,15 @@ from a `pip install` of git, as in CI. The results:
   with the change of the ruleset (W2). Only an admin changes the ruleset. Since 2026-11-26 it
   requires 14 contexts, among them the 8 `fingerprint-tests (debug|release, 0..3)`,
   `statistical-tests (release)`, `chart-tests (release)` and `Enforcement checker tests`.
+- [ ] H6 for each kind (the user decided on 2026-11-27). Every push of that day changed a file in
+  `.github/workflows/` (for example the new `claude-code-review.yml`), so each push run selected
+  all tests and wrote a full map. A kind names the files that its CI jobs run in
+  `test_parameters[kind]["test_selection"]["ci_files"]`, and a change of such a file selects all
+  tests of that kind. A change of a file of the project-level `ci_files` still selects all
+  tests, and a change of a workflow file selects all tests of each kind that names no files.
+  opp_repl 78dcb60 reads only `always` of `test_selection`, so INET can add the key while its
+  maps still name that opp_repl; those jobs keep the wider rule until a map has the new one.
+  INET names `fingerprint-tests.yml` for the fingerprint tests. INET T4 changes with it.
 - [ ] The tests of each kind at C without a build, for the selection before the build (T8): the
   `.test` files of the opp tests, the folder of the packet test; the kinds of simulations need
   their configs at C. Done for the fingerprint, opp and binary kinds (b66dd6a); open for the

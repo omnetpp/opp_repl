@@ -372,7 +372,9 @@ selection, but not a wrong one.
 | a baseline entry of the trailer form (`trailer` instead of `ref`): a pin trailer in a commit message, or a new mark in the baseline repository | the tests whose baseline file differs between the baselines of the two ends of each diff, as `resolve_test_baseline` finds them without a fetch; all tests of the kind if a baseline is not known, for example if the checkout does not have a pin |
 | `.opp` file | for other changed test parameters of a kind, all tests of that kind; for other changed fields, all tests |
 | build file: `Makefile` and `makefrag` in the root or in a C++ folder, `.oppbuildspec`, `.oppfeatures`, `.oppfeaturestate`, `.nedfolders`, `.nedexclusions` | all tests |
-| file of the CI jobs: `.github/workflows/`, and the paths of `ci_files` of the project | all tests |
+| file of the CI jobs: the paths of `ci_files` of the project | all tests |
+| file of the CI jobs of a kind: the paths of `test_parameters[kind]["test_selection"]["ci_files"]` | all tests of that kind |
+| other file in `.github/workflows/` | all tests of each kind that does not name the files of its CI jobs |
 | other file | the tests that read, examined or looked up the file; for a new or removed file, also the tests that listed its folder |
 
 The feature and validation tests have no records. A change of a C++, msg, NED,

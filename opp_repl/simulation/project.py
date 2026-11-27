@@ -503,9 +503,12 @@ class SimulationProject:
                 :py:func:`dispatch_all_workflows <opp_repl.common.github.dispatch_all_workflows>`.
 
             ci_files (list of str or None):
-                Regular expressions of the paths of the files that the CI jobs run, relative to the
-                root, besides ``.github/workflows/`` (e.g. ``["^_scripts/github/"]``). The change-based
-                test selection selects all tests for a change of such a file (rule H6).
+                Regular expressions of the paths of the files that the CI jobs of each kind of test run,
+                relative to the root, besides ``.github/workflows/`` (e.g. ``["^_scripts/github/"]``). The
+                change-based test selection selects all tests for a change of such a file (rule H6). A
+                kind names the files of its own CI jobs in
+                ``test_parameters[kind]["test_selection"]["ci_files"]``; then a change of another workflow
+                file does not select its tests.
 
             test_map_repository (dict or None):
                 The repository whose folder ``map/`` holds the test map of each weekly run, for
