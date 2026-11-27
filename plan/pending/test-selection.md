@@ -522,8 +522,9 @@ phase 5 before the next kind starts.
   commit 0798401b78 on the local branch `topic/coverage-more-suites` (worktree
   `inet-coverage-more-suites`), pushed to `origin` on 2026-11-25 without a pull request. On
   2026-11-27 the user chose to put the weekly map on this branch; the local branch is rebased onto
-  `origin/master` 22df607673 (not pushed): 0798401b78, 6921020a07 and 0af9da9b1e are now
-  e217b83e87, 86f7c3baf0 and e9703f7200. The text below cites the old ids.
+  `origin/master` 22df607673, and on 2026-11-27 onto 4beee48d6f (not pushed): 0798401b78,
+  6921020a07 and 0af9da9b1e are now dae5fc0883, 9d80b39665 and 7ee2a1fc52. The text below cites
+  the old ids.
   - New jobs: `statistical-0` and `statistical-1` (945 tests in 2 splits), `chart` (236 charts,
     4752 simulations), `smoke` (945 runs) and `validation` (8 tests). Each writes one lcov file
     with the name of its suite. `-m coverage` replaces the release mode of the `inet.opp` defaults.
@@ -567,7 +568,7 @@ phase 5 before the next kind starts.
       exists for comparison. No other GitHub workflow runs the smoke tests.
   - Repairs (2026-11-25, local, not pushed):
     - module: INET 6921020a07 on `topic/coverage-more-suites` removes `--debug` from the two
-      tests, and opp_repl f5e6538 gives the test program `MODE` of the run. Both tests pass in
+      tests, and opp_repl 0f49bcd gives the test program `MODE` of the run. Both tests pass in
       coverage mode with `MODE` unset.
     - statistical: INET c5d48a5cb4 on the branch `topic/reordering-expected-sequence-number`
       gives `expectedSequenceNumber` the start value 0. Network7 passes in debug and release, and
@@ -737,7 +738,7 @@ commits that change only tests and ini files).
     process).
 - [x] Merge the per-run `.profdata` files of a suite into the suite profile. Make sure that
   `opp_export_coverage` gives the same lcov file as with the `%4m` pool.
-  - `merge_coverage_profiles` merges the `.profdata` files of the pool too (opp_repl c6201bf).
+  - `merge_coverage_profiles` merges the `.profdata` files of the pool too (opp_repl 04171da).
   - Checked: the 24 fingerprint runs of `examples/manetrouting`, once without and once with
     records, give the same lcov file (11.2 MB, `cmp` finds no difference). The wall time of the
     test is 20.0 s without and 20.3 s with the records.
@@ -748,7 +749,7 @@ commits that change only tests and ini files).
     source file), and the headers of 1773 translation units. It takes 10 s and 1.8 GB of memory
     (the JSON of the export).
   - `llvm-cov` asked the debuginfod server (`DEBUGINFOD_URLS`, set by Ubuntu) for each binary, and
-    each export took 95 to 160 s with less than 2 s of CPU time. opp_repl 24162a4 starts
+    each export took 95 to 160 s with less than 2 s of CPU time. opp_repl 9d9f176 starts
     `llvm-cov` without the variable. This also makes `opp_export_coverage` faster: 2.7 s instead of
     93 s for 24 runs, with the same lcov file.
   - The emitter table reads the profile counters (`__profc_<name>`, with the characters
@@ -780,7 +781,7 @@ commits that change only tests and ini files).
 - [x] Write the map in the layout of 8.3. Add the commands `opp_update_test_map` and
   `opp_show_test_map`.
   - `opp_repl/test/test_map/writer.py` (`write_test_map`, `update_test_map`) and `show.py`
-    (`show_test_map`), opp_repl 7ac2fb7; the guide is `doc/test_map.md`. Run sets are Python
+    (`show_test_map`), opp_repl cb8fefd; the guide is `doc/test_map.md`. Run sets are Python
     integers used as bit sets, and each distinct set is converted to text once.
   - `opp_update_test_map` removes the old records of its records folder (and refuses a folder
     with other files), runs the fingerprint tests with records, makes the build tables and writes
@@ -812,11 +813,11 @@ commits that change only tests and ini files).
 ### Phase 2 — the selection
 
 Phase 2 works in the opp_repl worktree `opp_repl-test-selection` (branch `topic/test-selection`,
-from main b23e67e). The checks use the map of version 2 that the phase 1 records give
+from main 37f8e77). The checks use the map of version 2 that the phase 1 records give
 (`opp_update_test_map --no-run`, 8 s), and a scratch INET worktree at the map commit 0af9da9b1e.
 
 - [x] Write the diff reader for diff(A,B) ∪ diff(A,C), with hunks and both sides of each file.
-  - `opp_repl/test/test_map/changes.py` (opp_repl 4193bbf): `git diff -U0 --no-renames` (a rename
+  - `opp_repl/test/test_map/changes.py` (opp_repl b22e20b): `git diff -U0 --no-renames` (a rename
     is a removal and an addition), the text of each side from git or from the working tree, and
     the untracked files of the working tree as added files. `Changes` gives B and C for
     `worktree`, a commit (B is its first parent), `rev1..rev2`, `rev1...rev2` (rev2 can be
@@ -824,7 +825,7 @@ from main b23e67e). The checks use the map of version 2 that the phase 1 records
     (`git apply --cached`, `git write-tree`), so the index and the working tree do not change.
   - When A = B, the selection reads only diff(A,C).
 - [x] Write the rules of section 5 and the always-selected tests of 4.3.
-  - `opp_repl/test/test_map/select.py` (opp_repl 865389e). A lexer gives the tokens of each line
+  - `opp_repl/test/test_map/select.py` (opp_repl 0910a16). A lexer gives the tokens of each line
     without comments and white space (white space stays a token between two punctuation
     characters and in a directive). A hunk is trivial (R1) if its old and new tokens are the
     same and no line outside the hunks changed its tokens (an opened comment).
@@ -833,7 +834,7 @@ from main b23e67e). The checks use the map of version 2 that the phase 1 records
   - R4 changed: the rule of the plan selected all runs for 1983 of 2018 headers, because 1626 of
     1710 TUs have all runs: inline functions that run in each process are in almost all TUs.
     The new rule (5.1) needs all emitting TUs of each function, so the map has version 2 with
-    `emitter-sets.json` (opp_repl ca85cdc, 367 sets, 2.3 MB). For each header of INET alone: 620
+    `emitter-sets.json` (opp_repl 6d771a8, 367 sets, 2.3 MB). For each header of INET alone: 620
     headers select all runs, 248 select none, and the median header selects 253 of 1847 runs.
     With only the number of more than 20 emitters (version 1), 732 headers select all runs.
   - The remaining all-run headers come from the static initialization of the TUs that include
@@ -862,7 +863,7 @@ from main b23e67e). The checks use the map of version 2 that the phase 1 records
   - Self tests: `opp_repl/test/self/test_selection.py` (28 tests, also the rules on a small map in
     a git repository).
 - [x] Add `opp_select_tests` with `--explain`, and `--changes` on the `opp_run_*_tests` commands.
-  - opp_repl 0a1b351. All `opp_run_*_tests` commands take `--changes`, `--test-map` and
+  - opp_repl 0f00aee. All `opp_run_*_tests` commands take `--changes`, `--test-map` and
     `--ignore-environment`. `run_fingerprint_tests` keeps the selected tests of each group of
     ingredients, and `run_all_tests` does so for its fingerprint tests. The other kinds run all
     tests, and the command says so. `--changes` with `--test-map-records` is an error.
@@ -873,9 +874,10 @@ from main b23e67e). The checks use the map of version 2 that the phase 1 records
 - [x] Remove `dependency.py`, `affected_by_modification_filter`, the `dependency_store` field and
   INET `tests/dependency.json`. Before the removal, show the evidence of section 2 that nothing
   uses them.
-  - Done 2026-11-26, after the user agreed: opp_repl d555265 removes the code, the parameters and
+  - Done 2026-11-26, after the user agreed: opp_repl 434c695 removes the code, the parameters and
     the line of `doc/opp_files.md`. INET de20ccae69 removed `tests/dependency.json` on a local
-    branch; on 2026-11-26 it was rebased and put on the local `master` as b79190d7e5. The 165 tests of
+    branch; on 2026-11-26 it was rebased and put on the local `master` as b79190d7e5, and on
+    2026-11-27 on the INET landing stack as 6eb45b156e. The 165 tests of
     `opp_run_self_test` pass, and the dry run of the fingerprint tests with `--changes` again
     selects 105 of 4726 tests.
   - One more user came up before the removal: the workspace file
@@ -904,7 +906,7 @@ and a check on a real INET map with the scenarios of phase 2.
 - [x] The kinds in general: one function applies `--test-map-records` and `--changes` to the
   tasks of any simulation test kind, `run_fingerprint_tests` uses it too, and
   `opp_update_test_map --kind` makes the map of more than one kind.
-  - opp_repl 962db43: `apply_test_map_options()`, `get_test_key()`, `select_test_tasks()` for
+  - opp_repl 3ac88fe: `apply_test_map_options()`, `get_test_key()`, `select_test_tasks()` for
     any task list, `TEST_MAP_RUN_FUNCTIONS`. `run_all_tests` used the name of a task list
     (`statistical test`) as the kind, so it never found these tests in the map; `get_test_kind()`
     repairs it.
@@ -923,11 +925,11 @@ and a check on a real INET map with the scenarios of phase 2.
     statistical tests (the dry run of `opp_run_statistical_tests`: 42 of 945, with the task
     without a record); the new member of `Ipv4.h` selects 3003 fingerprint and 730 statistical
     tests.
-  - E2 (opp_repl fb04361): a move of the `statistics` pin selects the tests whose `.sca` file
+  - E2 (opp_repl 652ba82): a move of the `statistics` pin selects the tests whose `.sca` file
     differs between the two pins. Without the two commits in the `statistics` checkout, it selects
     all statistical tests. Checked: the move between the pins e4517d35 and 323dd063 (INET
     617ce3bad0) changes 2 result files, and E2 selects exactly their 2 tests.
-  - R-NDEBUG (opp_repl 6158203): the map writer scans the C++ files (`ndebug.py`), and the map
+  - R-NDEBUG (opp_repl 167ebff): the map writer scans the C++ files (`ndebug.py`), and the map
     (version 3) holds `release-only.json`. The scan evaluates each conditional for release and
     debug, also through macros that depend on `NDEBUG`, and takes an `#ifndef X` whose branch
     defines X as a guard. For INET it finds the 5 blocks and the 2 `#else` branches of macros of
@@ -938,11 +940,11 @@ and a check on a real INET map with the scenarios of phase 2.
   comments of the ini files are expected results of the smoke tests. The ini rule ignores comments,
   so they need their own rule, as E1 for the store (phase 2: INET 0af9da9b1e changes only these
   comments).
-  - I4 (opp_repl 8fd9a8c): opp_repl reads `#expected-result`, `#abstract`, `#emulation` and
+  - I4 (opp_repl fad011f): opp_repl reads `#expected-result`, `#abstract`, `#emulation` and
     `#bounded` also from comments, so they are entries of their section, for all kinds. INET
     0af9da9b1e now selects the tests of its 8 configs (20 fingerprint, 8 statistical, 8 smoke and
     8 sanitizer tests) and the tests that are always selected; before, it selected none.
-  - D2c (opp_repl 741c430): `test_parameters["smoke"]["sim_time_limits"]` names the store, and
+  - D2c (opp_repl 7a3fbc6): `test_parameters["smoke"]["sim_time_limits"]` names the store, and
     `opp_update_smoke_test_sim_time_limits` writes it. A value stops the smoke, sanitizer and
     feature tests at that simulation time, with a safety CPU-time limit of 30 s; `null` is a run
     that ends by itself; a config without a value keeps 1 s of CPU time. A run that a CPU-time or
@@ -950,8 +952,8 @@ and a check on a real INET map with the scenarios of phase 2.
     record is also the run of the sanitizer test of its config. `test_parameters` accepts only
     known keys (`RECOGNISED_TEST_ASPECTS`), so `sim_time_limits` is one now, and INET needs this
     opp_repl.
-  - INET 8e6b35315d on the local branch `topic/smoke-sim-time-limits` (from `master`
-    b79190d7e5): `tests/smoke/sim-time-limits.json` from a calibration at 0af9da9b1e on 32 cores in
+  - INET 29ddab297a on the local branch `topic/smoke-sim-time-limits` (the top of the INET
+    landing stack, after 6eb45b156e): `tests/smoke/sim-time-limits.json` from a calibration at 0af9da9b1e on 32 cores in
     coverage mode (about as fast as debug), 931 values: 412 times and 519 null; 3 configs do not get
     past the initialization in 1 s. A calibration on the CI runner replaces it (phase 5).
   - Checked: the calibration of the 945 smoke tests needs 1:36; with the store, the 945 tests with
@@ -960,7 +962,7 @@ and a check on a real INET map with the scenarios of phase 2.
     3736 runs: the string literal of phase 2 selects 43 smoke and 43 sanitizer tests, the new member
     of `Ipv4.h` 731 of each, a comment 14 (the tests that are always selected).
 - [x] The opp tests: per-test profiles and the `.d` files of the test builds; packet as one run.
-  - opp_repl e4a6dff: `TestMapRecorder` writes the record of one run of any test. An opp test and
+  - opp_repl 53286a9: `TestMapRecorder` writes the record of one run of any test. An opp test and
     the packet test give the processes of their run its environment; the record has `includes`,
     the project files that the own code of the test includes (from the `.d` files). Keys:
     `<kind>:<path of the .test file>`, `packet:tests/packet`. The map gives each such file
@@ -968,7 +970,7 @@ and a check on a real INET map with the scenarios of phase 2.
     E6: a changed `.test` file selects its test. H4 (v1): a change below the support library of a
     kind (`lib_folder`, else `<test_folder>/lib`) or the folder of a binary test selects all tests
     of the kind.
-  - opp_repl f78317e: `--print-instantiated-ned-types` writes into the standard output, which the
+  - opp_repl 5ce224f: `--print-instantiated-ned-types` writes into the standard output, which the
     opp tests compare, and 10 TCP module tests failed with records. A wrapper of the test program
     moves these lines into `ned-types.txt`. A `%testprog` program can be another program, so its
     record has no NED types and no normal end: the 306 packetdrill tests of `tests/protocol`
@@ -978,7 +980,7 @@ and a check on a real INET map with the scenarios of phase 2.
     skipped and 45 expected failures, as without records); packet 1. A new declaration in
     `CanvasProjection.h` selects 7 unit tests.
 - [x] Chart and validation, with the traced process tree.
-  - opp_repl 1bcb8f8: the simulations of the chart tests write records (kind `chart`), and the run
+  - opp_repl 08d6c6c: the simulations of the chart tests write records (kind `chart`), and the run
     writes `chart-tests.json`, the run keys of the simulations of each chart test; the key is
     `chart:<.anf file>:<chart id>`. With `--changes`, only the simulations of the selected chart
     tests run. The chart code runs in the opp_repl process, so no trace: H3 (a changed `.anf`
@@ -1007,7 +1009,7 @@ and a check on a real INET map with the scenarios of phase 2.
     text output only with the name of the file, so R3 needs to select only the opp tests whose
     `.test` file names the changed file.
 - [x] Feature tests (v1 rule). Their smoke runs use the store of D2c.
-  - opp_repl bc1c908: a kind without records (`KIND_LEVEL_KINDS`). A C++, msg, NED, ini or build
+  - opp_repl 7ce15eb: a kind without records (`KIND_LEVEL_KINDS`). A C++, msg, NED, ini or build
     file, or a file that a run used, selects all feature tests if a rule of the file other than R3
     applies; the key is `feature:<type>:<feature>`. Checked: of the 253 INET feature tests, the
     string literal selects all and a comment none.
@@ -1032,11 +1034,11 @@ and a check on a real INET map with the scenarios of phase 2.
   - The method: 14 fingerprint maps at 28f1dc534c~p for p in 5, 14, 46, 56, 64, 99, 107, 112,
     115, 123, 127, 135, 142 and 193, so that each commit with ground truth has a map at most 6
     commits older than its parent (`p4/maps.sh`, a scratch worktree with a coverage build, a copy
-    of opp_repl at 34bbf14). For each commit, the selection of `--changes <commit>` with that map
+    of opp_repl at fb54983). For each commit, the selection of `--changes <commit>` with that map
     must select each test whose stored fingerprint changed by a rule other than E1, the store rule
     itself; a test that is not in the map is selected anyway. The selection is correct with any
     map (diff(A,B) ∪ diff(A,C)), so a test that it misses is a defect of a rule or an assumption.
-  - The fingerprint result (2026-11-26, opp_repl 98023d7, the 14 maps built in 2:36): of the 854
+  - The fingerprint result (2026-11-26, opp_repl d02bfb9, the 14 maps built in 2:36): of the 854
     changed values of 29 commits, a rule other than E1 selects 848. The other 6 are of two commits
     that change no code: bee6f62eea records the mipv6 Handover fingerprints again (only the
     store), and b436a63418 records the baselines again for the Ubuntu 26.04 runners (the store and
@@ -1079,7 +1081,7 @@ and a check on a real INET map with the scenarios of phase 2.
     integer literal in an arithmetic or a comparison of a function that ran in 5 to 600 runs gets
     1 more. After each build, all 4726 fingerprint tests run; each test whose result differs from
     the run without a change must be in the selection of the change (`--changes worktree`).
-  - Result (2026-11-26, opp_repl 98023d7): all 12 mutations build, and the selection misses no
+  - Result (2026-11-26, opp_repl d02bfb9): all 12 mutations build, and the selection misses no
     test. 7 mutations change the results of 3621 tests; the selection is tight for most of them
     (3 of the selected tests are the run that did not end normally):
 
@@ -1122,13 +1124,13 @@ branch. The workflows can only run after a push.
 
 On 2026-11-26 the user decided to rebase the local opp_repl `main` and this branch onto
 `origin/main` b3ea94e, which names baselines by commit trailers (E2 and E3 need it). All local ids
-changed; this plan cites the new ones, and the messages of 3bd5bbc and 75c9b58 too. The map of the
+changed; this plan cites the new ones, and the messages of af04e95 and 5d806e8 too. The map of the
 old to the new ids is in `/var/tmp/claude-coverage-build/p5/rebase-map.txt`. Two citations stay
-old: INET `origin/master` cites opp_repl 5930baf (now c6213e7) in `plan/pending/master-guards.md`
+old: INET `origin/master` cites opp_repl 5930baf (now 50d28b9) in `plan/pending/master-guards.md`
 and `plan/pending/required-checks.md`, and the local INET commit b79190d7e5 cites 5d46ac3 (now
-d555265); the rebase of the local INET `master` onto `origin/master` is to correct the second.
+434c695). Its copy on the INET landing stack, 6eb45b156e, cites 434c695.
 
-E2 and E3 for the trailer form (5356090): for a kind whose entry has a `trailer`,
+E2 and E3 for the trailer form (f5259d4): for a kind whose entry has a `trailer`,
 `select_baseline_trailers` resolves the baseline at both ends of each diff with
 `resolve_test_baseline(fetch=False)` and selects the tests whose baseline file differs. The `ref`
 form keeps the rule of the `.opp` diff, because `resolve_test_baseline` reads the `ref` of the
@@ -1143,21 +1145,63 @@ the local branch `topic/baseline-pin-parse` (worktree `opp_repl-baseline-pin-par
 `origin/main`), cherry-picked here as 4267bc0. The user agreed, and ac74914 is on `main` and
 `github_ci` since 2026-11-26.
 
+On 2026-11-27 this branch is rebased onto `origin/main` ac74914 for the push. Git drops 4267bc0,
+which has the patch id of ac74914, and the tree of the tip does not change. All local ids changed
+again, and this plan cites the new ones. Three messages cite the new ids too: af04e95, 5d806e8 and
+94c1ef2. The message of the id commit 3f6ac78 keeps 5930baf and 5d46ac3, because INET cites them.
+The map of the old to the new ids is in
+`/var/tmp/claude-coverage-build/p5/opp_repl-rebase-ac74914-map.txt`. After the push, an INET doc
+commit replaces 5930baf with 50d28b9 in the two INET plans.
+
 The INET branch is `topic/test-selection-ci` (worktree `inet-test-selection-ci`, not pushed). Since
-2026-11-27 it is on `topic/coverage-more-suites`, which is on INET `origin/master` 22df607673,
+2026-11-27 it is on `topic/coverage-more-suites`, which is on INET `origin/master` 4beee48d6f,
 because the weekly map needs the jobs of that branch (the old ids of the next commits are in
 `/var/tmp/claude-coverage-build/p5/inet-ci-rebase-map.txt`). `topic/coverage-more-suites` needs no
-new opp_repl, so it can land first. cc3cc8f3b1 splits `configure-omnetpp.sh` and
-`configure-inet.sh` out of the build scripts, 3213538917 adds `_scripts/github/get-test-map.sh`,
-5a7e7f984b writes the new `fingerprint-tests.yml` and the field `ci_files` of `inet.opp`,
-4b03c35597 the agent documentation, 2fd48daeed and 82508a9b20 the updated maps of 15.6, and
-f9ab27e6b9 the weekly map of 8.4. Each commit passes `check-pull-request.sh`. The branch can land
+new opp_repl, so it can land first. 8381aa4e07 splits `configure-omnetpp.sh` and
+`configure-inet.sh` out of the build scripts, 9521a8fbeb adds `_scripts/github/get-test-map.sh`,
+85ee8e0a71 writes the new `fingerprint-tests.yml` and the field `ci_files` of `inet.opp`,
+c9b54b48e1 the agent documentation, 3a6e0d21e4 and 948cc8fe12 the updated maps of 15.6, and
+a83a67969e the weekly map of 8.4. Each commit passes `check-pull-request.sh`. The branch can land
 only after this opp_repl branch is on `github_ci`: the opp_repl of the CI jobs does not accept an
 unknown field in `inet.opp` (its `SimulationProject.__init__` has no `**kwargs`), and it has none
 of the new commands.
 
+The INET landing stack (2026-11-27), on `origin/master` 4beee48d6f:
+- `topic/coverage-more-suites`: dae5fc0883, 9d80b39665 and 7ee2a1fc52;
+- `topic/test-selection-ci`: 8381aa4e07 to a83a67969e;
+- `topic/smoke-sim-time-limits`: 6eb45b156e, the removal of `tests/dependency.json` from the local
+  `master`, and 29ddab297a, the smoke limits. The four plan commits of the local `master` below
+  them are on `origin/master` in the same form, so the stack drops them. The two messages cite the
+  new opp_repl ids 434c695 and 7a3fbc6.
+
+The gates pass over the stack. `check-required-contexts.sh` (INET ee613d58e4) gives 8 notes: it
+cannot compute the job names of the fingerprint matrix, because `mode` is an expression. For a
+pull request the expression gives `debug` and `release`, which are the names of the 8 required
+contexts. The user decided on 2026-11-27 that the INET stack lands by a direct push to `master`.
+
+The check before the push (2026-11-27, step 1 of the landing). The folder
+`/var/tmp/claude-coverage-build/p5/check` has the layout of the CI workspace: omnetpp
+`origin/omnetpp-6.x` a2a6c68a91 with the configure options of `build-omnetpp.sh`, INET
+`origin/master` 4beee48d6f, and inet-gpl 363e9ea. The commands of the INET master workflows ran
+two times, with opp_repl ac74914 (`github_ci`) and with the tip of this branch. Each opp_repl came
+from a `pip install` of git, as in CI. The results:
+- The verdicts are the same in each of the 22 steps: the 4 release splits and split 0 of the debug
+  fingerprint tests; the checkouts of the statistical and chart baselines, also with `--commit`;
+  the statistical tests (934 PASS, 11 SKIP); the chart tests (225 PASS, 11 SKIP); the samples of
+  the attribution job with `-f` and `-w`; the unit, module, packet and queueing tests; the
+  protocol tests with inet-gpl (1166 PASS, 48 expected FAIL); the validation tests; the smoke tests.
+- Both versions print the line `Tested … (N concurrent)` that `baseline_attribution.py` reads.
+- The smoke tests fail in both versions with the same 8 PASS that are not expected. INET
+  7ee2a1fc52 removes these 8 markers, and the master CI does not run the smoke tests.
+- In coverage mode, the queueing tests and a fingerprint sample give the same verdicts. The two
+  exports of one pool give the same lcov files, byte for byte, and `opp_coverage_report` gives the
+  same report (without `--html`, because this machine has no `genhtml`). The old export needed 4
+  minutes and the new one 3 s, because of 9d9f176.
+- The help of `opp_run_feature_tests` only adds options. The feature tests run only on GitHub.
+- The INET tree has no changed file after the runs, and the 123 self tests pass.
+
 - [x] The weekly coverage workflow writes the per-run profiles and the map. The report job commits
-  `map/` to the `master` branch of `inet-framework/coverage` (8.4). INET f9ab27e6b9, not run: each
+  `map/` to the `master` branch of `inet-framework/coverage` (8.4). INET a83a67969e, not run: each
   test job records (`--test-map-records`; the validation tests have no records), `fingerprint-0`
   makes the build tables inside `run_suite`, while `LLVM_PROFILE_FILE` still names its pool, a new
   job `test-map` writes the map of all kinds as the artifact `test-map-weekly` (30 days), and the
@@ -1168,7 +1212,7 @@ of the new commands.
   locally (32 cores) the chart map run needed 18 minutes and the fingerprint map run 8.5 minutes.
 - [x] The map header gives the commit of opp_repl also for an installed package, so that a pull
   request job can install the same opp_repl (15.2). The jobs install opp_repl with `pip`, which
-  leaves no git checkout; `opp_repl/_version.py` has `commit_id` (44fd08e). The value is short,
+  leaves no git checkout; `opp_repl/_version.py` has `commit_id` (6714738). The value is short,
   for example `b1207b4ab`; pip accepts it after `@`, and the version string that the selection
   compares (`0.6.dev75+gb1207b4ab`) depends only on the commit.
 - [ ] The viewer page on `gh-pages`, and links to it from the `genhtml` pages.
@@ -1182,27 +1226,27 @@ of the new commands.
   `opp_checkout_test_baselines` also checks out this repository, next to `statistics` and
   `media`, so that `opp_select_tests` finds the map without `--map`. If `gh` is available, it also
   downloads the map of the newest finished push run (D11).
-  Done: `find.py` (1ef30bf) and the field `test_map_repository` (75c9b58). The download of the map
-  of a push run is the INET script `get-test-map.sh` (3213538917), because a pull request job needs
+  Done: `find.py` (6193a98) and the field `test_map_repository` (5d806e8). The download of the map
+  of a push run is the INET script `get-test-map.sh` (9521a8fbeb), because a pull request job needs
   the map before it installs opp_repl; `run-the-gates.md` uses the script also for a local map.
   `inet.opp` gets `test_map_repository` (folder `coverage/map-repository`, inside the folder
-  `/coverage` that INET ignores) together with the weekly map, in INET f9ab27e6b9.
-- [x] Rule H6: a change of a CI file selects all tests (5.6), 37cd323; INET `inet.opp` adds
-  `ci_files=[r"^_scripts/github/"]` (5a7e7f984b).
+  `/coverage` that INET ignores) together with the weekly map, in INET a83a67969e.
+- [x] Rule H6: a change of a CI file selects all tests (5.6), 6f88d0c; INET `inet.opp` adds
+  `ci_files=[r"^_scripts/github/"]` (85ee8e0a71).
 - [ ] Calibrate the store of simulation-time limits of D2c on the CI runner, in the mode of the
-  smoke tests (a manual workflow job), and replace the local values of INET 8e6b35315d.
-- [x] R6 v2 (D10, 5.1), before the pull request jobs (98023d7).
+  smoke tests (a manual workflow job), and replace the local values of INET 29ddab297a.
+- [x] R6 v2 (D10, 5.1), before the pull request jobs (d02bfb9).
 - [x] The push run of the fingerprint tests runs in coverage mode instead of debug mode and saves
   its map as an artifact (D11, 8.4). Each split saves its records, and one more job writes the map
   from them and from the tables of the build. First compare the compile flags of `MODE=debug` and
   `MODE=coverage`: the coverage build must have all flags and defines of the debug build.
   The flags: omnetpp `Makefile.inc.in` gives `CFLAGS = $(CFLAGS_DEBUG) $(CFLAGS_COVERAGE)` for the
   coverage mode, INET adds only the precompiled header of the mode, and `precompiled_debug.h` and
-  `precompiled_coverage.h` are the same. Written in 5a7e7f984b, not run (15.5).
+  `precompiled_coverage.h` are the same. Written in 85ee8e0a71, not run (15.5).
 - [x] D5: the report gives the cost of the age of the map, and a map that is older than 2 days
-  gives a warning (section 9, step 6), 1ef30bf.
+  gives a warning (section 9, step 6), 6193a98.
 - [ ] The pull request job of 15.2 for each kind that passed its replay, first the fingerprint
-  tests. The fingerprint job is written in 5a7e7f984b, not run (15.5); G2a is then not necessary. It selects before the build (INET T8). It skips its steps with a step-level `if:`, not
+  tests. The fingerprint job is written in 85ee8e0a71, not run (15.5); G2a is then not necessary. It selects before the build (INET T8). It skips its steps with a step-level `if:`, not
   with a job-level `if:`: GitHub gives a matrix job that its job-level `if:` skips the name without
   its matrix value, so its required context never reports (INET `plan/pending/required-checks.md`
   F4, repaired for the statistical and chart jobs in INET 0572d1152e). Until the selection
@@ -1216,11 +1260,11 @@ of the new commands.
   `statistical-tests (release)`, `chart-tests (release)` and `Enforcement checker tests`.
 - [ ] The tests of each kind at C without a build, for the selection before the build (T8): the
   `.test` files of the opp tests, the folder of the packet test; the kinds of simulations need
-  their configs at C. Done for the fingerprint, opp and binary kinds (426f137); open for the
+  their configs at C. Done for the fingerprint, opp and binary kinds (b66dd6a); open for the
   kinds of simulations.
-- [x] The check of each push (V4, 15.3): `opp_check_test_selection` (955e6f3), and the step of the
-  job `test-map` of 5a7e7f984b, not run (15.5).
-- [x] The agent documentation of 15.4: INET `run-the-gates.md` and `testing.md` (4b03c35597),
+- [x] The check of each push (V4, 15.3): `opp_check_test_selection` (d832e67), and the step of the
+  job `test-map` of 85ee8e0a71, not run (15.5).
+- [x] The agent documentation of 15.4: INET `run-the-gates.md` and `testing.md` (c9b54b48e1),
   opp_repl `doc/test_map.md`. TR-SELECTED-PASS applies only to the kinds that the map holds: with
   the fingerprint map of a push run, `opp_run_all_tests --changes` would run all tests of each
   other kind, and that is the unfiltered campaign that `run-the-gates.md` does not ask for.
@@ -1240,7 +1284,7 @@ of the new commands.
   - [x] U4: `doc/test_map.md`: "Update a map", the layout, "In CI" and the sample.
   - [x] U5: INET `get-test-map.sh` (`FULL_ONLY`, `NEED_BUILD_TABLES`, the scheduled runs,
     `run_id`) and `fingerprint-tests.yml` (the update on a push, the full run each night, V4 only
-    in a full run), and the INET documentation: INET 2fd48daeed and 82508a9b20, not run. Tested
+    in a full run), and the INET documentation: INET 3a6e0d21e4 and 948cc8fe12, not run. Tested
     here: `get-test-map.sh` against a local map repository with a full map and the map of an
     update (each limit takes the right map), the YAML, and the shell syntax of each `run` block.
     The run kinds of the job `environment`: `pull-request`, `update` (a push with a map that has
@@ -1453,7 +1497,7 @@ changes go on a local INET branch.
 
 ### 15.5 The INET fingerprint workflow (written 2026-11-26, not run)
 
-INET 5a7e7f984b replaces `fingerprint-tests.yml` with three jobs:
+INET 85ee8e0a71 replaces `fingerprint-tests.yml` with three jobs:
 
 1. `environment` ("Environment and test map") fixes the omnetpp and opp_repl commits for all
    jobs of the run. On a pull request, they are the commits of the map, which `get-test-map.sh`
