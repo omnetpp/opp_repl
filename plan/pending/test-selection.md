@@ -1348,6 +1348,30 @@ from a `pip install` of git, as in CI. The results:
   name of their class and of its base class, which their own `.msg` file declares. If R4 leaves
   them out, 361 instead of 620 INET headers select all runs (phase 2). This is an assumption
   about the generated code, so it needs a decision.
+  - Examined on 2026-11-27 (the user asked), with the map of INET 86cb985b6c (1847 runs, 2018
+    headers). INET PR #1502 changes `Ieee80211HtMode.h` and `Ieee80211VhtMode.h`, and its
+    pull-request jobs selected all 4726 fingerprint tests. The six translation units that include
+    the two headers have one function each that every run uses: the constructors of
+    `Ieee80211HtCompliantModes` and `Ieee80211VhtCompliantModes`. Each simulation makes their
+    `static OPP_THREAD_LOCAL const ... singleton`, the constructor body is empty, and a run
+    without Wi-Fi never calls `getCompliantMode`.
+  - 1996 functions have `runs: all`: 1746 constructors and destructors of class descriptors, 191
+    other constructors (serializers that a registration makes, singletons), 6 destructors and 53
+    other functions (registries such as `InitStageRegistry::addInitStage`, `SharedDataManager`,
+    startup functions, lifecycle listeners).
+  - For a change of one header, R4 selects all runs for (a) 620 headers now, (b) 361 without the
+    descriptor functions, (c) 18 without all 1996 functions, and (d) 135 without the 1943
+    constructors and destructors. The mean part of the runs is 36.3%, 26.2%, 15.6% and 17.5%,
+    the median 4.9%, 2.3%, 1.6% and 1.6%. The two headers of PR #1502 select 313 runs in (c) and
+    (d). The script is `/var/tmp/claude-coverage-build/p5/h6/r4measure.py`.
+  - Case (c) is not safe: every module reads the order of the init stages, which a function of
+    all runs makes, and the code that reads it is in omnetpp. Case (d) keeps these functions.
+  - The assumption of (d): a constructor or a destructor that every run uses belongs to a static
+    object, and a change of it changes a run only through the state of that object, which the run
+    reads with another function that R4 still sees. It fails for such a constructor that writes,
+    with a value from the changed header, into a registry of another translation unit. One run
+    still tests the skipped functions, so a crash in them is found, and V5 on each push and V4
+    each night measure the misses.
 - [ ] R3 for the opp tests: select only the tests whose `.test` file names the changed file (a
   line number reaches a text output only with the name of the file). Phase 3 measured 296
   module and 654 protocol tests for a comment in line 1 of `Ipv4.cc`.
