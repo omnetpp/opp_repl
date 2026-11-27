@@ -420,6 +420,20 @@ class SelectionTestCase(unittest.TestCase):
         tests = _get_test_universe("unit", self.project, Side(self.root, WORKTREE))
         self.assertEqual(tests, ["unit:tests/unit/A.test", "unit:tests/unit/B.test"])
 
+    def test_the_simulation_tests_at_the_target_without_a_build(self):
+        from opp_repl.test.test_map.select import _get_test_universe
+        side = Side(self.root, WORKTREE)
+        # no ini, anf or opp file changed: the tests of the map
+        self.assertEqual(_get_test_universe("statistical", self.project, side, self.test_map, ["src/a.cc", "examples/data.xml"]),
+                         ["statistical:examples/omnetpp.ini:One:#0:1s", "statistical:examples/omnetpp.ini:Two:#0:1s"])
+        self.assertEqual(_get_test_universe("chart", self.project, side, self.test_map, ["src/a.cc"]), ["chart:examples/results.anf:1"])
+        # a changed file that can define a test: unknown without the build
+        for path in ("examples/omnetpp.ini", "examples/results.anf", "inet.opp"):
+            self.assertIsNone(_get_test_universe("statistical", self.project, side, self.test_map, [path]), path)
+        # a kind of all or nothing, and a kind that the map does not hold
+        self.assertIsNone(_get_test_universe("validation", self.project, side, self.test_map, []))
+        self.assertIsNone(_get_test_universe("smoke", self.project, side, self.test_map, []))
+
     def test_the_support_library_selects_all_tests_of_its_kind(self):
         _, selection = self.select({"tests/unit/lib/L.cc": "int l() { return 1; }\n"})
         self.assertEqual({kind: reason.rule for kind, reason in selection.kinds.items()}, {"unit": "H4"})

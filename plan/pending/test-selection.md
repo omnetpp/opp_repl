@@ -1265,8 +1265,11 @@ from a `pip install` of git, as in CI. The results:
   `/coverage` that INET ignores) together with the weekly map, in INET e99b616741.
 - [x] Rule H6: a change of a CI file selects all tests (5.6), 6f88d0c; INET `inet.opp` adds
   `ci_files=[r"^_scripts/github/"]` (8e5c18d1f5).
-- [ ] Calibrate the store of simulation-time limits of D2c on the CI runner, in the mode of the
-  smoke tests (a manual workflow job), and replace the local values of INET 184493ebeb.
+- [ ] Calibrate the store of simulation-time limits of D2c. No CI job does it: a test workflow only
+  tests, and the author makes stored values on their own machine (the user, 2026-11-23, about the
+  baselines). The local values of INET 184493ebeb stay. If the smoke tests of the weekly coverage
+  run of 2026-11-29 take too long or stop too early on the CI runner, the author calibrates again
+  with `opp_update_smoke_test_sim_time_limits`, with a factor for the speed of the runner.
 - [x] R6 v2 (D10, 5.1), before the pull request jobs (d02bfb9).
 - [x] The push run of the fingerprint tests runs in coverage mode instead of debug mode and saves
   its map as an artifact (D11, 8.4). Each split saves its records, and one more job writes the map
@@ -1304,8 +1307,10 @@ from a `pip install` of git, as in CI. The results:
   the Claude workflows, and 402d864 selects 3 (the run with the expected ERROR).
 - [ ] The tests of each kind at C without a build, for the selection before the build (T8): the
   `.test` files of the opp tests, the folder of the packet test; the kinds of simulations need
-  their configs at C. Done for the fingerprint, opp and binary kinds (b66dd6a); open for the
-  kinds of simulations.
+  their configs at C. Done for the fingerprint, opp and binary kinds (b66dd6a). For the kinds of
+  simulations (2026-11-27): while no `.ini`, `.anf` or `.opp` file changes on either side, no
+  test of the kind is new or removed, so its tests at C are the tests of the map; else they stay
+  unknown, and the job builds. The kinds `validation` and `feature` keep all or nothing.
 - [x] The check of each push (V4, 15.3): `opp_check_test_selection` (d832e67), and the step of the
   job `test-map` of 8e5c18d1f5, not run (15.5).
 - [x] The agent documentation of 15.4: INET `run-the-gates.md` and `testing.md` (5536d13b78),

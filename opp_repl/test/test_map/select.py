@@ -1464,10 +1464,14 @@ class TestSelection:
                                      "selected": {key: [str(reason) for reason in self.get_reasons(kind, key)] for key in (selected or [])}}
         return result
 
-def _get_test_universe(kind, project, target_side):
+# the files that define the tests of a kind of simulations: the configs, the charts and the test parameters
+TEST_DEFINITION_FILES = re.compile(r"\.(ini|anf|opp)$")
+
+def _get_test_universe(kind, project, target_side, test_map=None, changed_paths=()):
     # the tests of a kind at C, also the new ones, without a build (rule T8 of INET): the fingerprint
-    # tests from the store, the opp tests from their .test files, a binary test from its folder;
-    # None for a kind whose tests need the build (the configs of the simulations)
+    # tests from the store, the opp tests from their .test files, a binary test from its folder, and
+    # the tests of the map for a kind of simulations while no file that defines its tests changed since
+    # the map; None for a kind whose tests need the build to list the configs of the simulations
     if kind == "fingerprint":
         parameters = project.test_parameters.get("fingerprint", {})
         store = parameters.get("store")
@@ -1491,6 +1495,10 @@ def _get_test_universe(kind, project, target_side):
         # the .test files below the test folder, not in a work folder below it (get_opp_test_tasks)
         return [f"{kind}:{path}" for path in target_side.list_files(test_folder)
                 if path.endswith(".test") and "work" not in os.path.relpath(os.path.dirname(path), test_folder).split("/")]
+    if test_map is not None and kind in test_map.tests and kind not in KIND_LEVEL_KINDS \
+            and not any(TEST_DEFINITION_FILES.search(path) for path in changed_paths):
+        # without a change of an ini, anf or opp file, a test of the map is a test at C, and no test is new
+        return list(test_map.tests[kind])
     return None
 
 # a map that is older gives a warning (decision D5): each push run makes a map (D11)
@@ -1606,6 +1614,8 @@ def select_tests(simulation_project=None, changes=WORKTREE, map_folder=None, kin
             _logger.warning(f"Ignored: {reason.detail}")
     kinds = kinds or sorted(set(test_map.tests) | KIND_LEVEL_KINDS)
     target_side = Side(root_folder, changes.target)
+    # the changed files of both sides: a test that is new on the base is also unknown to the map
+    changed_paths = [path for side in sides for path, _, _, _ in side.files]
     abnormal = test_map.get_abnormal_runs()
     entries = [(bits, reason) for side in sides for bits, reason in side.entries]
     if abnormal:
@@ -1630,7 +1640,7 @@ def select_tests(simulation_project=None, changes=WORKTREE, map_folder=None, kin
         run_reasons = get_run_reasons(kind in LINE_SENSITIVE_KINDS)
         always = [re.compile(pattern) for pattern in project.test_parameters.get(kind, {}).get("test_selection", {}).get("always", [])]
         kind_reasons = _get_kind_reasons(kind, project, sides, kind_environment)
-        kind_selection = KindSelection(kind, tests=_get_test_universe(kind, project, target_side),
+        kind_selection = KindSelection(kind, tests=_get_test_universe(kind, project, target_side, test_map, changed_paths),
                                        everything=(everything or kind_reasons or [None])[0])
         if kind not in test_map.tests and kind not in KIND_LEVEL_KINDS:
             kind_selection.everything = kind_selection.everything or Reason("4.3", None, f"the map has no {kind} tests", None)

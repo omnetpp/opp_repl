@@ -338,9 +338,11 @@ map needs this label.
 
 The selection before the build needs the tests of the kind at the merge commit,
 also the new ones: the fingerprint tests come from the store, the opp tests from
-their `.test` files, and the packet test from its folder. A kind of simulations
-whose configs need the build (statistical, smoke, chart) cannot skip its build
-this way yet.
+their `.test` files, and the packet test from its folder. For a kind of
+simulations (statistical, smoke, chart), the list of its configs needs the build.
+While diff(A,B) and diff(A,C) change no `.ini`, `.anf` or `.opp` file, no test of
+such a kind is new or removed, so its tests at C are the tests of the map. Else
+`kinds.<kind>.tests` is null, and the job builds.
 
 ### How the selection works
 
