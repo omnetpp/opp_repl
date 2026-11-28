@@ -1706,7 +1706,7 @@ Limits:
 - A push that needs a newer omnetpp or opp_repl than the map fails in the environment of the map.
   The next full run (each night, or a push after a new full map) repairs this.
 
-### 15.7 The INET statistical and chart workflows (D13, proposed 2026-11-27)
+### 15.7 The INET statistical and chart workflows (D13, agreed 2026-11-28)
 
 Facts (INET `master` 60160028cb):
 - `statistical-tests.yml` and `chart-tests.yml` each have three jobs: `changes` (the paths of a
@@ -1725,12 +1725,17 @@ Facts (INET `master` 60160028cb):
 The design:
 1. The verdict stays in release mode. A coverage job as the verdict would make each landing
    wait 3 to 5 times longer for `Master green`, and Network7 would fail until c5d48a5cb4 lands.
-2. On `master` (the `workflow_run` and a new nightly `schedule`), each of the two workflows gets
-   a job `records (coverage)` and a job `Test map`, as the fingerprint workflow has: the records
-   job runs the kind in coverage mode with `--test-map-records`, and its verdict does not count.
-   A push run updates the map of an earlier run (15.6), and the nightly run makes a full map when
-   `master`, omnetpp or opp_repl changed. `master_green.py` lists both jobs in
-   `NOT_COUNTED_JOBS`, so `Master green` waits only for the release job, as now.
+2. On `master`, the records and the map of each kind come from a workflow of their own,
+   `statistical-test-map.yml` ("Test map: statistical") and later `chart-test-map.yml`. The first
+   design put a records job and a job `Test map` into the test workflow, and listed them in
+   `NOT_COUNTED_JOBS` of `master_green.py`. But `Master green` counts a workflow as finished only
+   when its whole run is complete, so it would also wait for these jobs. The map workflow runs by
+   `workflow_run` after `Check: baseline masters`, as the test workflow does, and each night; it
+   skips a trivial landing (M9). It is not in `FULL_RUN` of `master_green.py`, so `master_green.py`
+   needs no change. Its records jobs run the kind in coverage mode in 2 splits with
+   `--test-map-records`, and their verdicts do not count. A run after a landing updates the map
+   of an earlier run (15.6), and the nightly run makes a full map when `master`, omnetpp or
+   opp_repl changed. `get-test-map.sh` also takes the runs of the event `workflow_run`.
 3. A pull request keeps the path job in front. For a relevant change, the job
    `Environment and test map` finds the map of the kind (`get-test-map.sh`), and the release job
    selects before the build (T8, with the tests at C of 93ee86d) and runs with
