@@ -1211,6 +1211,16 @@ runs, omnetpp a2a6c68a91 and opp_repl 78dcb602f, in the artifact `test-map-finge
 kept until 2026-12-27). Not yet seen on GitHub: the update run of a push, a pull request with the
 map, a nightly run, and the weekly map (Sunday 2026-11-29).
 
+A third defect showed on 2026-11-28, after the first map existed: for a change of a NED file, the
+selection parses the NED files with `omnetpp/bin/opp_nedtool`, which only the make of omnetpp
+gives, and the selection runs before the build. Each pull request with a NED change failed its 8
+fingerprint checks (for example run 46101908803), and an update run and the job `Test map`
+select too. INET af4d8e2958 compiles the omnetpp target `nedxml` in release mode after the
+configure in both steps (36 s on 32 cores); the real step text with a NED change stops without
+the tool and passes with it. The earlier check of the pull request step changed no NED file.
+The scheduled run of 02:17 UTC did not start on 2026-11-28; GitHub can drop or delay a scheduled
+run under load. The push of af4d8e2958 changes the fingerprint workflow, so its run is a full run.
+
 The check before the push (2026-11-27, step 1 of the landing). The folder
 `/var/tmp/claude-coverage-build/p5/check` has the layout of the CI workspace: omnetpp
 `origin/omnetpp-6.x` a2a6c68a91 with the configure options of `build-omnetpp.sh`, INET
