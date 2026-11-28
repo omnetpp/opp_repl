@@ -65,10 +65,15 @@ def is_normal_end(record):
     True if the run ended normally and its record is complete: exit code 0, a profile, a section
     chain, the NED types, and no CPU-time or real-time limit stopped it. Where such a limit stops a
     run depends on the machine, so the record does not show what the run of a test uses.
+
+    A run of an interactive config stops with an error at its prompt for user input, and the tests
+    skip it. It stops at the same point each time, so its profile and its NED types show all that it
+    used, and it ends normally too. A change that gives the asked parameter a value changes the ini
+    file or a NED type of the run, which the rules see.
     """
     text = (record.get("end") or {}).get("text") or ""
-    return record["exit_code"] == 0 and record["profile"] and record["sections"] is not None and record.get("ned_types") is not None and \
-        not text.startswith(("CPU time limit reached", "Realtime limit reached"))
+    return (record["exit_code"] == 0 or bool(record.get("interactive"))) and record["profile"] and record["sections"] is not None \
+        and record.get("ned_types") is not None and not text.startswith(("CPU time limit reached", "Realtime limit reached"))
 
 def get_fingerprint_ingredients(args):
     """Returns the ingredients of the ``--fingerprint`` argument of a run, for example ``["tplx", "~tNl"]``."""

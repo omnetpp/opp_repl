@@ -441,6 +441,9 @@ sample. The update of a map uses the sample for check V5.
 - A run that does not end normally (an exit code other than 0, no profile, or
   no section chain) has `normal_end` false in `runs.json`. Such a run can have
   used inputs that the map does not show, for example NED lookups that failed.
+  A run of an interactive config stops with an error at its prompt for user
+  input, and the tests skip it. It stops at the same point each time, so with
+  its profile it ends normally (`interactive` in its record).
 - The file trace sees the calls of the C library that it replaces. A program
   that makes system calls directly is not traced.
 - The NED type table does not see the NED lookups that failed in a run.

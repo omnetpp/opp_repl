@@ -323,6 +323,18 @@ class WriterTestCase(unittest.TestCase):
         # a run whose NED types are not known, for example of a %testprog program
         self.assertFalse(is_normal_end(dict(record, ned_types=None)))
 
+    def test_a_run_that_stops_at_its_prompt_for_user_input_ended_normally(self):
+        record = {"exit_code": 1, "profile": True, "sections": ["Config Ping2", "General"], "ned_types": ["inet.examples.Net"], "end": None}
+        # an error, and an old record without the field: not a normal end
+        self.assertFalse(is_normal_end(record))
+        self.assertFalse(is_normal_end(dict(record, interactive=False)))
+        # the prompt of an interactive config, with its profile: a normal end, but not without the profile
+        self.assertTrue(is_normal_end(dict(record, interactive=True)))
+        self.assertFalse(is_normal_end(dict(record, interactive=True, profile=False)))
+        from opp_repl.test.test_map.record import INTERACTIVE_PROMPT
+        self.assertTrue(INTERACTIVE_PROMPT.search("<!> Error: The simulation attempted to prompt for user input, set cmdenv-interactive=true to allow it"))
+        self.assertFalse(INTERACTIVE_PROMPT.search("<!> Error: Cannot load library"))
+
     def test_a_smoke_record_is_also_the_run_of_the_sanitizer_test(self):
         import json
         records = read_test_map_records([self.records_folder])

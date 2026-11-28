@@ -1755,3 +1755,19 @@ The design:
 5. First the statistical workflow; the chart workflow follows after its first runs on GitHub.
 6. Before each push, the order of the steps of each new or changed job runs in a new workspace
    with real artifacts (the lesson of 15.5).
+
+The local check of the statistical jobs (2026-11-28, `/var/tmp/claude-coverage-build/p5/d13`, the
+real step texts through `step.py`): a full run gave 473 and 471 records in coverage mode in about 7
+and 5 minutes on 32 cores and a map of 944 runs; an update with no change gave 60 records of the
+sample, and check V5 passed; a pull request with a body change in `Ipv4.cc` selected 649 of 944
+tests, and one with a doc change selected 10.
+- The 10 are the interactive configs, for example `examples/wireless/lan80211 -c Ping2`: such a run
+  stops at a prompt for user input with exit code 1, so rule 4.3 always selected it, and the
+  statistical job could never skip its build. Their records have a profile, a section chain and
+  NED types. opp_repl now writes `interactive` into the record of such a run, and
+  `is_normal_end` takes it as a normal end (the user agreed on 2026-11-28). A change that gives
+  the asked parameter a value changes the ini file or a NED type of the run.
+- The run of `showcases/ethernet/tenbaset1s` is an unbounded simulation, which the tests skip
+  before it runs, so the map has no run of it.
+- The push of the 3 INET commits was rejected on 2026-11-28: since the other session's change of
+  the ruleset that day, the bypass of the required checks works only through a pull request.

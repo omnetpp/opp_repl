@@ -39,6 +39,9 @@ _logger = logging.getLogger(__name__)
 
 TEST_MAP_RECORD_VERSION = 1
 
+# the error of a run that prompts for user input; the simulation task gives such a test the result SKIP
+INTERACTIVE_PROMPT = re.compile(r"The simulation wanted to ask a question|The simulation attempted to prompt for user input")
+
 def get_test_map_run_key(kind, simulation_task):
     """
     Returns the key of a run: the kind of the test, the ini file, the config, the run number and the
@@ -293,6 +296,8 @@ class TestMapSimulationRunner:
                                "run_number": simulation_task.run_number,
                                "sim_time_limit": simulation_task.get_sim_time_limit(),
                                "end": read_end_of_run(subprocess_result.stdout),
+                               # an interactive config stops at its prompt for user input, which the tests skip
+                               "interactive": INTERACTIVE_PROMPT.search(subprocess_result.stderr or "") is not None,
                                "ned_types": read_instantiated_ned_types(subprocess_result.stdout),
                                "sections": self.get_section_chain(simulation_task, working_directory)})
         return subprocess_result
